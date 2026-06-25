@@ -146,8 +146,6 @@ export default function HomePage() {
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
-          allTags={allTags}
-          allCategories={allCategories}
           filters={filters}
           onFiltersChange={setFilters}
           snippetCounts={snippetCounts}
