@@ -19,7 +19,7 @@ export function Sidebar({ items = [], onItemClick, activeItemId }: SidebarProps)
   const defaultItems = [
     {
       id: "all",
-      label: "All Items",
+      label: "Master Kendaraan",
       icon: <Code2 className="h-4 w-4" />,
     },
   ]
