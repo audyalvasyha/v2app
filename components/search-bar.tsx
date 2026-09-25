@@ -1,27 +1,28 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Search, X, Filter } from "lucide-react"
-import type { SnippetFilters, Language } from "@/lib/types"
-import { LANGUAGE_NAMES } from "@/lib/editor-languages"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
-interface SearchBarProps {
-  filters: SnippetFilters
-  onFiltersChange: (filters: SnippetFilters) => void
-  allTags: string[]
-  allCategories: string[]
+export interface EquipmentFilters {
+  search?: string
+  status?: string
+  serviceStatus?: string;
 }
 
-export function SearchBar({ filters, onFiltersChange, allTags, allCategories }: SearchBarProps) {
+interface SearchBarProps {
+  filters: EquipmentFilters;
+  onFiltersChange: (filters: EquipmentFilters) => void;
+  activeView?: 'dashboard' | 'equipment' | 'maintenance' | 'monitoring';
+}
+
+export function SearchBar({ filters, onFiltersChange, activeView }: SearchBarProps) {
   const [localSearch, setLocalSearch] = useState(filters.search || "")
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -34,14 +35,19 @@ export function SearchBar({ filters, onFiltersChange, allTags, allCategories }: 
     onFiltersChange({})
   }
 
-  const hasActiveFilters =
-    filters.search ||
-    filters.language ||
-    filters.category ||
-    (filters.tags && filters.tags.length > 0) ||
-    filters.visibility
+  // Cek apakah ada filter apa pun yang sedang aktif
+  const hasActiveFilters = !!(filters.search || filters.status || filters.serviceStatus)
 
-  const languages = Object.keys(LANGUAGE_NAMES) as Language[]
+  // Fungsi helper untuk menerjemahkan value status servis ke teks yang rapi di badge
+  const getServiceStatusLabel = (val: string) => {
+    switch (val) {
+      case 'safe': return 'Aman';
+      case 'warning': return 'Segera Servis';
+      case 'overdue': return 'Terlewat (Overdue)';
+      case 'none': return 'Belum Ada Data';
+      default: return val;
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -51,140 +57,94 @@ export function SearchBar({ filters, onFiltersChange, allTags, allCategories }: 
           <Input
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
-            placeholder="Search snippets... (title, description, code, tags)"
+            placeholder="Cari equipment... (ID, deskripsi, plat nomor)"
             className="pl-10"
           />
         </div>
-        <Button type="submit">Search</Button>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="gap-2 bg-transparent">
-              <Filter className="h-4 w-4" />
-              Filters
-              {hasActiveFilters && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
-                >
-                  !
-                </Badge>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80" align="end">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Language</Label>
-                <Select
-                  value={filters.language || "all"}
-                  onValueChange={(value) =>
-                    onFiltersChange({ ...filters, language: value === "all" ? undefined : (value as Language) })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Languages</SelectItem>
-                    {languages.map((lang) => (
-                      <SelectItem key={lang} value={lang}>
-                        {LANGUAGE_NAMES[lang]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <Button type="submit" className="gap-2">
+          Search
+        </Button>
 
-              <div className="space-y-2">
-                <Label>Category</Label>
-                <Select
-                  value={filters.category || "all"}
-                  onValueChange={(value) =>
-                    onFiltersChange({ ...filters, category: value === "all" ? undefined : value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Categories" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    {allCategories.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        {/* Tampilkan tombol Filter HANYA jika bukan di dashboard atau maintenance (karena maintenance pakai search saja) */}
+        {(activeView === 'equipment' || activeView === 'monitoring') && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="gap-2 bg-transparent">
+                <Filter className="h-4 w-4" />
+                Filters
+                {(filters.status || filters.serviceStatus) && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs bg-[#f97316] text-white"
+                  >
+                    !
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80" align="end">
+              <div className="space-y-4">
 
-              <div className="space-y-2">
-                <Label>Visibility</Label>
-                <Select
-                  value={filters.visibility || "all"}
-                  onValueChange={(value) =>
-                    onFiltersChange({
-                      ...filters,
-                      visibility: value === "all" ? undefined : (value as "public" | "private"),
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="public">Public</SelectItem>
-                    <SelectItem value="private">Private</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {allTags.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Tags</Label>
-                  <div className="max-h-32 overflow-y-auto space-y-2">
-                    {allTags.map((tag) => (
-                      <div key={tag} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`tag-${tag}`}
-                          checked={filters.tags?.includes(tag)}
-                          onCheckedChange={(checked) => {
-                            const currentTags = filters.tags || []
-                            const newTags = checked ? [...currentTags, tag] : currentTags.filter((t) => t !== tag)
-                            onFiltersChange({ ...filters, tags: newTags.length > 0 ? newTags : undefined })
-                          }}
-                        />
-                        <Label htmlFor={`tag-${tag}`} className="cursor-pointer">
-                          {tag}
-                        </Label>
-                      </div>
-                    ))}
+                {/* HANYA MUNCUL DI VIEW EQUIPMENT */}
+                {activeView === 'equipment' && (
+                  <div className="space-y-2">
+                    <Label>Status Equipment</Label>
+                    <Select
+                      value={filters.status || "all"}
+                      onValueChange={(value) =>
+                        onFiltersChange({ ...filters, status: value === "all" ? undefined : value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Semua Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Semua Status</SelectItem>
+                        <SelectItem value="Available">Available</SelectItem>
+                        <SelectItem value="In Use">In Use</SelectItem>
+                        <SelectItem value="Maintenance">Maintenance</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="regex"
-                  checked={filters.useRegex}
-                  onCheckedChange={(checked) => onFiltersChange({ ...filters, useRegex: checked as boolean })}
-                />
-                <Label htmlFor="regex" className="cursor-pointer">
-                  Use Regular Expression
-                </Label>
+                {/* HANYA MUNCUL DI VIEW MONITORING */}
+                {activeView === 'monitoring' && (
+                  <div className="space-y-2">
+                    <Label>Status Servis</Label>
+                    <Select
+                      value={filters.serviceStatus || "all"}
+                      onValueChange={(value) =>
+                        onFiltersChange({ ...filters, serviceStatus: value === "all" ? undefined : value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Semua Status Servis" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Semua Status Servis</SelectItem>
+                        <SelectItem value="safe">Aman</SelectItem>
+                        <SelectItem value="warning">Segera Servis</SelectItem>
+                        <SelectItem value="overdue">Terlewat (Overdue)</SelectItem>
+                        <SelectItem value="none">Belum Ada Data</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {(filters.status || filters.serviceStatus) && (
+                  <Button variant="outline" onClick={() => onFiltersChange({ ...filters, status: undefined, serviceStatus: undefined })} className="w-full gap-2 bg-transparent mt-2">
+                    <X className="h-4 w-4" />
+                    Reset Dropdown Filters
+                  </Button>
+                )}
               </div>
-
-              {hasActiveFilters && (
-                <Button variant="outline" onClick={clearFilters} className="w-full gap-2 bg-transparent">
-                  <X className="h-4 w-4" />
-                  Clear All Filters
-                </Button>
-              )}
-            </div>
-          </PopoverContent>
-        </Popover>
+            </PopoverContent>
+          </Popover>
+        )}
       </form>
 
+      {/* MENAMPILKAN BADGE FILTER YANG AKTIF */}
       {hasActiveFilters && (
         <div className="flex flex-wrap gap-2">
           {filters.search && (
@@ -195,44 +155,41 @@ export function SearchBar({ filters, onFiltersChange, allTags, allCategories }: 
                   setLocalSearch("")
                   onFiltersChange({ ...filters, search: undefined })
                 }}
-                className="hover:text-destructive"
+                className="hover:text-destructive ml-1"
               >
                 <X className="h-3 w-3" />
               </button>
             </Badge>
           )}
-          {filters.language && (
+
+          {filters.status && (
             <Badge variant="secondary" className="gap-1">
-              {LANGUAGE_NAMES[filters.language]}
+              Status: {filters.status}
               <button
-                onClick={() => onFiltersChange({ ...filters, language: undefined })}
-                className="hover:text-destructive"
+                onClick={() => onFiltersChange({ ...filters, status: undefined })}
+                className="hover:text-destructive ml-1"
               >
                 <X className="h-3 w-3" />
               </button>
             </Badge>
           )}
-          {filters.category && (
+
+          {filters.serviceStatus && (
             <Badge variant="secondary" className="gap-1">
-              {filters.category}
+              Servis: {getServiceStatusLabel(filters.serviceStatus)}
               <button
-                onClick={() => onFiltersChange({ ...filters, category: undefined })}
-                className="hover:text-destructive"
+                onClick={() => onFiltersChange({ ...filters, serviceStatus: undefined })}
+                className="hover:text-destructive ml-1"
               >
                 <X className="h-3 w-3" />
               </button>
             </Badge>
           )}
-          {filters.visibility && (
-            <Badge variant="secondary" className="gap-1">
-              {filters.visibility}
-              <button
-                onClick={() => onFiltersChange({ ...filters, visibility: undefined })}
-                className="hover:text-destructive"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
+
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-5 px-2 text-xs text-muted-foreground hover:text-foreground">
+              Clear All
+            </Button>
           )}
         </div>
       )}

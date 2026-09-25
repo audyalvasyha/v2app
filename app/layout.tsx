@@ -12,7 +12,7 @@ const _sourceSerif_4 = V0_Font_Source_Serif_4({ subsets: ['latin'], weight: ["20
 const geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Snippet Manager - Developer Code Library",
+  title: "v2app - Fleet Management System",
   description:
     "A powerful code snippet manager with syntax highlighting, tagging, and advanced search capabilities for developers.",
     generator: 'v0.app'

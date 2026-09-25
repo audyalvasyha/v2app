@@ -1,221 +1,176 @@
 "use client"
 
-import { useState, useRef } from "react"
-import type { Snippet } from "@/lib/types"
-import { useSnippets } from "@/hooks/use-snippets"
+import React, { useState, useEffect } from "react"
 import { useTheme } from "@/hooks/use-theme"
+import { supabase } from "@/utils/supabase"
+import { SearchBar, EquipmentFilters } from "@/components/search-bar"
+
+import { DashboardLayout } from "@/components/templates/dashboard-layout"
+import { DashboardView } from "@/components/organisms/dashboard-view" // Import Dashboard Baru
+import { EquipmentTable } from "@/components/organisms/equipment-table"
+import { MaintenanceTable } from "@/components/organisms/maintenance-table"
+import { ServiceMonitoringTable } from "@/components/organisms/service-monitoring-table"
+import { AboutView } from "@/components/organisms/about-view"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
-import { getSnippetCounts } from "@/lib/snippet-stats"
-import { Header } from "@/components/header"
-import { Sidebar } from "@/components/sidebar"
-import { SearchBar } from "@/components/search-bar"
-import { SnippetList } from "@/components/snippet-list"
-import { SnippetForm } from "@/components/snippet-form"
-import { SnippetViewer } from "@/components/snippet-viewer"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+
+const ITEMS_PER_PAGE = 15
 
 export default function HomePage() {
   const { theme, toggleTheme } = useTheme()
+  // Jadikan 'dashboard' sebagai view default
+  const [activeView, setActiveView] = useState<'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about'>('dashboard')
 
-  const {
-    snippets,
-    allSnippets,
-    filters,
-    setFilters,
-    allTags,
-    allCategories,
-    createSnippet,
-    updateSnippet,
-    deleteSnippet,
-    exportJSON,
-    importJSON,
-    exportGist,
-    isLoaded,
-  } = useSnippets()
+  const [filters, setFilters] = useState<EquipmentFilters>({})
+  const [equipments, setEquipments] = useState<any[]>([])
+  const [histories, setHistories] = useState<any[]>([])
+  const [serviceLogs, setServiceLogs] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const [formOpen, setFormOpen] = useState(false)
-  const [editingSnippet, setEditingSnippet] = useState<Snippet | null>(null)
-  const [viewingSnippet, setViewingSnippet] = useState<Snippet | null>(null)
-  const [deletingSnippetId, setDeletingSnippetId] = useState<string | null>(null)
-  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [maintPage, setMaintPage] = useState(1)
+  useKeyboardShortcuts(setActiveView, toggleTheme)
 
-  const snippetCounts = getSnippetCounts(allSnippets)
+  useEffect(() => {
+    async function fetchData() {
+      setIsLoading(true)
+      const [eqResponse, histResponse, serviceResponse] = await Promise.all([
+        supabase.from('equipment').select('*').order('created_at', { ascending: false }),
+        supabase.from('maintenance_histories').select('*').order('tanggal', { ascending: false }),
+        supabase.from('service_logs').select('*').order('service_date', { ascending: false })
+      ])
 
-  // Keyboard shortcuts
-  useKeyboardShortcuts([
-    {
-      key: "n",
-      ctrl: true,
-      description: "Create new snippet",
-      handler: () => {
-        setEditingSnippet(null)
-        setFormOpen(true)
-      },
-    },
-    {
-      key: "k",
-      ctrl: true,
-      description: "Focus search",
-      handler: () => {
-        const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement
-        searchInput?.focus()
-      },
-    },
-    {
-      key: "/",
-      description: "Focus search",
-      handler: () => {
-        const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement
-        searchInput?.focus()
-      },
-    },
-    {
-      key: "Escape",
-      description: "Close dialogs",
-      handler: () => {
-        setFormOpen(false)
-        setViewingSnippet(null)
-      },
-    },
-  ])
+      if (eqResponse.error) setError(eqResponse.error.message)
+      else setEquipments(eqResponse.data || [])
 
-  const handleNewSnippet = () => {
-    setEditingSnippet(null)
-    setFormOpen(true)
-  }
+      if (!histResponse.error) setHistories(histResponse.data || [])
+      if (!serviceResponse.error) setServiceLogs(serviceResponse.data || [])
 
-  const handleEditSnippet = (snippet: Snippet) => {
-    setEditingSnippet(snippet)
-    setFormOpen(true)
-    setViewingSnippet(null)
-  }
-
-  const handleSaveSnippet = (data: Omit<Snippet, "id" | "createdAt" | "updatedAt" | "versions">) => {
-    if (editingSnippet) {
-      updateSnippet(editingSnippet.id, data)
-    } else {
-      createSnippet(data)
+      setIsLoading(false)
     }
-    setFormOpen(false)
-    setEditingSnippet(null)
-  }
+    fetchData()
+  }, [])
 
-  const handleDeleteSnippet = (id: string) => {
-    deleteSnippet(id)
-    setDeletingSnippetId(null)
-    setViewingSnippet(null)
-  }
+  // Filter Data
+  const filteredEquipments = equipments.filter((item) => {
+    const matchesSearch = filters.search
+      ? (item.equipment_id?.toLowerCase().includes(filters.search.toLowerCase()) ||
+        item.description?.toLowerCase().includes(filters.search.toLowerCase()) ||
+        item.license_plate?.toLowerCase().includes(filters.search.toLowerCase()))
+      : true;
+    const matchesStatus = filters.status ? item.status === filters.status : true;
+    return matchesSearch && matchesStatus;
+  })
 
-  const handleViewSnippet = (snippet: Snippet) => {
-    setViewingSnippet(snippet)
-  }
+  const availableCount = filteredEquipments.filter(item => item.status === 'Available').length;
 
-  if (!isLoaded) {
+  const filteredGlobalHistories = histories.filter((item) => {
+    if (!filters.search) return true;
+    const query = filters.search.toLowerCase();
     return (
-      <div className="h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center mx-auto mb-4">
-            <span className="text-primary-foreground font-bold text-lg">{"</>"}</span>
-          </div>
-          <p className="text-muted-foreground">Loading snippets...</p>
-        </div>
-      </div>
-    )
+      item.nama_barang_atau_jasa?.toLowerCase().includes(query) ||
+      item.license_plate?.toLowerCase().includes(query) ||
+      item.equipment_id?.toLowerCase().includes(query)
+    );
+  })
+
+  const totalMaintPages = Math.ceil(filteredGlobalHistories.length / ITEMS_PER_PAGE) || 1
+  const paginatedGlobalHistories = filteredGlobalHistories.slice((maintPage - 1) * ITEMS_PER_PAGE, maintPage * ITEMS_PER_PAGE)
+
+  const handleViewChange = (view: 'dashboard' | 'equipment' | 'maintenance' | 'monitoring') => {
+    setActiveView(view)
+    setFilters({}) // Reset filter saat pindah menu
+    setMaintPage(1)
+  }
+
+  const handleSearchFilterChange = (newFilters: EquipmentFilters) => {
+    setFilters(newFilters)
+    setMaintPage(1)
+  }
+
+  // Konfigurasi Header Dinamis
+  const headerInfo = {
+    dashboard: { title: 'Dashboard', desc: 'Ringkasan metrik dan status operasional armada.' },
+    equipment: { title: 'Daftar Equipment', desc: 'Kelola data aset dan pantau riwayat pemeliharaan secara spesifik.' },
+    maintenance: { title: 'Semua Riwayat Maintenance', desc: 'Cari riwayat perbaikan menyeluruh berdasarkan plat nombor atau nama barang.' },
+    monitoring: { title: 'Monitoring Status Servis', desc: 'Pantau jadwal servis unit berdasarkan tanggal dan odometer.' },
+    about: { title: 'Tentang Aplikasi', desc: 'Kisah di balik pengembangan Fleet Management System v2.' } // Tambahan baru
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      <Header
-        onNewSnippet={handleNewSnippet}
-        onExportJSON={exportJSON}
-        onImportJSON={importJSON}
-        onExportGist={exportGist}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-      />
+    <DashboardLayout
+      theme={theme}
+      onToggleTheme={toggleTheme}
+      activeView={activeView}
+      onViewChange={handleViewChange}
+      equipmentCounts={{ total: filteredEquipments.length, available: availableCount }}
+    >
+      <div className="container mx-auto p-6 flex flex-col h-full space-y-4">
 
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar
-          filters={filters}
-          onFiltersChange={setFilters}
-          snippetCounts={snippetCounts}
-        />
+        {/* Header Dinamis */}
+        {activeView !== 'about' && (
+          <div className="shrink-0">
+            <h1 className="text-2xl font-bold tracking-tight">
+              {headerInfo[activeView].title}
+            </h1>
+            <p className="text-muted-foreground mb-4">
+              {headerInfo[activeView].desc}
+            </p>
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="container mx-auto p-6 space-y-6">
-            <SearchBar filters={filters} onFiltersChange={setFilters} allTags={allTags} allCategories={allCategories} />
-
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                {snippets.length} snippet{snippets.length !== 1 ? "s" : ""} found
-              </p>
-            </div>
-
-            <SnippetList
-              snippets={snippets}
-              onEdit={handleEditSnippet}
-              onDelete={(id) => setDeletingSnippetId(id)}
-              onView={handleViewSnippet}
-            />
+            {/* Sembunyikan SearchBar di mode Dashboard agar lebih rapi */}
+            {activeView !== 'dashboard' && (
+              <SearchBar
+                filters={filters}
+                onFiltersChange={handleSearchFilterChange}
+                activeView={activeView}
+              />
+            )}
           </div>
-        </main>
-      </div>
+        )}
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingSnippet ? "Edit Snippet" : "Create New Snippet"}</DialogTitle>
-          </DialogHeader>
-          <SnippetForm
-            snippet={editingSnippet || undefined}
-            onSave={handleSaveSnippet}
-            onCancel={() => {
-              setFormOpen(false)
-              setEditingSnippet(null)
-            }}
-            theme={theme}
+        {/* Render Konten Sesuai View */}
+        {activeView === 'dashboard' && (
+          // Kita berikan data asli (equipments & histories) agar kalkulasi dashboard mencakup semua data tanpa terpengaruh search bar
+          <DashboardView
+            equipments={equipments}
+            histories={histories}
+            serviceLogs={serviceLogs}
+            isLoading={isLoading}
           />
-        </DialogContent>
-      </Dialog>
+        )}
 
-      {/* View Dialog */}
-      <SnippetViewer
-        snippet={viewingSnippet}
-        open={!!viewingSnippet}
-        onOpenChange={(open) => !open && setViewingSnippet(null)}
-        onEdit={() => viewingSnippet && handleEditSnippet(viewingSnippet)}
-        onDelete={() => viewingSnippet && setDeletingSnippetId(viewingSnippet.id)}
-        theme={theme}
-      />
+        {activeView === 'equipment' && (
+          <EquipmentTable
+            equipments={filteredEquipments}
+            histories={histories}
+            isLoading={isLoading}
+            error={error}
+          />
+        )}
 
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!deletingSnippetId} onOpenChange={(open) => !open && setDeletingSnippetId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Snippet</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this snippet? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deletingSnippetId && handleDeleteSnippet(deletingSnippetId)}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+        {activeView === 'maintenance' && (
+          <MaintenanceTable
+            histories={paginatedGlobalHistories}
+            isLoading={isLoading}
+            currentPage={maintPage}
+            totalPages={totalMaintPages}
+            onPageChange={setMaintPage}
+          />
+        )}
+
+        {activeView === 'monitoring' && (
+          <ServiceMonitoringTable
+            equipments={filteredEquipments}
+            serviceLogs={serviceLogs}
+            isLoading={isLoading}
+            statusFilter={filters.serviceStatus || 'all'} // Kirim state filter
+          />
+        )}
+
+        {activeView === 'about' && (
+          <AboutView />
+        )}
+
+      </div>
+    </DashboardLayout>
   )
 }

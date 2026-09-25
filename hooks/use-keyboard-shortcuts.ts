@@ -1,43 +1,64 @@
-"use client"
-
 import { useEffect } from "react"
 
-interface KeyboardShortcut {
+export type Shortcut = {
   key: string
   ctrl?: boolean
   shift?: boolean
   alt?: boolean
-  handler: () => void
   description: string
 }
 
-export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[]) {
+// Daftar Shortcut Khusus Fleet Management System
+export const KEYBOARD_SHORTCUTS: Shortcut[] = [
+  { key: "/", ctrl: true, description: "Fokus ke Kolom Pencarian" },
+  { key: "d", alt: true, description: "Buka Tab Dashboard" },
+  { key: "e", alt: true, description: "Buka Tab Equipment" },
+  { key: "h", alt: true, description: "Buka Tab Histories" },
+  { key: "m", alt: true, description: "Buka Tab Monitoring" },
+  { key: "t", alt: true, description: "Ganti Tema (Dark/Light)" },
+]
+
+export function useKeyboardShortcuts(
+  onViewChange?: (view: 'dashboard' | 'equipment' | 'maintenance' | 'monitoring') => void,
+  onToggleTheme?: () => void
+) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      for (const shortcut of shortcuts) {
-        const ctrlMatch = shortcut.ctrl === undefined || shortcut.ctrl === (e.ctrlKey || e.metaKey)
-        const shiftMatch = shortcut.shift === undefined || shortcut.shift === e.shiftKey
-        const altMatch = shortcut.alt === undefined || shortcut.alt === e.altKey
-        const keyMatch = e.key.toLowerCase() === shortcut.key.toLowerCase()
+      // Abaikan jika user sedang mengetik di dalam input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
 
-        if (ctrlMatch && shiftMatch && altMatch && keyMatch) {
-          e.preventDefault()
-          shortcut.handler()
-          break
-        }
+      // Ctrl + / : Fokus Search
+      if (e.ctrlKey && e.key === "/") {
+        e.preventDefault()
+        const searchInput = document.querySelector('input[placeholder*="Cari"]') as HTMLInputElement
+        if (searchInput) searchInput.focus()
+      }
+
+      // Alt + D : Dashboard
+      if (e.altKey && e.key.toLowerCase() === "d" && onViewChange) {
+        e.preventDefault(); onViewChange("dashboard");
+      }
+      // Alt + E : Equipment
+      if (e.altKey && e.key.toLowerCase() === "e" && onViewChange) {
+        e.preventDefault(); onViewChange("equipment");
+      }
+      // Alt + H : Histories
+      if (e.altKey && e.key.toLowerCase() === "h" && onViewChange) {
+        e.preventDefault(); onViewChange("maintenance");
+      }
+      // Alt + M : Monitoring
+      if (e.altKey && e.key.toLowerCase() === "m" && onViewChange) {
+        e.preventDefault(); onViewChange("monitoring");
+      }
+      // Alt + T : Tema
+      if (e.altKey && e.key.toLowerCase() === "t" && onToggleTheme) {
+        e.preventDefault(); onToggleTheme();
       }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [shortcuts])
+  }, [onViewChange, onToggleTheme])
 }
-
-export const KEYBOARD_SHORTCUTS = [
-  { key: "n", ctrl: true, description: "Create new snippet" },
-  { key: "k", ctrl: true, description: "Focus search" },
-  { key: "s", ctrl: true, description: "Save current snippet" },
-  { key: "e", ctrl: true, description: "Export snippets" },
-  { key: "/", ctrl: false, description: "Focus search (alternative)" },
-  { key: "Escape", ctrl: false, description: "Close dialogs" },
-]
