@@ -190,6 +190,7 @@ export default function HomePage() {
             histories={histories}
             serviceLogs={serviceLogs}
             isLoading={isLoading}
+            onNavigate={handleViewChange}
           />
         )}
 
@@ -199,6 +200,13 @@ export default function HomePage() {
             histories={histories}
             isLoading={isLoading}
             error={error}
+            statusFilter={filters.status || 'all'}
+            onStatusFilterChange={(next) =>
+              setFilters((prev) => ({
+                ...prev,
+                status: next === 'all' ? undefined : next,
+              }))
+            }
           />
         )}
 

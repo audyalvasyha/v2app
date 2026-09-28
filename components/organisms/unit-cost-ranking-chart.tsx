@@ -7,6 +7,7 @@ import {
     type ChartConfig,
 } from "@/components/ui/chart"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell } from "recharts"
+import { compactRupiah } from "@/lib/format"
 
 export interface RankedUnit {
     equipment_id: string
@@ -16,13 +17,6 @@ export interface RankedUnit {
 
 const topConfig = { totalCost: { label: "Total biaya", color: "#FF3C00" } } satisfies ChartConfig
 const bottomConfig = { totalCost: { label: "Total biaya", color: "hsl(var(--muted-foreground))" } } satisfies ChartConfig
-
-function formatRp(n: number): string {
-    if (n >= 1_000_000_000) return `Rp ${(n / 1_000_000_000).toFixed(1)}M`
-    if (n >= 1_000_000) return `Rp ${(n / 1_000_000).toFixed(1)} jt`
-    if (n >= 1000) return `Rp ${(n / 1000).toFixed(0)} rb`
-    return `Rp ${n.toLocaleString("id-ID")}`
-}
 
 function RankBar({
     data,
@@ -85,7 +79,7 @@ function RankBar({
                         </span>
                         <span className="min-w-0 flex-1 truncate font-medium">{row.equipment_id}</span>
                         <span className="shrink-0 font-mono tabular-nums text-foreground">
-                            {formatRp(row.totalCost)}
+                            {compactRupiah(row.totalCost)}
                         </span>
                         <span className="hidden shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground sm:inline">
                             · {row.count} entri
@@ -108,7 +102,7 @@ function RankBar({
                             axisLine={false}
                             tickMargin={8}
                             className="text-xs"
-                            tickFormatter={(v: number) => formatRp(Number(v))}
+                            tickFormatter={(v: number) => compactRupiah(Number(v))}
                         />
                         <YAxis
                             type="category"

@@ -73,7 +73,16 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           onClick={() => onViewChange('dashboard')}
         />
 
-        {/* Menu 1: Equipment */}
+        {/* Menu 1: Monitoring Servis */}
+        <SidebarButton
+          icon={Activity}
+          label="Monitoring Servis"
+          active={activeView === 'monitoring'}
+          collapsed={collapsed}
+          onClick={() => onViewChange('monitoring')}
+        />
+
+        {/* Menu 2: Equipment */}
         <SidebarButton
           icon={Settings}
           label="Equipment"
@@ -87,22 +96,13 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           }
         />
 
-        {/* Menu 2: Histories */}
+        {/* Menu 3: Histories */}
         <SidebarButton
           icon={History}
           label="Histories"
           active={activeView === 'maintenance'}
           collapsed={collapsed}
           onClick={() => onViewChange('maintenance')}
-        />
-
-        {/* Menu 3: Monitoring Servis */}
-        <SidebarButton
-          icon={Activity}
-          label="Monitoring Servis"
-          active={activeView === 'monitoring'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('monitoring')}
         />
 
         {/* Menu 4: About me */}

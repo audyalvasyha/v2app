@@ -29,27 +29,21 @@ import {
     ArrowUpDown,
     Wrench,
 } from "lucide-react"
-
-type ServiceStatusId = "safe" | "warning" | "overdue" | "none"
-
-interface ServiceStatus {
-    id: ServiceStatusId
-    label: string
-    badgeClass: string
-    barClass: string
-    dotClass: string
-    rowAccent: string
-    progress: number
-    remainingDays: number | null // null jika tanpa jadwal tanggal
-    remainingKm: number | null // null jika tanpa target odo; negatif = kelebihan
-    rank: number // 0 paling gawat
-}
+// Aturan status servis & format tanggal kini tinggal di lib bersama
+import { formatDateMedium as formatDateShort } from "@/lib/format"
+import {
+    evaluateServiceStatus,
+    remainingDaysLabel as relativeDaysLabel,
+    remainingKmLabel,
+    type ServiceStatusId,
+    type ServiceScheduleStatus,
+} from "@/lib/service-status"
 
 interface Row {
     item: any
     latestLog: any | null
     history: any[]
-    status: ServiceStatus
+    status: ServiceScheduleStatus
 }
 
 interface Props {
@@ -62,127 +56,6 @@ interface Props {
 
 const PAGE_SIZE = 10
 type SortKey = "urgency" | "dueDate" | "odometer" | "equipmentId"
-
-function buildStatus(equipment: any, latestLog: any): ServiceStatus {
-    if (!latestLog) {
-        return {
-            id: "none",
-            label: "Tanpa jadwal",
-            badgeClass:
-                "border-border text-muted-foreground bg-muted/20 hover:bg-muted/30",
-            barClass: "bg-muted-foreground/30",
-            dotClass: "bg-muted-foreground",
-            rowAccent: "border-l-muted-foreground/40",
-            progress: 0,
-            remainingDays: null,
-            remainingKm: null,
-            rank: 3,
-        }
-    }
-
-    const today = new Date()
-    // normalisasi ke tengah hari biar diff hari stabil
-    today.setHours(12, 0, 0, 0)
-    const nextDate = latestLog.next_service_date ? new Date(latestLog.next_service_date) : null
-    if (nextDate) nextDate.setHours(12, 0, 0, 0)
-
-    const nextOdo: number | null =
-        latestLog.next_service_odometer != null ? Number(latestLog.next_service_odometer) : null
-    const prevOdo = Number(latestLog.odometer_at_service ?? 0)
-    const currentOdo = Number(equipment.last_odometer ?? 0)
-
-    let progress = 0
-    let remainingKm: number | null = null
-    if (nextOdo != null && Number.isFinite(nextOdo) && nextOdo > prevOdo) {
-        remainingKm = nextOdo - currentOdo
-        if (currentOdo >= nextOdo) progress = 100
-        else if (currentOdo > prevOdo) progress = ((currentOdo - prevOdo) / (nextOdo - prevOdo)) * 100
-        else progress = 0
-    }
-
-    let remainingDays: number | null = null
-    if (nextDate) {
-        const diff = Math.ceil((nextDate.getTime() - today.getTime()) / (86_400_000))
-        remainingDays = diff
-    }
-
-    // urgency: overdue > warning (<=14 hari atau <=1000 km) > safe
-    const odoWarning =
-        remainingKm != null && remainingKm <= 1000 && remainingKm >= 0
-    const dateWarning =
-        remainingDays != null && remainingDays >= 0 && remainingDays <= 14
-    const odoOverdue = remainingKm != null && remainingKm < 0
-    const dateOverdue = remainingDays != null && remainingDays < 0
-
-    const isOverdue = odoOverdue || dateOverdue
-    const isWarning = !isOverdue && (odoWarning || dateWarning)
-
-    if (isOverdue) {
-        return {
-            id: "overdue",
-            label: "Terlewat",
-            badgeClass:
-                "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15",
-            barClass: "bg-destructive",
-            dotClass: "bg-destructive",
-            rowAccent: "border-l-destructive",
-            progress,
-            remainingDays,
-            remainingKm,
-            rank: 0,
-        }
-    }
-    if (isWarning) {
-        return {
-            id: "warning",
-            label: "Segera servis",
-            badgeClass:
-                "border-amber-300/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/15",
-            barClass: "bg-amber-500",
-            dotClass: "bg-amber-500",
-            rowAccent: "border-l-amber-500",
-            progress,
-            remainingDays,
-            remainingKm,
-            rank: 1,
-        }
-    }
-    return {
-        id: "safe",
-        label: "Aman",
-        badgeClass:
-            "border-emerald-300/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15",
-        barClass: "bg-emerald-500",
-        dotClass: "bg-emerald-500",
-        rowAccent: "border-l-emerald-500",
-        progress,
-        remainingDays,
-        remainingKm,
-        rank: 2,
-    }
-}
-
-function formatDateShort(value: string | null): string {
-    if (!value) return "—"
-    const d = new Date(value)
-    if (Number.isNaN(d.getTime())) return "—"
-    return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
-}
-
-function relativeDaysLabel(n: number | null): string {
-    if (n == null) return "Tanpa jadwal"
-    if (n === 0) return "Hari ini"
-    if (n === 1) return "Besok"
-    if (n > 1) return `${n} hari lagi`
-    return `Terlambat ${Math.abs(n)} hari`
-}
-
-function remainingKmLabel(n: number | null): string {
-    if (n == null) return "—"
-    if (n > 0) return `Sisa ${n.toLocaleString("id-ID")} km`
-    if (n === 0) return "Tepat jadwal"
-    return `Kelebihan ${Math.abs(n).toLocaleString("id-ID")} km`
-}
 
 function KpiCard({
     label,
@@ -247,6 +120,7 @@ function ServiceMonitoringTableImpl({
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [page, setPage] = useState(1)
     const [sortKey, setSortKey] = useState<SortKey>("urgency")
+    const today = useMemo(() => new Date(), [])
 
     const rows: Row[] = useMemo(() => {
         const byUnit = new Map<string, any[]>()
@@ -261,9 +135,9 @@ function ServiceMonitoringTableImpl({
             const key = String(item.equipment_id ?? "")
             const history = (byUnit.get(key) ?? []).slice().sort((a, b) => +new Date(b.service_date) - +new Date(a.service_date))
             const latestLog = history[0] ?? null
-            return { item, latestLog, history, status: buildStatus(item, latestLog) }
+            return { item, latestLog, history, status: evaluateServiceStatus(item, latestLog, today) }
         })
-    }, [equipments, serviceLogs])
+    }, [equipments, serviceLogs, today])
 
     const counts = useMemo(() => {
         const c: Record<ServiceStatusId, number> = { safe: 0, warning: 0, overdue: 0, none: 0 }
@@ -478,7 +352,7 @@ function ServiceMonitoringTableImpl({
                                             onClick={() => setExpandedId(isExpanded ? null : String(item.id))}
                                             className={[
                                                 "cursor-pointer border-l-2 transition-colors hover:bg-muted/40",
-                                                status.rowAccent,
+                                                status.tone.accent,
                                                 isExpanded ? "bg-muted/30" : "",
                                             ].join(" ")}
                                         >
@@ -496,8 +370,8 @@ function ServiceMonitoringTableImpl({
                                                 </div>
                                             </TableCell>
                                             <TableCell className="py-2.5">
-                                                <Badge variant="outline" className={["gap-1.5 border font-medium", status.badgeClass].join(" ")}>
-                                                    <span className={["h-1.5 w-1.5 rounded-full", status.dotClass].join(" ")} />
+                                                <Badge variant="outline" className={["gap-1.5 border font-medium", status.tone.badge].join(" ")}>
+                                                    <span className={["h-1.5 w-1.5 rounded-full", status.tone.dot].join(" ")} />
                                                     {status.label}
                                                 </Badge>
                                             </TableCell>
@@ -529,7 +403,7 @@ function ServiceMonitoringTableImpl({
                                                         </div>
                                                         <div className="h-2 overflow-hidden rounded-full bg-secondary">
                                                             <div
-                                                                className={["h-full rounded-full transition-all duration-500", status.barClass].join(" ")}
+                                                                className={["h-full rounded-full transition-all duration-500", status.tone.bar].join(" ")}
                                                                 style={{ width: `${Math.min(100, Math.max(0, status.progress))}%` }}
                                                             />
                                                         </div>

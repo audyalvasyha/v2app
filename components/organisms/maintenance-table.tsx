@@ -29,6 +29,15 @@ import {
     TrendingUp,
     X,
 } from "lucide-react"
+import { StatTile } from "@/components/molecules/stat-tile"
+// Format nominal & tanggal kini dari lib bersama (satu sumber untuk semua menu)
+import {
+    compactRupiah,
+    formatDateMedium,
+    formatRupiah,
+    periodLabel,
+    relativeDayLabel,
+} from "@/lib/format"
 
 interface MaintenanceTableProps {
     /** Seluruh riwayat yang sudah difilter pencarian dari halaman induk */
@@ -56,46 +65,10 @@ function toDate(value: string): Date | null {
     return Number.isNaN(d.getTime()) ? null : d
 }
 
-function formatRupiah(n: number): string {
-    return `Rp ${Math.round(n).toLocaleString("id-ID")}`
-}
-
-/** Ringkas untuk kotak ringkasan — nominal panjang dipindah ke atribut title */
-function compactRupiah(n: number): string {
-    if (n >= 1_000_000_000) return `Rp ${(n / 1_000_000_000).toLocaleString("id-ID", { maximumFractionDigits: 2 })} M`
-    if (n >= 1_000_000) return `Rp ${(n / 1_000_000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} jt`
-    if (n >= 1_000) return `Rp ${(n / 1_000).toLocaleString("id-ID", { maximumFractionDigits: 0 })} rb`
-    return `Rp ${Math.round(n).toLocaleString("id-ID")}`
-}
-
-function formatDateMedium(iso: string): string {
-    const d = toDate(iso)
-    if (!d) return "—"
-    return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
-}
-
 function weekdayShort(iso: string): string {
     const d = toDate(iso)
     if (!d) return ""
     return d.toLocaleDateString("id-ID", { weekday: "short" })
-}
-
-/** Jarak dari hari ini dalam bahasa manusia — jauh lebih mudah dibaca daripada tanggal mentah */
-function relativeDayLabel(iso: string): string {
-    const d = toDate(iso)
-    if (!d) return ""
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const target = new Date(d)
-    target.setHours(0, 0, 0, 0)
-    const diff = Math.round((today.getTime() - target.getTime()) / 86_400_000)
-
-    if (diff === 0) return "Hari ini"
-    if (diff === 1) return "Kemarin"
-    if (diff > 1 && diff < 30) return `${diff} hari lalu`
-    if (diff >= 30 && diff < 365) return `${Math.floor(diff / 30)} bln lalu`
-    if (diff >= 365) return `${Math.floor(diff / 365)} thn lalu`
-    return `${Math.abs(diff)} hari lagi`
 }
 
 function monthKey(iso: string): string {
@@ -107,57 +80,6 @@ function monthLabel(iso: string): string {
     const d = toDate(iso)
     if (!d) return "Tanpa tanggal"
     return d.toLocaleDateString("id-ID", { month: "long", year: "numeric" })
-}
-
-function periodLabel(min: string | null, max: string | null): string {
-    if (!min || !max) return "—"
-    const a = toDate(min)
-    const b = toDate(max)
-    if (!a || !b) return "—"
-    const shortMonth = (d: Date) => d.toLocaleDateString("id-ID", { month: "short" })
-    if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()) {
-        return `${shortMonth(a)} ${a.getFullYear()}`
-    }
-    if (a.getFullYear() === b.getFullYear()) {
-        return `${shortMonth(a)} – ${shortMonth(b)} ${b.getFullYear()}`
-    }
-    return `${shortMonth(a)} ${a.getFullYear()} – ${shortMonth(b)} ${b.getFullYear()}`
-}
-
-/* ── Ringkasan ───────────────────────────────────────────────────────────── */
-
-function StatTile({
-    label,
-    value,
-    hint,
-    title,
-    icon,
-    emphasis,
-}: {
-    label: string
-    value: string
-    hint?: string
-    title?: string
-    icon: React.ReactNode
-    emphasis?: boolean
-}) {
-    return (
-        <div className="rounded-xl border bg-card px-4 py-3 shadow-sm" title={title}>
-            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                {icon}
-                <span className="truncate">{label}</span>
-            </div>
-            <div
-                className={[
-                    "mt-2 truncate tabular-nums leading-none",
-                    emphasis ? "text-lg font-semibold text-primary" : "text-lg font-semibold",
-                ].join(" ")}
-            >
-                {value}
-            </div>
-            {hint && <div className="mt-1.5 truncate text-xs text-muted-foreground">{hint}</div>}
-        </div>
-    )
 }
 
 /* ── Baris isi tabel: pemisah bulan atau data ────────────────────────────── */

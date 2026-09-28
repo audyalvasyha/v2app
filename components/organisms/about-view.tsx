@@ -118,7 +118,7 @@ export function AboutView() {
                         <div className="pt-1">
                             <h2 className="text-xl font-semibold tracking-tight">Audy Al Vasyah</h2>
                             <p className="mt-1 text-sm text-[#f97316]">
-                                Fullstack Engineer &amp; Transport Planner
+                                Transport Planner &amp; Operations Tech
                             </p>
                         </div>
                     </div>
