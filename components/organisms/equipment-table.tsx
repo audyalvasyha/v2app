@@ -38,7 +38,7 @@ export function EquipmentTable({ equipments, histories, isLoading, error }: Equi
 
   return (
     <Table>
-      <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
+      <TableHeader className="bg-muted/50">
         <TableRow>
           <TableHead className="w-[50px]"></TableHead> 
           <TableHead>Equipment ID</TableHead>

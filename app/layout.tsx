@@ -3,13 +3,11 @@ import type { Metadata, Viewport } from "next"
 
 import "./globals.css"
 
-import { Geist_Mono, Geist_Mono as V0_Font_Geist_Mono, Source_Serif_4 as V0_Font_Source_Serif_4 } from 'next/font/google'
+import { Geist_Mono } from 'next/font/google'
 
-// Initialize fonts
-const _geistMono = V0_Font_Geist_Mono({ subsets: ['latin'], weight: ["100","200","300","400","500","600","700","800","900"] })
-const _sourceSerif_4 = V0_Font_Source_Serif_4({ subsets: ['latin'], weight: ["200","300","400","500","600","700","800","900"] })
-
-const geistMono = Geist_Mono({ subsets: ["latin"] })
+// Font utama saja — inisialisasi font tak terpakai (Source Serif, double Geist Mono)
+// membuat build lebih lambat dan menambah CSS font yang tidak dipakai
+const geistMono = Geist_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" })
 
 export const metadata: Metadata = {
   title: "v2app - Fleet Management System",
@@ -31,6 +29,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        {/* Koneksi ke Supabase dipanaskan lebih awal — menghemat handshake TLS pada fetch data pertama */}
+        {process.env.NEXT_PUBLIC_SUPABASE_URL && (
+          <link rel="preconnect" href={new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin} crossOrigin="anonymous" />
+        )}
+        {process.env.NEXT_PUBLIC_SUPABASE_URL && (
+          <link rel="dns-prefetch" href={new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin} />
+        )}
+      </head>
       <body className={`${geistMono.className} antialiased`}>{children}</body>
     </html>
   )

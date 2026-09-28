@@ -1,4 +1,4 @@
-import React from "react"
+import React, { memo, useMemo } from "react"
 import {
     Table,
     TableBody,
@@ -16,10 +16,21 @@ interface ServiceMonitoringTableProps {
     statusFilter: string; // Tambahkan prop ini
 }
 
-export function ServiceMonitoringTable({ equipments, serviceLogs, isLoading, statusFilter }: ServiceMonitoringTableProps) {
+type ServiceStatusId = "safe" | "warning" | "overdue" | "none"
+
+interface ServiceStatus {
+    id: ServiceStatusId
+    label: string
+    customClass: string
+    progress: number
+    barColor: string
+}
+
+function ServiceMonitoringTableImpl({ equipments, serviceLogs, isLoading, statusFilter }: ServiceMonitoringTableProps) {
     // Fungsi untuk mengecek status dan menghitung progres
-    const getServiceStatus = (equipment: any, latestLog: any) => {
+    const getServiceStatus = (equipment: any, latestLog: any): ServiceStatus => {
         if (!latestLog) return {
+            id: "none",
             label: "Belum Ada Data",
             customClass: "border-muted-foreground text-muted-foreground bg-transparent",
             progress: 0,
@@ -45,7 +56,7 @@ export function ServiceMonitoringTable({ equipments, serviceLogs, isLoading, sta
                 progress = ((currentOdo - prevOdo) / (nextOdo - prevOdo)) * 100;
             }
 
-            // Warning jika sisa kurang dari 500 km
+            // Warning jika sisa kurang dari 1000 km
             if (nextOdo - currentOdo <= 1000 && currentOdo < nextOdo) isWarning = true;
         }
 
@@ -60,43 +71,58 @@ export function ServiceMonitoringTable({ equipments, serviceLogs, isLoading, sta
 
         // Return format styling Outline transparan
         if (isOverdue) return {
+            id: "overdue",
             label: "Terlewat (Overdue)",
             customClass: "text-destructive border-current bg-transparent hover:bg-destructive/10",
             progress,
             barColor: "bg-destructive"
         };
         if (isWarning) return {
+            id: "warning",
             label: "Segera Servis",
             customClass: "text-yellow-600 dark:text-yellow-500 border-current bg-transparent hover:bg-yellow-500/10",
             progress,
             barColor: "bg-yellow-500"
         };
         return {
+            id: "safe",
             label: "Aman",
             customClass: "text-green-600 dark:text-green-500 border-current bg-transparent hover:bg-green-500/10",
             progress,
             barColor: "bg-green-500"
         };
     }
-    const processedData = equipments.map(item => {
-        const unitLogs = serviceLogs
-            .filter(log => log.equipment_id === item.equipment_id)
-            .sort((a, b) => new Date(b.service_date).getTime() - new Date(a.service_date).getTime());
 
-        const latestLog = unitLogs[0];
-        const status = getServiceStatus(item, latestLog);
+    // Proses data (sorting + kalkulasi status) di-memoize agar tidak dihitung ulang di tiap render
+    const processedData = useMemo(() => {
+        // Index semua log per unit sekali — hindari scan ulang serviceLogs per equipment
+        const logsByUnit = new Map<string, any[]>();
+        for (const log of serviceLogs) {
+            const list = logsByUnit.get(log.equipment_id);
+            if (list) list.push(log);
+            else logsByUnit.set(log.equipment_id, [log]);
+        }
 
-        return { item, latestLog, status };
-    });
-    const filteredProcessedData = processedData.filter(({ status }) => {
-        if (statusFilter === "all" || !statusFilter) return true;
-        return status.id === statusFilter;
-    });
+        return equipments.map(item => {
+            const unitLogs = (logsByUnit.get(item.equipment_id) || [])
+                .sort((a, b) => new Date(b.service_date).getTime() - new Date(a.service_date).getTime());
+
+            const latestLog = unitLogs[0];
+            const status = getServiceStatus(item, latestLog);
+
+            return { item, latestLog, status };
+        });
+    }, [equipments, serviceLogs]);
+
+    const filteredProcessedData = useMemo(() => {
+        if (statusFilter === "all" || !statusFilter) return processedData;
+        return processedData.filter(({ status }) => status.id === statusFilter);
+    }, [processedData, statusFilter]);
 
     return (
-        <div className="rounded-md border flex-1 overflow-auto bg-card">
+        <div className="rounded-md border bg-card">
             <Table>
-                <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
+                <TableHeader className="bg-muted/50">
                     <TableRow>
                         <TableHead>Equipment ID</TableHead>
                         <TableHead>Plat Nomor</TableHead>
@@ -108,15 +134,8 @@ export function ServiceMonitoringTable({ equipments, serviceLogs, isLoading, sta
                 <TableBody>
                     {isLoading ? (
                         <TableRow><TableCell colSpan={5} className="text-center h-32">Memuat data monitoring...</TableCell></TableRow>
-                    ) : equipments.length > 0 ? (
-                        equipments.map((item) => {
-                            const unitLogs = serviceLogs
-                                .filter(log => log.equipment_id === item.equipment_id)
-                                .sort((a, b) => new Date(b.service_date).getTime() - new Date(a.service_date).getTime());
-
-                            const latestLog = unitLogs[0];
-                            const status = getServiceStatus(item, latestLog);
-
+                    ) : filteredProcessedData.length > 0 ? (
+                        filteredProcessedData.map(({ item, latestLog, status }) => {
                             return (
                                 <TableRow key={item.id}>
                                     <TableCell className="font-medium whitespace-nowrap">{item.equipment_id}</TableCell>
@@ -167,3 +186,5 @@ export function ServiceMonitoringTable({ equipments, serviceLogs, isLoading, sta
         </div>
     )
 }
+
+export const ServiceMonitoringTable = memo(ServiceMonitoringTableImpl)

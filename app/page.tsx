@@ -1,11 +1,11 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useTheme } from "@/hooks/use-theme"
 import { supabase } from "@/utils/supabase"
 import { SearchBar, EquipmentFilters } from "@/components/search-bar"
 
-import { DashboardLayout } from "@/components/templates/dashboard-layout"
+import { DashboardLayout, type View } from "@/components/templates/dashboard-layout"
 import { DashboardView } from "@/components/organisms/dashboard-view" // Import Dashboard Baru
 import { EquipmentTable } from "@/components/organisms/equipment-table"
 import { MaintenanceTable } from "@/components/organisms/maintenance-table"
@@ -15,10 +15,39 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 
 const ITEMS_PER_PAGE = 15
 
+// Kolom minimal yang benar-benar dipakai UI — payload lebih kecil, query lebih cepat
+const EQUIPMENT_COLS = "id,equipment_id,license_plate,description,company_code,construction_year,last_odometer,status"
+const HISTORY_COLS = "id,tanggal,equipment_id,license_plate,nama_barang_atau_jasa,jumlah_harga"
+const SERVICE_LOG_COLS = "equipment_id,service_date,next_service_date,next_service_odometer,odometer_at_service"
+
+const CACHE_KEY = "fleet-cache-v1"
+
+function readCache(): { equipments: any[]; histories: any[]; serviceLogs: any[] } | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed?.equipments) || !Array.isArray(parsed?.histories) || !Array.isArray(parsed?.serviceLogs)) return null
+    return { equipments: parsed.equipments, histories: parsed.histories, serviceLogs: parsed.serviceLogs }
+  } catch {
+    return null
+  }
+}
+
+function writeCache(equipments: any[], histories: any[], serviceLogs: any[]) {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ equipments, histories, serviceLogs }))
+  } catch {
+    // Kuota localStorage penuh dsb — cache bersifat opsional, abaikan
+  }
+}
+
 export default function HomePage() {
   const { theme, toggleTheme } = useTheme()
   // Jadikan 'dashboard' sebagai view default
-  const [activeView, setActiveView] = useState<'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about'>('dashboard')
+  const [activeView, setActiveView] = useState<View>('dashboard')
 
   const [filters, setFilters] = useState<EquipmentFilters>({})
   const [equipments, setEquipments] = useState<any[]>([])
@@ -28,64 +57,101 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null)
 
   const [maintPage, setMaintPage] = useState(1)
+  const isRefreshing = useRef(false)
+
   useKeyboardShortcuts(setActiveView, toggleTheme)
 
   useEffect(() => {
-    async function fetchData() {
-      setIsLoading(true)
-      const [eqResponse, histResponse, serviceResponse] = await Promise.all([
-        supabase.from('equipment').select('*').order('created_at', { ascending: false }),
-        supabase.from('maintenance_histories').select('*').order('tanggal', { ascending: false }),
-        supabase.from('service_logs').select('*').order('service_date', { ascending: false })
-      ])
-
-      if (eqResponse.error) setError(eqResponse.error.message)
-      else setEquipments(eqResponse.data || [])
-
-      if (!histResponse.error) setHistories(histResponse.data || [])
-      if (!serviceResponse.error) setServiceLogs(serviceResponse.data || [])
-
+    // 1. Cache-first: render data terakhir seketika, tanpa menunggu network
+    const cached = readCache()
+    if (cached) {
+      setEquipments(cached.equipments)
+      setHistories(cached.histories)
+      setServiceLogs(cached.serviceLogs)
       setIsLoading(false)
+    }
+
+    // 2. Selalu refresh di background agar data tetap segar (stale-while-revalidate)
+    async function fetchData() {
+      if (isRefreshing.current) return
+      isRefreshing.current = true
+      if (!cached) setIsLoading(true)
+
+      try {
+        const [eqResponse, histResponse, serviceResponse] = await Promise.all([
+          supabase.from('equipment').select(EQUIPMENT_COLS).order('created_at', { ascending: false }),
+          supabase.from('maintenance_histories').select(HISTORY_COLS).order('tanggal', { ascending: false }),
+          supabase.from('service_logs').select(SERVICE_LOG_COLS).order('service_date', { ascending: false }),
+        ])
+
+        if (eqResponse.error) setError(eqResponse.error.message)
+        else {
+          setError(null)
+          setEquipments(eqResponse.data || [])
+        }
+
+        if (!histResponse.error) setHistories(histResponse.data || [])
+        if (!serviceResponse.error) setServiceLogs(serviceResponse.data || [])
+
+        if (!eqResponse.error && !histResponse.error && !serviceResponse.error) {
+          writeCache(eqResponse.data || [], histResponse.data || [], serviceResponse.data || [])
+        }
+      } catch (fetchError) {
+        // Misal env Supabase belum terisi atau jaringan gagal — tampilkan pesan, jangan crash
+        setError(fetchError instanceof Error ? fetchError.message : 'Gagal memuat data')
+      } finally {
+        setIsLoading(false)
+        isRefreshing.current = false
+      }
     }
     fetchData()
   }, [])
 
-  // Filter Data
-  const filteredEquipments = equipments.filter((item) => {
-    const matchesSearch = filters.search
-      ? (item.equipment_id?.toLowerCase().includes(filters.search.toLowerCase()) ||
-        item.description?.toLowerCase().includes(filters.search.toLowerCase()) ||
-        item.license_plate?.toLowerCase().includes(filters.search.toLowerCase()))
-      : true;
-    const matchesStatus = filters.status ? item.status === filters.status : true;
-    return matchesSearch && matchesStatus;
-  })
+  // Filter & turunannya di-memoize agar tidak dihitung ulang pada setiap render
+  const searchLower = filters.search?.toLowerCase() ?? ""
 
-  const availableCount = filteredEquipments.filter(item => item.status === 'Available').length;
+  const filteredEquipments = useMemo(() => {
+    return equipments.filter((item) => {
+      const matchesSearch = searchLower
+        ? (item.equipment_id?.toLowerCase().includes(searchLower) ||
+          item.description?.toLowerCase().includes(searchLower) ||
+          item.license_plate?.toLowerCase().includes(searchLower))
+        : true;
+      const matchesStatus = filters.status ? item.status === filters.status : true;
+      return matchesSearch && matchesStatus;
+    })
+  }, [equipments, searchLower, filters.status])
 
-  const filteredGlobalHistories = histories.filter((item) => {
-    if (!filters.search) return true;
-    const query = filters.search.toLowerCase();
-    return (
-      item.nama_barang_atau_jasa?.toLowerCase().includes(query) ||
-      item.license_plate?.toLowerCase().includes(query) ||
-      item.equipment_id?.toLowerCase().includes(query)
+  const availableCount = useMemo(
+    () => filteredEquipments.filter(item => item.status === 'Available').length,
+    [filteredEquipments]
+  );
+
+  const filteredGlobalHistories = useMemo(() => {
+    if (!searchLower) return histories;
+    return histories.filter((item) =>
+      item.nama_barang_atau_jasa?.toLowerCase().includes(searchLower) ||
+      item.license_plate?.toLowerCase().includes(searchLower) ||
+      item.equipment_id?.toLowerCase().includes(searchLower)
     );
-  })
+  }, [histories, searchLower])
 
   const totalMaintPages = Math.ceil(filteredGlobalHistories.length / ITEMS_PER_PAGE) || 1
-  const paginatedGlobalHistories = filteredGlobalHistories.slice((maintPage - 1) * ITEMS_PER_PAGE, maintPage * ITEMS_PER_PAGE)
+  const paginatedGlobalHistories = useMemo(
+    () => filteredGlobalHistories.slice((maintPage - 1) * ITEMS_PER_PAGE, maintPage * ITEMS_PER_PAGE),
+    [filteredGlobalHistories, maintPage]
+  )
 
-  const handleViewChange = (view: 'dashboard' | 'equipment' | 'maintenance' | 'monitoring') => {
+  const handleViewChange = useCallback((view: View) => {
     setActiveView(view)
     setFilters({}) // Reset filter saat pindah menu
     setMaintPage(1)
-  }
+  }, [])
 
-  const handleSearchFilterChange = (newFilters: EquipmentFilters) => {
+  const handleSearchFilterChange = useCallback((newFilters: EquipmentFilters) => {
     setFilters(newFilters)
     setMaintPage(1)
-  }
+  }, [])
 
   // Konfigurasi Header Dinamis
   const headerInfo = {
@@ -104,7 +170,7 @@ export default function HomePage() {
       onViewChange={handleViewChange}
       equipmentCounts={{ total: filteredEquipments.length, available: availableCount }}
     >
-      <div className="container mx-auto p-6 flex flex-col h-full space-y-4">
+      <div className="container mx-auto p-6 flex flex-col space-y-4">
 
         {/* Header Dinamis */}
         {activeView !== 'about' && (

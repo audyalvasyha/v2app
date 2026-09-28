@@ -1,18 +1,22 @@
-import React from "react"
+import React, { memo, useState, useCallback, useEffect } from "react"
 // Sesuaikan import ini jika Anda sudah memindahkan header & sidebar ke folder organisms
 import { Header } from "@/components/header"
 import { Sidebar } from "@/components/sidebar"
 
-interface DashboardLayoutProps {
-  theme: string;
+export type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about'
+
+const SIDEBAR_COLLAPSED_KEY = "fleet-sidebar-collapsed"
+
+export interface DashboardLayoutProps {
+  theme: "dark" | "light";
   onToggleTheme: () => void;
-  activeView: 'equipment' | 'maintenance' | 'about';
-  onViewChange: (view: 'equipment' | 'maintenance' | 'about') => void;
+  activeView: View;
+  onViewChange: (view: View) => void;
   equipmentCounts: { total: number; available: number };
   children: React.ReactNode;
 }
 
-export function DashboardLayout({
+function DashboardLayoutImpl({
   theme,
   onToggleTheme,
   activeView,
@@ -20,28 +24,56 @@ export function DashboardLayout({
   equipmentCounts,
   children
 }: DashboardLayoutProps) {
+  // State collapse sidebar — dipulihkan dari localStorage saat mount
+  const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true")
+    } catch { /* localStorage tidak tersedia */ }
+  }, [])
+
+  const handleToggleCollapsed = useCallback(() => {
+    setCollapsed(prev => {
+      const next = !prev
+      try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next)) } catch { /* abaikan */ }
+      return next
+    })
+  }, [])
+
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    // Tanpa overflow-hidden: halaman di-scroll lewat scroll utama dokumen (window)
+    <div className="min-h-screen flex flex-col">
       <Header
         onNewSnippet={() => console.log("New Item clicked")}
-        onExportJSON={() => { }}
-        onImportJSON={() => { }}
-        onExportGist={() => { }}
+        onExportJSON={() => "" }
+        onImportJSON={() => ({ success: false as const, count: 0 })}
+        onExportGist={() => ({ description: "", public: false as const, files: {} })}
         theme={theme}
         onToggleTheme={onToggleTheme}
       />
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* Sidebar fixed (selalu terlihat di bawah header); konten utama scroll di level dokumen */}
+      <div className="flex flex-1">
         <Sidebar
           activeView={activeView}
           onViewChange={onViewChange}
           equipmentCounts={equipmentCounts}
+          collapsed={collapsed}
+          onToggleCollapsed={handleToggleCollapsed}
         />
 
-        <main className="flex-1 flex flex-col overflow-hidden bg-background">
+        <main
+          className={`flex-1 min-w-0 flex flex-col bg-background transition-[margin] duration-200 ease-in-out ${
+            collapsed ? 'ml-16' : 'ml-64'
+          }`}
+        >
           {children}
         </main>
       </div>
     </div>
   )
 }
+
+// Memo: layout tidak pernah re-render saat data tabel berubah, hanya saat prop-nya berubah
+export const DashboardLayout = memo(DashboardLayoutImpl)

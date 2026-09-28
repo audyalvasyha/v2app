@@ -31,10 +31,10 @@ export function MaintenanceTable({
   onPageChange
 }: MaintenanceTableProps) {
   return (
-    <div className="flex flex-col h-full w-full">
-      <div className="rounded-md border flex-1 overflow-auto bg-card">
+    <div className="flex flex-col w-full">
+      <div className="rounded-md border bg-card">
         <Table>
-          <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
+          <TableHeader className="bg-muted/50">
             <TableRow>
               <TableHead className="whitespace-nowrap">Tanggal</TableHead>
               <TableHead className="whitespace-nowrap">Equipment ID</TableHead>
@@ -65,7 +65,7 @@ export function MaintenanceTable({
 
       {/* Menggunakan komponen Pagination UI Anda dengan modifikasi input */}
       {totalPages > 1 && (
-        <div className="shrink-0 flex items-center justify-end pt-4">
+        <div className="flex items-center justify-end pt-4">
           <Pagination className="mx-0 w-auto">
             <PaginationContent>
               <PaginationItem>
