@@ -13,8 +13,6 @@ import { ServiceMonitoringTable } from "@/components/organisms/service-monitorin
 import { AboutView } from "@/components/organisms/about-view"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 
-const ITEMS_PER_PAGE = 15
-
 // Kolom minimal yang benar-benar dipakai UI — payload lebih kecil, query lebih cepat
 const EQUIPMENT_COLS = "id,equipment_id,license_plate,description,company_code,construction_year,last_odometer,status"
 const HISTORY_COLS = "id,tanggal,equipment_id,license_plate,nama_barang_atau_jasa,jumlah_harga"
@@ -56,7 +54,6 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [maintPage, setMaintPage] = useState(1)
   const isRefreshing = useRef(false)
 
   useKeyboardShortcuts(setActiveView, toggleTheme)
@@ -136,21 +133,13 @@ export default function HomePage() {
     );
   }, [histories, searchLower])
 
-  const totalMaintPages = Math.ceil(filteredGlobalHistories.length / ITEMS_PER_PAGE) || 1
-  const paginatedGlobalHistories = useMemo(
-    () => filteredGlobalHistories.slice((maintPage - 1) * ITEMS_PER_PAGE, maintPage * ITEMS_PER_PAGE),
-    [filteredGlobalHistories, maintPage]
-  )
-
   const handleViewChange = useCallback((view: View) => {
     setActiveView(view)
     setFilters({}) // Reset filter saat pindah menu
-    setMaintPage(1)
   }, [])
 
   const handleSearchFilterChange = useCallback((newFilters: EquipmentFilters) => {
     setFilters(newFilters)
-    setMaintPage(1)
   }, [])
 
   // Konfigurasi Header Dinamis
@@ -215,11 +204,8 @@ export default function HomePage() {
 
         {activeView === 'maintenance' && (
           <MaintenanceTable
-            histories={paginatedGlobalHistories}
+            histories={filteredGlobalHistories}
             isLoading={isLoading}
-            currentPage={maintPage}
-            totalPages={totalMaintPages}
-            onPageChange={setMaintPage}
           />
         )}
 
@@ -228,7 +214,13 @@ export default function HomePage() {
             equipments={filteredEquipments}
             serviceLogs={serviceLogs}
             isLoading={isLoading}
-            statusFilter={filters.serviceStatus || 'all'} // Kirim state filter
+            statusFilter={filters.serviceStatus || 'all'}
+            onStatusFilterChange={(next) =>
+              setFilters((prev) => ({
+                ...prev,
+                serviceStatus: next === 'all' ? undefined : next,
+              }))
+            }
           />
         )}
 

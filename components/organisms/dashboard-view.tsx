@@ -23,6 +23,9 @@ import { AlertTriangle, Wrench, Truck, CircleDollarSign } from "lucide-react"
 // Import dinamis per-named-export dari recharts (CJS) tidak reliable di Turbopack,
 // jadi yang di-lazy adalah file komponennya, bukan simbol recharts-nya.
 const LazyCostChart = lazy(() => import("@/components/organisms/cost-chart"))
+const LazyUnitCostRankingChart = lazy(
+    () => import("@/components/organisms/unit-cost-ranking-chart"),
+)
 
 interface DashboardViewProps {
     equipments: any[];
@@ -167,6 +170,38 @@ function DashboardContent({ equipments, histories, serviceLogs }: {
         .sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
         .slice(0, 5), [histories]);
 
+    // 4. Peringkat biaya per unit (6 bulan terakhir, akumulasi jumlah_harga)
+    //    Dipisah dari grafik Tren yang sudah ada — tidak mengubah chartData.
+    const ranking6M = useMemo(() => {
+        const sixMonthsAgo = new Date(today)
+        sixMonthsAgo.setMonth(today.getMonth() - 6)
+        const byUnit = new Map<string, { totalCost: number; count: number }>()
+        for (const h of histories) {
+            const d = new Date(h.tanggal)
+            if (Number.isNaN(d.getTime()) || d < sixMonthsAgo) continue
+            const key = String(h.equipment_id ?? "").trim()
+            if (!key) continue
+            const prev = byUnit.get(key)
+            const cost = Number(h.jumlah_harga) || 0
+            if (prev) {
+                prev.totalCost += cost
+                prev.count += 1
+            } else {
+                byUnit.set(key, { totalCost: cost, count: 1 })
+            }
+        }
+        const entries = Array.from(byUnit.entries()).map(([equipment_id, v]) => ({
+            equipment_id,
+            totalCost: v.totalCost,
+            count: v.count,
+        }))
+        entries.sort((a, b) => b.totalCost - a.totalCost)
+        return {
+            top5: entries.slice(0, 5),
+            bottom5: [...entries].sort((a, b) => a.totalCost - b.totalCost).slice(0, 5),
+        }
+    }, [histories, today])
+
     return (
         <div className="flex flex-col gap-6 pb-4">
 
@@ -220,7 +255,7 @@ function DashboardContent({ equipments, histories, serviceLogs }: {
                 </Card>
             </div>
 
-            {/* GRAFIK BIAYA */}
+            {/* GRAFIK BIAYA — jangan diubah sesuai permintaan user */}
             <Card>
                 <CardHeader>
                     <CardTitle>Tren Biaya Perbaikan</CardTitle>
@@ -236,6 +271,21 @@ function DashboardContent({ equipments, histories, serviceLogs }: {
                             Belum ada data pengeluaran dalam 3 bulan terakhir.
                         </div>
                     )}
+                </CardContent>
+            </Card>
+
+            {/* PERINGKAT BIAYA PER UNIT — 6 bulan (Top 5 / Bottom 5) — tambahan, tidak menggantikan Tren */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Peringkat Biaya Unit (6 Bulan)</CardTitle>
+                    <CardDescription>
+                        Perbandingan akumulasi biaya perbaikan per unit. Top 5 paling boros dan Bottom 5 paling hemat dalam 6 bulan terakhir.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Suspense fallback={<Skeleton className="h-[264px] w-full rounded-md" />}>
+                        <LazyUnitCostRankingChart top5={ranking6M.top5} bottom5={ranking6M.bottom5} />
+                    </Suspense>
                 </CardContent>
             </Card>
 
