@@ -109,7 +109,7 @@ export function AboutView() {
                 <div className="mt-8 grid gap-10 md:grid-cols-12">
                     <div className="flex items-start gap-5 md:col-span-4">
                         <img
-                            src="/images.png"
+                            src="/IMG_20260929_045219.jpg"
                             alt="Audy Al Vasyah"
                             width={112}
                             height={112}
