@@ -58,7 +58,7 @@ export function AboutView() {
                         <span className="text-primary">.</span>
                     </h1>
                     <p className="mt-8 max-w-xl text-pretty text-[15px] leading-relaxed text-muted-foreground">
-                        Satu dasbor operasional untuk mengelola armada kendaraan — mulai dari inventaris
+                        Satu dasbor operasional untuk mengelola armada kendaraan mulai dari inventaris
                         unit, riwayat perbaikan, hingga pengingat servis yang dihitung dari tanggal maupun
                         odometer. Dibangun agar tim lapangan dan tim administrasi membaca angka yang sama.
                     </p>
@@ -125,8 +125,8 @@ export function AboutView() {
 
                     <div className="md:col-span-5 md:col-start-6">
                         <p className="text-sm leading-relaxed text-muted-foreground">
-                            Menggabungkan sisi <i>engineering</i> dengan perencanaan transportasi: menyusun
-                            arsitektur aplikasi, merancang antarmuka, hingga menuntaskan integrasi{" "}
+                            Menggabungkan sisi <i>engineering</i> dengan pengelolaan armada: menyusun
+                            arsitektur aplikasi, merancang antarmuka, hingga mengintegrasi{" "}
                             <i>database</i> dari hulu ke hilir.
                         </p>
                         <p className="mt-5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground/80">
@@ -173,9 +173,9 @@ export function AboutView() {
                 </div>
                 <div className="md:col-span-9">
                     <p className="max-w-3xl text-pretty text-sm leading-relaxed text-muted-foreground">
-                        Penataan ulang komponen ke pola <i>Atomic Design</i>, penajaman performa di ekosistem
+                        Pengoptimalan komponen ke pola <i>Atomic Design</i>, penajaman performa di ekosistem
                         Next.js, serta penyempurnaan antarmuka dengan Tailwind dan shadcn/ui dikerjakan bersama
-                        asisten AI sebagai rekan peninjau — memeriksa keputusan teknis, bukan menyalin templat.
+                        asisten AI sebagai rekan peninjau memeriksa keputusan teknis.
                     </p>
                 </div>
             </div>
