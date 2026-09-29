@@ -44,14 +44,7 @@ function DashboardLayoutImpl({
   return (
     // Tanpa overflow-hidden: halaman di-scroll lewat scroll utama dokumen (window)
     <div className="min-h-screen flex flex-col">
-      <Header
-        onNewSnippet={() => console.log("New Item clicked")}
-        onExportJSON={() => "" }
-        onImportJSON={() => ({ success: false as const, count: 0 })}
-        onExportGist={() => ({ description: "", public: false as const, files: {} })}
-        theme={theme}
-        onToggleTheme={onToggleTheme}
-      />
+      <Header theme={theme} onToggleTheme={onToggleTheme} />
 
       {/* Sidebar fixed (selalu terlihat di bawah header); konten utama scroll di level dokumen */}
       <div className="flex flex-1">

@@ -7,15 +7,11 @@ import { ExportImportDialog } from "./export-import-dialog"
 import { ThemeToggle } from "./theme-toggle"
 
 interface HeaderProps {
-  onNewSnippet: () => void
-  onExportJSON: () => string
-  onImportJSON: (json: string) => { success: boolean; count: number; error?: string }
-  onExportGist: () => { description: string; public: boolean; files: Record<string, { content: string }> }
   theme: "dark" | "light"
   onToggleTheme: () => void
 }
 
-export function Header({ onNewSnippet, onExportJSON, onImportJSON, onExportGist, theme, onToggleTheme }: HeaderProps) {
+export function Header({ theme, onToggleTheme }: HeaderProps) {
   return (
     <header className="border-b border-border bg-background sticky top-0 z-20">
       <div className="flex h-16 items-center justify-between px-6">
@@ -33,7 +29,7 @@ export function Header({ onNewSnippet, onExportJSON, onImportJSON, onExportGist,
 
         <div className="flex items-center gap-2">
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-          <ExportImportDialog onExportJSON={onExportJSON} onImportJSON={onImportJSON} onExportGist={onExportGist} />
+          <ExportImportDialog />
           <KeyboardShortcutsDialog />
 
           {/* Tombol GitHub */}
