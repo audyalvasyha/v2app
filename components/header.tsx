@@ -25,7 +25,7 @@ export function Header({ onNewSnippet, onExportJSON, onImportJSON, onExportGist,
               <span className="text-primary-foreground font-bold text-lg">{"@"}</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold">v2app</h1>
+              <h1 className="text-xl font-bold">Midaa</h1>
               <p className="text-xs text-muted-foreground">Fleet Management System</p>
             </div>
           </div>
