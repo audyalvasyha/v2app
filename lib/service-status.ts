@@ -6,6 +6,8 @@
  * keduanya memanggil fungsi ini.
  */
 
+import { startOfZonedDay } from "@/lib/format"
+
 export type ServiceStatusId = "safe" | "warning" | "overdue" | "none"
 
 export interface ServiceStatusTone {
@@ -93,12 +95,12 @@ export function evaluateServiceStatus(
         }
     }
 
-    // Normalisasi ke tengah hari supaya selisih hari tidak terpengaruh zona waktu
-    const base = new Date(today)
-    base.setHours(12, 0, 0, 0)
+    // Normalisasi ke tengah hari WIB supaya selisih hari tidak terpengaruh zona waktu
+    const base = new Date(startOfZonedDay(today) + 12 * 60 * 60 * 1000)
 
-    const nextDate = latestLog.next_service_date ? new Date(latestLog.next_service_date) : null
-    if (nextDate && !Number.isNaN(nextDate.getTime())) nextDate.setHours(12, 0, 0, 0)
+    const nextDate = latestLog.next_service_date
+        ? new Date(startOfZonedDay(latestLog.next_service_date) + 12 * 60 * 60 * 1000)
+        : null
 
     const nextOdo: number | null =
         latestLog.next_service_odometer != null ? Number(latestLog.next_service_odometer) : null

@@ -12,23 +12,40 @@ import { MaintenanceTable } from "@/components/organisms/maintenance-table"
 import { ServiceMonitoringTable } from "@/components/organisms/service-monitoring-table"
 import { AboutView } from "@/components/organisms/about-view"
 import { ComingSoonView } from "@/components/organisms/coming-soon-view"
+import { OutboundTable } from "@/components/organisms/outbound-table"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 
 // Kolom minimal yang benar-benar dipakai UI — payload lebih kecil, query lebih cepat
 const EQUIPMENT_COLS = "id,equipment_id,license_plate,description,company_code,construction_year,last_odometer,status"
 const HISTORY_COLS = "id,tanggal,equipment_id,license_plate,nama_barang_atau_jasa,jumlah_harga"
 const SERVICE_LOG_COLS = "equipment_id,service_date,next_service_date,next_service_odometer,odometer_at_service"
+const OUTBOUND_COLS = "freight_order,no_polisi,jam_out,jam_in,created_at"
 
-const CACHE_KEY = "fleet-cache-v1"
+const CACHE_KEY = "fleet-cache-v2"
 
-function readCache(): { equipments: any[]; histories: any[]; serviceLogs: any[] } | null {
+interface FleetCache {
+  equipments: any[]
+  histories: any[]
+  serviceLogs: any[]
+}
+
+function readCache(): FleetCache | null {
   if (typeof window === "undefined") return null
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed?.equipments) || !Array.isArray(parsed?.histories) || !Array.isArray(parsed?.serviceLogs)) return null
-    return { equipments: parsed.equipments, histories: parsed.histories, serviceLogs: parsed.serviceLogs }
+    if (
+      !Array.isArray(parsed?.equipments) ||
+      !Array.isArray(parsed?.histories) ||
+      !Array.isArray(parsed?.serviceLogs)
+    )
+      return null
+    return {
+      equipments: parsed.equipments,
+      histories: parsed.histories,
+      serviceLogs: parsed.serviceLogs,
+    }
   } catch {
     return null
   }
@@ -52,7 +69,10 @@ export default function HomePage() {
   const [equipments, setEquipments] = useState<any[]>([])
   const [histories, setHistories] = useState<any[]>([])
   const [serviceLogs, setServiceLogs] = useState<any[]>([])
+  const [outbounds, setOutbounds] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [outboundError, setOutboundError] = useState<string | null>(null)
+  const [isOutboundFetching, setIsOutboundFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const isRefreshing = useRef(false)
@@ -105,6 +125,62 @@ export default function HomePage() {
     fetchData()
   }, [])
 
+  // armada_outbound di-fetch terpisah sesuai rentang tanggal menu Pengiriman
+  // — tanpa ini, seluruh tabel besar ikut termuat setiap kali app dibuka.
+  const fetchOutbounds = useCallback(async (from: string, to: string) => {
+    // Validasi format YYYY-MM-DD — input date bisa dikosongkan user, dan
+    // string kosong akan menghasilkan Invalid Date (NaN → toISOString throw).
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/
+    if (!datePattern.test(from) || !datePattern.test(to)) {
+      setOutboundError('Rentang tanggal tidak valid. Pilih tanggal dari dan sampai.')
+      return
+    }
+    // Bila rentang terbalik (dari > sampai), balik otomatis agar hasilnya
+    // konsisten alih-alih kosong tanpa penjelasan.
+    const [start, end] = from <= to ? [from, to] : [to, from]
+
+    setIsOutboundFetching(true)
+    try {
+      // Batas akhir dikasih +1 hari (lt) karena jam_out berisi jam.
+      const toNext = new Date(`${end}T00:00:00+07:00`)
+      toNext.setDate(toNext.getDate() + 1)
+      const res = await supabase
+        .from('armada_outbound')
+        .select(OUTBOUND_COLS)
+        .gte('jam_out', `${start}T00:00:00+07:00`)
+        .lt('jam_out', toNext.toISOString())
+        .order('jam_out', { ascending: false })
+      if (res.error) {
+        setOutboundError(res.error.message)
+      } else {
+        setOutboundError(null)
+        setOutbounds(res.data || [])
+      }
+    } catch (e) {
+      setOutboundError(e instanceof Error ? e.message : 'Gagal memuat pengiriman')
+    } finally {
+      setIsOutboundFetching(false)
+    }
+  }, [])
+
+  // Rentang tanggal menu Pengiriman — default 30 hari terakhir (WIB).
+  const [outboundRange, setOutboundRange] = useState(() => {
+    const nowParts = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })
+    const today = nowParts
+    const from = new Date(`${today}T00:00:00+07:00`)
+    from.setDate(from.getDate() - 29)
+    const fromParts = from.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })
+    return { from: fromParts, to: today }
+  })
+
+  const handleOutboundRangeChange = useCallback((from: string, to: string) => {
+    setOutboundRange({ from, to })
+  }, [])
+
+  useEffect(() => {
+    fetchOutbounds(outboundRange.from, outboundRange.to)
+  }, [fetchOutbounds, outboundRange.from, outboundRange.to])
+
   // Filter & turunannya di-memoize agar tidak dihitung ulang pada setiap render
   const searchLower = filters.search?.toLowerCase() ?? ""
 
@@ -151,7 +227,7 @@ export default function HomePage() {
     monitoring: { title: 'Monitoring Status Servis', desc: 'Pantau jadwal servis unit berdasarkan tanggal dan odometer.' },
     about: { title: 'Tentang Aplikasi', desc: 'Kisah di balik pengembangan Fleet Management System v2.' },
     skr: { title: 'SKR', desc: 'Surat Keterangan Result — modul ekspedisi yang sedang disiapkan.' },
-    pengiriman: { title: 'Pengiriman', desc: 'Pantau pengiriman armada ekspedisi — modul yang sedang disiapkan.' },
+    pengiriman: { title: 'Pengiriman', desc: 'Pantau armada outbound: nomor polisi, jam keluar, jam kembali, dan durasi tempuh.' },
   }
 
   return (
@@ -240,7 +316,15 @@ export default function HomePage() {
         )}
 
         {activeView === 'pengiriman' && (
-          <ComingSoonView title="Pengiriman" />
+          <OutboundTable
+            outbounds={outbounds}
+            isLoading={isLoading && outboundError == null}
+            error={outboundError}
+            dateFrom={outboundRange.from}
+            dateTo={outboundRange.to}
+            onDateRangeChange={handleOutboundRangeChange}
+            isFetching={isOutboundFetching}
+          />
         )}
 
         {activeView === 'about' && (

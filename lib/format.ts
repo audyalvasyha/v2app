@@ -4,10 +4,53 @@
  * konsisten di seluruh aplikasi (sebelumnya setiap file punya salinannya).
  */
 
+/**
+ * Seluruh aplikasi menghitung tanggal dalam zona waktu Indonesia (WIB, UTC+7),
+ * bukan mengikuti zona waktu browser. Tanpa ini, data yang sama bisa tampil
+ * berbeda tergantung perangkat — terutama untuk waktu dekat tengah malam.
+ */
+export const APP_TIMEZONE = "Asia/Jakarta"
+
+/** Offset WIB dalam milidetik (tetap, tanpa DST) */
+export const WIB_OFFSET_MS = 7 * 60 * 60 * 1000
+
 export function toDate(value: string | null | undefined): Date | null {
     if (!value) return null
     const d = new Date(value)
     return Number.isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * Komponen kalender dari sebuah timestamp dalam WIB — tahun, bulan (1-12), dan
+ * tanggal. Memakai `getFullYear()` langsung akan mengikuti zona waktu browser,
+ * sehingga timestamp dekat tengah malam bisa jatuh di hari yang salah.
+ */
+export function zonedParts(value: string | number | Date | null | undefined) {
+    const d = value instanceof Date ? value : new Date(value ?? NaN)
+    if (Number.isNaN(d.getTime())) return null
+    const shifted = new Date(d.getTime() + WIB_OFFSET_MS)
+    return {
+        year: shifted.getUTCFullYear(),
+        month: shifted.getUTCMonth() + 1,
+        day: shifted.getUTCDate(),
+    }
+}
+
+/** Epoch ms of 00:00 WIB for the day containing `value` */
+export function startOfZonedDay(value: string | number | Date = new Date()): number {
+    const parts = zonedParts(value)
+    if (!parts) return 0
+    return Date.UTC(parts.year, parts.month - 1, parts.day) - WIB_OFFSET_MS
+}
+
+/**
+ * Epoch ms of 00:00 WIB, mundur sejumlah bulan kalender dari `value`.
+ * Dihitung lewat Date.UTC agar `getMonth()` tidak ikut zona waktu browser.
+ */
+export function startOfZonedDayMonthsAgo(months: number, value: string | number | Date = new Date()): number {
+    const parts = zonedParts(value)
+    if (!parts) return 0
+    return Date.UTC(parts.year, parts.month - 1 - months, parts.day) - WIB_OFFSET_MS
 }
 
 export function formatNumber(
@@ -49,14 +92,36 @@ export function formatKm(n: number | null | undefined): string {
 export function formatDateMedium(value: string | null | undefined): string {
     const d = toDate(value)
     if (!d) return "—"
-    return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
+    return d.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        timeZone: APP_TIMEZONE,
+    })
 }
 
 /** 12 Agu */
 export function formatDateShort(value: string | null | undefined): string {
     const d = toDate(value)
     if (!d) return "—"
-    return d.toLocaleDateString("id-ID", { day: "numeric", month: "short" })
+    return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: APP_TIMEZONE })
+}
+
+/** 12 Agu 2026, 14:30 WIB */
+export function formatDateTimeWIB(value: string | null | undefined): string {
+    const d = toDate(value)
+    if (!d) return "—"
+    return `${d.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        timeZone: APP_TIMEZONE,
+    })}, ${d.toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: APP_TIMEZONE,
+    })} WIB`
 }
 
 /**
@@ -66,11 +131,7 @@ export function formatDateShort(value: string | null | undefined): string {
 export function relativeDayLabel(value: string | null | undefined): string {
     const d = toDate(value)
     if (!d) return ""
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const target = new Date(d)
-    target.setHours(0, 0, 0, 0)
-    const diff = Math.round((today.getTime() - target.getTime()) / 86_400_000)
+    const diff = Math.round((startOfZonedDay() - startOfZonedDay(d)) / 86_400_000)
 
     if (diff === 0) return "Hari ini"
     if (diff === 1) return "Kemarin"
@@ -85,12 +146,15 @@ export function periodLabel(from: string | null, to: string | null): string {
     const a = toDate(from)
     const b = toDate(to)
     if (!a || !b) return "—"
-    const shortMonth = (d: Date) => d.toLocaleDateString("id-ID", { month: "short" })
-    if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()) {
-        return `${shortMonth(a)} ${a.getFullYear()}`
+    const pa = zonedParts(a)
+    const pb = zonedParts(b)
+    if (!pa || !pb) return "—"
+    const shortMonth = (d: Date) => d.toLocaleDateString("id-ID", { month: "short", timeZone: APP_TIMEZONE })
+    if (pa.year === pb.year && pa.month === pb.month) {
+        return `${shortMonth(a)} ${pa.year}`
     }
-    if (a.getFullYear() === b.getFullYear()) {
-        return `${shortMonth(a)} – ${shortMonth(b)} ${b.getFullYear()}`
+    if (pa.year === pb.year) {
+        return `${shortMonth(a)} – ${shortMonth(b)} ${pb.year}`
     }
-    return `${shortMonth(a)} ${a.getFullYear()} – ${shortMonth(b)} ${b.getFullYear()}`
+    return `${shortMonth(a)} ${pa.year} – ${shortMonth(b)} ${pb.year}`
 }

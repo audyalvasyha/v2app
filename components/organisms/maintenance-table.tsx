@@ -37,6 +37,10 @@ import {
     formatRupiah,
     periodLabel,
     relativeDayLabel,
+    startOfZonedDay,
+    toDate,
+    zonedParts,
+    APP_TIMEZONE,
 } from "@/lib/format"
 
 interface MaintenanceTableProps {
@@ -60,26 +64,21 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 /* ── Format & util ───────────────────────────────────────────────────────── */
 
-function toDate(value: string): Date | null {
-    const d = new Date(value)
-    return Number.isNaN(d.getTime()) ? null : d
-}
-
 function weekdayShort(iso: string): string {
     const d = toDate(iso)
     if (!d) return ""
-    return d.toLocaleDateString("id-ID", { weekday: "short" })
+    return d.toLocaleDateString("id-ID", { weekday: "short", timeZone: APP_TIMEZONE })
 }
 
 function monthKey(iso: string): string {
-    const d = toDate(iso)
-    return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` : "0"
+    const parts = zonedParts(iso)
+    return parts ? `${parts.year}-${String(parts.month).padStart(2, "0")}` : "0"
 }
 
 function monthLabel(iso: string): string {
     const d = toDate(iso)
     if (!d) return "Tanpa tanggal"
-    return d.toLocaleDateString("id-ID", { month: "long", year: "numeric" })
+    return d.toLocaleDateString("id-ID", { month: "long", year: "numeric", timeZone: APP_TIMEZONE })
 }
 
 /* ── Baris isi tabel: pemisah bulan atau data ────────────────────────────── */
@@ -100,12 +99,12 @@ function MaintenanceTableImpl({ histories, isLoading }: MaintenanceTableProps) {
     const rangeRows = useMemo(() => {
         const opt = RANGE_OPTIONS.find((o) => o.id === range)
         if (!opt?.days) return histories
-        const cutoff = new Date()
-        cutoff.setHours(0, 0, 0, 0)
-        cutoff.setDate(cutoff.getDate() - opt.days)
+        // Batas dihitung dari tengah malam WIB agar "30 hari" tidak bergeser
+        // saat perangkat pengguna berada di zona waktu lain.
+        const cutoff = startOfZonedDay() - opt.days * 86_400_000
         return histories.filter((h) => {
-            const d = toDate(h.tanggal)
-            return d ? d >= cutoff : false
+            const t = toDate(h.tanggal)
+            return t ? t.getTime() >= cutoff : false
         })
     }, [histories, range])
 

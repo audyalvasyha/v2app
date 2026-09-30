@@ -25,6 +25,9 @@ import {
     formatNumber,
     formatRupiah,
     relativeDayLabel,
+    startOfZonedDay,
+    startOfZonedDayMonthsAgo,
+    APP_TIMEZONE,
 } from "@/lib/format"
 import {
     evaluateServiceStatus,
@@ -199,15 +202,12 @@ function DashboardContent({
      * `histories` dipindai tiga kali terpisah.
      */
     const analytics = useMemo(() => {
-        const startOfToday = new Date(today)
-        startOfToday.setHours(0, 0, 0, 0)
-        const cutoff30 = startOfToday.getTime() - 30 * DAY_MS
-        const cutoff60 = startOfToday.getTime() - 60 * DAY_MS
+        const startOfTodayMs = startOfZonedDay(today)
+        const cutoff30 = startOfTodayMs - 30 * DAY_MS
+        const cutoff60 = startOfTodayMs - 60 * DAY_MS
         // Rentang tren dipertahankan sama seperti sebelumnya (3 bulan kalender)
-        const cutoff3m = new Date(today)
-        cutoff3m.setMonth(today.getMonth() - 3)
-        const cutoff6m = new Date(today)
-        cutoff6m.setMonth(today.getMonth() - 6)
+        const cutoff3m = new Date(startOfZonedDayMonthsAgo(3, today))
+        const cutoff6m = new Date(startOfZonedDayMonthsAgo(6, today))
 
         let totalCost = 0
         let cost30 = 0
@@ -259,7 +259,11 @@ function DashboardContent({
             .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
             .map(([date, cost]) => ({
                 date,
-                displayDate: new Date(date).toLocaleDateString("id-ID", { day: "numeric", month: "short" }),
+                displayDate: new Date(date).toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "short",
+                    timeZone: APP_TIMEZONE,
+                }),
                 cost,
             }))
         const trendTotal = trend.reduce((sum, point) => sum + point.cost, 0)
