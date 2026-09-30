@@ -12,14 +12,16 @@
 --  Jalankan sekali di Supabase → SQL Editor. Aman diulang.
 -- ═══════════════════════════════════════════════════════════════
 
--- 1. RLS: role authenticated (hasil login Supabase Auth) boleh menulis.
+-- 1. RLS: TIDAK ada policy tulis untuk authenticated sekalipun.
+-- Penulisan HANYA lewat fungsi replace_skr_detail di bawah yang:
+--   - security definer (tidak terkena RLS) sehingga tetap bisa insert,
+--   - atomik: delete semua + insert batch baru dalam satu transaksi.
+-- Kalau authenticated diberi policy INSERT/UPDATE/DELETE langsung,
+-- admin bisa menghapus/mengubah baris sebagian lewat PostgREST dan
+-- melewati jaminan atomik — cukup satu pintu (RPC) saja.
 alter table public.skr_detail enable row level security;
 
 drop policy if exists "authenticated_tulis_skr_detail" on public.skr_detail;
-create policy "authenticated_tulis_skr_detail" on public.skr_detail
-  for all to authenticated
-  using (true)
-  with check (true);
 
 -- 2. Fungsi atomic "replace penuh": hapus semua baris lalu masukkan batch
 --    baru dalam SATU transaksi. Gagal di tengah → semua dibatalkan,
@@ -47,7 +49,8 @@ begin
 
   insert into public.skr_detail (
     license_no, salesman, pod_reason, skr_base_unit,
-    pod_date, skr_sales_unit, skr_value, customer_id, delivery_number
+    pod_date, skr_sales_unit, skr_value, customer_id, delivery_number,
+    sales_office, distribution_channel
   )
   select
     nullif(trim(r.item->>'license_no'), ''),
@@ -59,7 +62,9 @@ begin
            (r.item->>'skr_sales_unit')::bigint),
     nullif(trim(r.item->>'skr_value'), ''),
     nullif(trim(r.item->>'customer_id'), ''),
-    nullif(trim(r.item->>'delivery_number'), '')
+    nullif(trim(r.item->>'delivery_number'), ''),
+    nullif(trim(r.item->>'sales_office'), ''),
+    nullif(trim(r.item->>'distribution_channel'), '')
   from jsonb_array_elements(rows) as r(item);
 
   get diagnostics inserted_count = row_count;

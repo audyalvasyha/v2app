@@ -18,6 +18,9 @@ export interface SkrCsvRow {
     skr_value: string
     customer_id: string
     delivery_number: string
+    /** Kolom pelengkap — disimpan apa adanya agar data CSV tidak hilang */
+    sales_office: string
+    distribution_channel: string
 }
 
 export interface CsvParseResult {
@@ -80,15 +83,25 @@ const COLUMN_ALIASES: Record<string, string> = {
     donumber: "delivery_number",
     nomordo: "delivery_number",
 
-    // Kolom yang ada di CSV tapi tidak dipakai — dipetakan ke "" agar tidak
-    // muncul sebagai "unknown".
-    distribution_channel: "",
-    sales_office: "",
+    // Kolom pelengkap — ikut disimpan supaya data CSV lengkap di database.
+    sales_office: "sales_office",
+    salesoffice: "sales_office",
+    office: "sales_office",
+    kantorpenjualan: "sales_office",
+
+    distribution_channel: "distribution_channel",
+    distributionchannel: "distribution_channel",
+    channel: "distribution_channel",
+    saluran: "distribution_channel",
 }
 
 /** "Delivery Number" / " delivery number " → "deliverynumber" */
 function normalizeHeader(raw: string): string {
-    return raw.trim().toLowerCase().replace(/[\s_-]+/g, "")
+    return raw
+        .replace(/^\uFEFF/, "") // BOM Excel di sel pertama
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, "")
 }
 
 /**
@@ -139,7 +152,7 @@ function splitCsv(text: string): string[][] {
 }
 
 export function parseSkrCsv(text: string): CsvParseResult {
-    const table = splitCsv(text)
+    const table = splitCsv(text.replace(/^\uFEFF/, ""))
     if (table.length === 0) {
         return { rows: [], headerMap: [], unknownHeaders: [], errors: [{ rowNumber: 0, message: "File kosong" }] }
     }
@@ -194,6 +207,8 @@ export function parseSkrCsv(text: string): CsvParseResult {
             skr_value: record.skr_value ?? "",
             customer_id: record.customer_id ?? "",
             delivery_number: record.delivery_number ?? "",
+            sales_office: record.sales_office ?? "",
+            distribution_channel: record.distribution_channel ?? "",
         })
     }
 
@@ -202,7 +217,7 @@ export function parseSkrCsv(text: string): CsvParseResult {
 
 /** Template CSV standar — unduh dari halaman import. */
 export const SKR_CSV_TEMPLATE = [
-    "License No,Salesman,POD Reason,SKR Base Unit,POD Date,SKR Sales Unit,SKR Value,Customer ID,Delivery Number",
-    'B9296SXW,S090091380,Barang Hilang,48,02 April 2026,2,"169,300",110056017,JBP0005388',
-    'B1234ABC,S000000001,Terkirim Lengkap,24,03 April 2026,5,"1,062,725",110056018,JBP0005389',
+    "Delivery Number,POD Date,License No,Salesman,Customer ID,SKR Base Unit,SKR Sales Unit,SKR Value,POD Reason,Sales Office,Distribution Channel",
+    'JBP0005388,02 April 2026,B9296SXW,S090091380,110056017,48,2,"169,300",Barang Hilang,PKD Bagan Batu,Modern Trade',
+    'JBP0005389,03 April 2026,B1234ABC,S000000001,110056018,24,5,"1,062,725",Terkirim Lengkap,PKD Bagan Batu,General Trade',
 ].join("\r\n")

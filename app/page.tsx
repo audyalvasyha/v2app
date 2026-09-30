@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { ArrowUpRight } from "lucide-react"
 import { useTheme } from "@/hooks/use-theme"
 import { supabase } from "@/utils/supabase"
 import { SearchBar, EquipmentFilters } from "@/components/search-bar"
@@ -489,8 +490,21 @@ export default function HomePage() {
         {/* Header Dinamis */}
         {activeView !== 'about' && (
           <div className="shrink-0">
-            <h1 className="text-2xl font-bold tracking-tight">
+            <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
               {headerInfo[activeView].title}
+              {/* Menu SKR: pintasan ke sub-app import CSV (subdomain) */}
+              {activeView === 'skr' && (
+                <a
+                  href="https://skr.transportbaganbatu.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Buka halaman import data SKR"
+                  aria-label="Buka halaman import data SKR"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
+                >
+                  <ArrowUpRight className="h-4 w-4" />
+                </a>
+              )}
             </h1>
             <p className="text-muted-foreground mb-4">
               {headerInfo[activeView].desc}
