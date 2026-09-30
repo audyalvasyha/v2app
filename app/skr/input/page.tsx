@@ -85,19 +85,19 @@ export default function SkrInputPage() {
     const handleUpload = async () => {
         if (!rows || rows.length === 0) return
         const total = rows.length
-        const label = `${total.toLocaleString("id-ID")} baris akan menggantikan seluruh data SKR lama. Lanjutkan?`
+        const label = `${total.toLocaleString("id-ID")} baris akan di-upsert: yang sudah ada ditimpa, yang baru ditambah. Lanjutkan?`
         if (!window.confirm(label)) return
 
         setUploading(true)
-        const { data, error } = await supabase.rpc("replace_skr_detail", { rows: rows as unknown as never[] })
+        const { data, error } = await supabase.rpc("upsert_skr_detail", { rows: rows as unknown as never[] })
         setUploading(false)
         if (error) {
             toast.error("Upload gagal — data lama tidak berubah", { description: error.message })
             return
         }
-        const inserted = (data as { inserted?: number } | null)?.inserted ?? total
-        toast.success(`Berhasil: ${formatQty(inserted, "baris")} tersimpan`, {
-            description: "Seluruh data lama telah diganti. Grafik & tabel di dashboard langsung memakai data baru.",
+        const affected = (data as { affected?: number } | null)?.affected ?? total
+        toast.success(`Berhasil: ${formatQty(affected, "baris")} tersimpan`, {
+            description: "Baris yang sudah ada ditimpa, yang baru ditambah. Data hari sebelumnya tetap aman.",
         })
         setRows(null)
         setParseSummary(null)
@@ -191,14 +191,15 @@ export default function SkrInputPage() {
                 </div>
             </div>
 
-            {/* Peringatan mode replace */}
-            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-2.5 text-xs leading-relaxed">
-                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            {/* Info mode upsert harian */}
+            <div className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-2.5 text-xs leading-relaxed">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                 <p>
-                    <span className="font-medium text-amber-700 dark:text-amber-400">Replace penuh.</span>{" "}
+                    <span className="font-medium text-emerald-700 dark:text-emerald-400">Mode harian (upsert).</span>{" "}
                     <span className="text-muted-foreground">
-                        Upload akan <b>menghapus seluruh</b> data SKR lama lalu menggantinya dengan isi file ini —
-                        dalam satu transaksi (gagal di tengah = tidak ada yang berubah). Pastikan CSV berisi data lengkap.
+                        Baris dengan kombinasi <b>Delivery Number + Tanggal POD + SKU + Qty</b> yang sudah ada akan
+                        ditimpa, yang belum ada ditambah — dan data hari-hari sebelumnya tetap aman. Seluruh batch
+                        berjalan dalam satu transaksi: gagal di tengah = tidak ada yang berubah.
                     </span>
                 </p>
             </div>
@@ -271,7 +272,7 @@ export default function SkrInputPage() {
                         </p>
                         <Button className="gap-1.5" onClick={handleUpload} disabled={uploading}>
                             <Upload className="h-4 w-4" />
-                            {uploading ? "Mengunggah…" : "Ganti seluruh data"}
+                            {uploading ? "Mengunggah…" : "Upsert data"}
                         </Button>
                     </div>
                     <div className="overflow-x-auto rounded-lg border">

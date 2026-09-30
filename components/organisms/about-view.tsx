@@ -27,6 +27,21 @@ const CAPABILITIES: { index: string; title: string; desc: string }[] = [
         title: "Jadwal Servis",
         desc: "Bandingkan tanggal dan odometer servis berikutnya untuk menandai unit yang aman, mendekati, atau sudah terlambat servis.",
     },
+    {
+        index: "04",
+        title: "Sisa Kiriman (SKR)",
+        desc: "Dasbor Sisa Kiriman per armada, sales, dan toko: dokumen, qty, dan nilai tersaji berdampingan dengan tren harian dibanding bulan sebelumnya.",
+    },
+    {
+        index: "05",
+        title: "Pengiriman Outbound",
+        desc: "Jam keluar dan kembali tiap armada dirangkap durasi tempuh, dengan filter rentang tanggal dan pencarian cepat nomor polisi.",
+    },
+    {
+        index: "06",
+        title: "Import Data Harian",
+        desc: "Halaman terproteksi login untuk mengunggah CSV dari sistem: baris yang sama ditimpa, yang baru ditambah — data hari sebelumnya tetap aman.",
+    },
 ]
 
 const SKILLS = ["Next.js", "TypeScript", "Tailwind", "Supabase", "Firebase", "GitHub", "Vercel"]
@@ -83,7 +98,7 @@ export function AboutView() {
                 <div className="text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
                     Cakupan
                 </div>
-                <div className="mt-8 grid gap-x-10 gap-y-10 md:grid-cols-3">
+                <div className="mt-8 grid gap-x-10 gap-y-10 sm:grid-cols-2 md:grid-cols-3">
                     {CAPABILITIES.map((item) => (
                         <div key={item.index} className="group">
                             <div className="flex items-center gap-3">

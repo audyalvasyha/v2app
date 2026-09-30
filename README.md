@@ -1,7 +1,7 @@
-# Transport Management System
+# Transport Management System — Midaa
 
 Dasbor operasional untuk mengelola armada kendaraan: inventaris unit, riwayat perbaikan,
-dan pengingat servis yang dihitung dari tanggal maupun odometer — agar tim lapangan dan
+pengingat servis, sisa kiriman (SKR), dan pengiriman outbound — agar tim lapangan dan
 tim administrasi membaca angka yang sama.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js)
@@ -9,6 +9,7 @@ tim administrasi membaca angka yang sama.
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-06B6D4?style=flat-square&logo=tailwindcss)
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat-square&logo=supabase)
+![Vercel](https://img.shields.io/badge/Vercel-Deploy-000000?style=flat-square&logo=vercel)
 
 ---
 
@@ -45,6 +46,41 @@ Ringkasan satu layar untuk inventaris unit, ketersediaan, biaya, dan jadwal serv
 - Dikelompokkan per bulan dengan subtotal, bar biaya relatif, dan penanda *outlier*.
 - Ringkasan total periode.
 
+### SKR — Sisa Kiriman
+Dasbor sisa kiriman dari tabel `skr_detail` (parsing tanggal & nilai dipindah ke database
+lewat view `skr_ringkasan`):
+
+- **Kartu ringkas**: total qty, total nilai, toko terlibat, alasan POD terbanyak.
+- **Tren harian**: grafik kolom berkelompok bulan terakhir vs bulan sebelumnya per
+  tanggal 1–31, dengan toggle metrik Qty/Nilai, total per bulan, dan indikator selisih
+  yang dibaca dari sisi perbaikan (turun = hijau, naik = primer).
+- **Jendela otomatis**: bila bulan berjalan belum berisi (awal bulan), grafik bergeser
+  sendiri membandingkan dua bulan terakhir yang punya data.
+- **5 Toko dengan SKR Terbesar**: nama toko dari join tabel `customers`, lengkap jumlah
+  dokumen, qty, dan nilai — klik baris untuk membuka rincian dokumennya (nomor dokumen,
+  tanggal, plat, sales, alasan).
+- **Peringkat Armada & Sales**: top/bottom 5 per metrik aktif.
+- **Filter**: rentang tanggal (popover preset WIB), pencarian toko/plat/sales/alasan,
+  dan chip kategori POD berhitung.
+- **Toolbar konsisten** dengan menu Pengiriman: tanggal + pencarian sejajar satu baris.
+
+### Pengiriman
+- Tabel `armada_outbound` dengan filter rentang tanggal WIB + pencarian.
+- Status keberangkatan per durasi tempuh; export CSV dari sisi klien.
+
+### Import SKR (sub-app `skr.transportbaganbatu.com`)
+Halaman `/skr/input` terproteksi **Supabase Auth** (admin tunggal):
+
+- Upload CSV dengan **pemetaan header longgar** — spasi/kapital pada header asli
+  ("Delivery Number", "SKR Value", dst.) dikenali otomatis ke kolom database.
+- **Upsert harian**: kombinasi `delivery_number + pod_date + skr_base_unit +
+  skr_sales_unit` jadi sidik jari — baris yang ada ditimpa, yang baru ditambah, data
+  hari sebelumnya tetap aman.
+- Seluruh batch berjalan dalam **satu transaksi atomik** via RPC `upsert_skr_detail`;
+  gagal di tengah berarti tidak ada yang berubah.
+- Preview 8 baris pertama + peta header sebelum unggah; unduh template CSV standar.
+- Middleware mengarahkan subdomain `skr.transportbaganbatu.com` ke halaman ini.
+
 ### Tentang
 - Spesifikasi teknis, cakupan kemampuan aplikasi, dan profil pengembang.
 
@@ -61,6 +97,8 @@ Ringkasan satu layar untuk inventaris unit, ketersediaan, biaya, dan jadwal serv
 | Data | Supabase (PostgreSQL) via `@supabase/supabase-js` |
 | State | React Context + hooks kustom |
 | Ikon | Lucide React |
+| Uji | Vitest (parser CSV) |
+| Hosting | Vercel |
 
 ---
 
@@ -88,6 +126,7 @@ npm run dev     # server pengembangan (Turbopack)
 npm run build   # build produksi
 npm run start   # jalankan hasil build produksi
 npm run lint    # ESLint
+npm test        # unit test parser CSV (Vitest)
 npx tsc --noEmit  # pemeriksaan tipe tanpa emit
 ```
 
@@ -105,61 +144,51 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-public-key>
 Keduanya wajib. Klien Supabase dibuat secara **lazy** dan defensif: jika env belum terisi,
 aplikasi tetap berjalan dan menampilkan pesan error di dalam UI — bukan halaman kosong.
 
+Di Vercel, kedua variabel yang sama diisi di Project → Settings → Environment Variables
+untuk environment Production dan Preview.
+
 > Jangan pernah meng-commit berkas `.env.local`.
 
 ---
 
 ## Struktur Data (Supabase)
 
-Aplikasi membaca tiga tabel. Hanya kolom yang benar-benar dipakai UI yang diambil, sehingga
-payload lebih kecil dan query lebih cepat.
+### Tabel baca dashboard
 
-### `equipment`
-
-| Kolom | Keterangan |
+| Tabel | Isi |
 | --- | --- |
-| `id` | Kunci primer |
-| `equipment_id` | Kode unit |
-| `license_plate` | Nomor plat |
-| `description` | Nama/deskripsi unit |
-| `company_code` | Kode perusahaan |
-| `construction_year` | Tahun pembuatan |
-| `last_odometer` | Odometer terakhir (km) |
-| `status` | Status unit |
-| `created_at` | Waktu pembuatan (untuk pengurutan) |
+| `equipment` | Inventaris unit: plat, tahun, odometer, status |
+| `maintenance_histories` | Riwayat perbaikan per unit + biaya (IDR) |
+| `service_logs` | Jadwal servis: terakhir & berikutnya (tanggal + odometer) |
+| `armada_outbound` | Pengiriman: freight order, plat, jam keluar/kembali |
+| `customers` | Master customer: `customer_id`, `customer_name` |
 
-### `maintenance_histories`
+### SKR: `skr_detail` dan view `skr_ringkasan`
 
-| Kolom | Keterangan |
-| --- | --- |
-| `id` | Kunci primer |
-| `tanggal` | Tanggal perbaikan |
-| `equipment_id` | Kode unit |
-| `license_plate` | Nomor plat |
-| `nama_barang_atau_jasa` | Item/perbaikan yang dilakukan |
-| `jumlah_harga` | Biaya (IDR) |
+`skr_detail` menyimpan baris mentah POD (`pod_date` bertipe TEXT). View
+`skr_ringkasan` memindahkan parsing ke database:
 
-### `service_logs`
+- `pod_date` → `pod_d` (DATE, bisa difilter server-side)
+- `skr_value` ("169,300") → `nilai` (NUMERIC, bisa di-SUM)
+- kolom ikut tersedia: `customer_id`, `delivery_number`, `sales_office`,
+  `distribution_channel`, `qty`, `nilai`, dst.
 
-| Kolom | Keterangan |
-| --- | --- |
-| `equipment_id` | Kode unit |
-| `service_date` | Tanggal servis terakhir |
-| `next_service_date` | Jatuh tempo servis berikutnya |
-| `next_service_odometer` | Target odometer servis berikutnya |
-| `odometer_at_service` | Odometer saat servis |
+View `customers_ringkas` mengekspos hanya `customer_id` + `customer_name`
+(tanpa nomor telepon / NIK sales) untuk kebutuhan join nama toko.
 
-### Status Servis
+### Import harian (upsert)
 
-Status dihitung di sisi klien lewat satu fungsi bersama (`lib/service-status.ts`) dengan
-ambang batas: **14 hari** atau **1.000 km** sebelum jatuh tempo.
+Sidik jari baris = `delivery_number + pod_date + skr_base_unit + skr_sales_unit`
+(unique index). RPC `upsert_skr_detail(jsonb)` — hanya untuk role `authenticated`,
+dipanggil dari halaman yang sudah login:
 
-| Status | Keterangan |
-| --- | --- |
-| Terlewat | Sudah melewati tanggal atau odometer target |
-| Segera servis | Remaining ≤ 14 hari atau ≤ 1.000 km |
-| Aman | Masih jauh dari jatuh tempo |
-| Tanpa jadwal | Unit belum punya log servis |
+- kombinasi sudah ada → baris ditimpa dengan nilai CSV terbaru
+- kombinasi baru → baris ditambah
+- baris lama yang tidak ada di CSV → dibiarkan
+- seluruh batch dalam satu transaksi (gagal di tengah = tidak ada perubahan)
+
+Role `anon` hanya diberi SELECT (baca dashboard); tidak ada policy tulis.
+SQL lengkap: `supabase/sql/skr_ringkasan.sql` dan `supabase/sql/skr_upload.sql`.
 
 ---
 
@@ -167,22 +196,29 @@ ambang batas: **14 hari** atau **1.000 km** sebelum jatuh tempo.
 
 ```
 app/
-  layout.tsx            # Root layout, provider, font Geist
+  layout.tsx            # Root layout, font Geist Mono, Toaster
   page.tsx              # Orkestrasi data + routing antar-tab
+  skr/input/page.tsx    # Sub-app import CSV (login gate)
   globals.css           # Token tema, direktif Tailwind
   loading.tsx
 components/
   templates/            # Layout dashboard (shell + sidebar)
   organisms/            # Tampilan per halaman + tabel + grafik
-  molecules/            # Komponen reusable (StatTile, PaginationInput)
+  molecules/            # Komponen reusable (StatTile, FilterToolbar, DateRangeField)
   ui/                   # shadcn/ui
   sidebar.tsx           # Navigasi, bisa dikecilkan
   search-bar.tsx        # Pencarian + filter status
-hooks/                  # use-theme, use-keyboard-shortcuts, use-mobile
+hooks/
+  use-theme.ts, use-keyboard-shortcuts.ts, use-mobile.ts, use-page-title.ts
 lib/
-  format.ts             # Format rupiah, angka, tanggal (sumber tunggal)
-  service-status.ts     # Perhitungan status jadwal servis (sumber tunggal)
-  unit-status.ts        # Tone warna per status unit
+  format.ts             # Format rupiah, angka, tanggal, zona WIB
+  service-status.ts     # Perhitungan status jadwal servis
+  skr-status.ts         # Helper SKR: tanggal POD, nilai, kategori POD
+  skr-analytics.ts      # Agregasi SKR: totals, ranking, tren harian, per toko
+  skr-csv.ts            # Parser CSV + pemetaan header + template
+  skr-csv.test.ts       # Unit test parser (Vitest)
+middleware.ts           # Rewrite subdomain skr.* ke /skr/input
+supabase/sql/           # Skrip view & RPC (jalankan manual di SQL Editor)
 utils/
   supabase.ts           # Klien Supabase lazy + defensif
 ```
@@ -206,25 +242,23 @@ Pola **Atomic Design** dipakai konsisten: `ui` → `molecules` → `organisms` �
 
 ## Catatan Performa
 
-- **Stale-while-revalidate**: hasil fetch disimpan di `localStorage` (kunci `fleet-cache-v1`),
+- **Stale-while-revalidate**: hasil fetch disimpan di `localStorage` (kunci `fleet-cache-v2`),
   lalu dirender seketika sambil refresh di latar belakang.
 - **Selective column fetch**: hanya kolom yang dipakai UI yang diambil.
 - **Memoization**: agregasi dashboard, filter, dan grafik dihitung sekali per perubahan
   dependensi (`useMemo`), bukan di setiap render.
-- **Lazy chart**: komponen grafik dimuat saat dibutuhkan.
-- **Single source of truth**: helper format dan status servis dipusatkan di `lib/`, sehingga
-  nominal rupiah dan badge status konsisten di seluruh aplikasi.
+- **Parsing di database**: filter tanggal & penjumlahan nilai SKR dikerjakan view
+  `skr_ringkasan` — browser hanya menerima baris yang benar-benar ditampilkan.
+- **Single source of truth**: helper format, status servis, dan analitik SKR dipusatkan
+  di `lib/`, sehingga nominal rupiah dan badge status konsisten di seluruh aplikasi.
 
 ---
 
 ## Deployment
 
-Setiap merge ke `main` otomatis ter-deploy. Untuk build manual:
-
-```bash
-npm run build
-npm run start
-```
+Setiap push ke `main` otomatis ter-deploy ke Vercel. Subdomain
+`skr.transportbaganbatu.com` diarahkan ke project yang sama (CNAME
+`cname.vercel-dns.com`) dan diteruskan ke `/skr/input` oleh middleware.
 
 ---
 
