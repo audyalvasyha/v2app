@@ -83,13 +83,18 @@ export function skrTotals(rows: any[]): SkrTotals {
 }
 
 /** Kunci kelompok + label yang enak dibaca. */
-export function skrGroupKey(row: any, by: "armada" | "sales"): string {
-    const raw = by === "armada" ? row.license_no : row.salesman
+export function skrGroupKey(row: any, by: "armada" | "sales" | "customer"): string {
+    const raw =
+        by === "armada"
+            ? row.license_no
+            : by === "sales"
+              ? row.salesman
+              : row.customer_id
     const text = raw == null ? "" : String(raw).trim()
     return text || "(tidak diisi)"
 }
 
-function accumulate(map: Map<string, SkrAggregate>, row: any, by: "armada" | "sales") {
+function accumulate(map: Map<string, SkrAggregate>, row: any, by: "armada" | "sales" | "customer") {
     const key = skrGroupKey(row, by)
     const m = skrRowMetrics(row)
     const existing = map.get(key)
@@ -105,6 +110,8 @@ function accumulate(map: Map<string, SkrAggregate>, row: any, by: "armada" | "sa
 export interface SkrRankingOptions {
     /** Peta plat nomor → deskripsi armada (dari tabel equipment) */
     equipmentByPlate?: Map<string, { equipment_id?: string; description?: string }>
+    /** Peta customer_id → nama toko (dari tabel customers) */
+    customerById?: Map<string, string>
 }
 
 /**
@@ -114,7 +121,7 @@ export interface SkrRankingOptions {
  */
 export function skrRanking(
     rows: any[],
-    by: "armada" | "sales",
+    by: "armada" | "sales" | "customer",
     metric: SkrMetric,
     topCount = 5,
     options: SkrRankingOptions = {},
@@ -124,13 +131,19 @@ export function skrRanking(
 
     const list = [...map.values()]
 
-    // Perjelas label: untuk armada, sisipkan equipment_id + deskripsi
+    // Perjelas label: untuk armada, sisipkan equipment_id + deskripsi;
+    // untuk customer, sisipkan nama toko dari tabel customers.
     if (by === "armada" && options.equipmentByPlate) {
         for (const item of list) {
             const eq = options.equipmentByPlate.get(item.key)
             if (eq) {
                 item.sublabel = [eq.equipment_id, eq.description].filter(Boolean).join(" · ") || undefined
             }
+        }
+    } else if (by === "customer" && options.customerById) {
+        for (const item of list) {
+            const nama = options.customerById.get(item.key)
+            if (nama) item.label = nama
         }
     }
 
@@ -240,4 +253,68 @@ export function skrDailySeries(
  */
 export function daysInMonth(year: number, month: number): number {
     return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+export interface SkrCustomerSummary {
+    /** customer_id mentah (string) — "(tidak diisi)" bila kosong */
+    key: string
+    /** Nama toko dari tabel customers, fallback ke id mentah */
+    nama: string
+    /** Nama diisi dari tabel customers (bukan fallback id)? */
+    known: boolean
+    qty: number
+    nilai: number
+    /** Jumlah dokumen (baris) SKR */
+    docs: number
+    /** Jumlah armada unik yang mengantar ke customer ini */
+    armada: number
+}
+
+/**
+ * Ringkasan per customer — dokumen, qty, dan nilai sisa kiriman, diurutkan
+ * dari nilai terbesar. Label toko diambil dari peta customerById (join
+ * di sisi aplikasi karena tipe id berbeda: bigint vs TEXT).
+ */
+export function skrCustomerSummary(
+    rows: any[],
+    customerById: Map<string, string> = new Map(),
+): SkrCustomerSummary[] {
+    const map = new Map<
+        string,
+        { qty: number; nilai: number; docs: number; armadas: Set<string> }
+    >()
+
+    for (const row of rows) {
+        const key = skrGroupKey(row, "customer")
+        const m = skrRowMetrics(row)
+        const existing = map.get(key)
+        if (existing) {
+            existing.qty += m.qty
+            existing.nilai += m.nilai
+            existing.docs += 1
+            if (row.license_no) existing.armadas.add(String(row.license_no))
+        } else {
+            map.set(key, {
+                qty: m.qty,
+                nilai: m.nilai,
+                docs: 1,
+                armadas: new Set(row.license_no ? [String(row.license_no)] : []),
+            })
+        }
+    }
+
+    return [...map.entries()]
+        .map(([key, v]) => {
+            const nama = customerById.get(key)
+            return {
+                key,
+                nama: nama || key,
+                known: Boolean(nama),
+                qty: v.qty,
+                nilai: v.nilai,
+                docs: v.docs,
+                armada: v.armadas.size,
+            }
+        })
+        .sort((a, b) => b.nilai - a.nilai)
 }

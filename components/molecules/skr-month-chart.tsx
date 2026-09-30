@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import {
     ChartContainer,
     ChartLegend,
@@ -36,9 +36,14 @@ function tickCompact(v: number): string {
     return formatNumber(v)
 }
 
+//_Warna literal (bukan rantai CSS var) supaya fill kolom SVG selalu
+//ter-render di tema gelap maupun terang. Oranye = warna brand aplikasi.
+const CURRENT_COLOR = "#FF3C00"
+const PREVIOUS_COLOR = "#2aa084"
+
 /**
- * Grafik garis perbandingan harian: bulan berjalan (garis solid) vs bulan
- * sebelumnya (garis putus-putus) dalam satu sumbu-X tanggal 1..31.
+ * Grafik kolom berkelompok perbandingan harian: bulan berjalan vs bulan
+ * sebelumnya berdampingan pada tiap tanggal (1..31).
  */
 export function SkrMonthChart({
     currentRows,
@@ -69,8 +74,8 @@ export function SkrMonthChart({
     }, [currentRows, previousRows, currentIso, previousIso, metric, maxDay])
 
     const chartConfig = {
-        current: { label: currentLabel, color: "var(--chart-1)" },
-        previous: { label: previousLabel, color: "var(--chart-2)" },
+        current: { label: currentLabel, color: CURRENT_COLOR },
+        previous: { label: previousLabel, color: PREVIOUS_COLOR },
     } satisfies ChartConfig
 
     const hasAnyData = data.some((d) => d.current != null || d.previous != null)
@@ -85,20 +90,17 @@ export function SkrMonthChart({
         )
     }
 
-    const ticks = [1, 5, 10, 15, 20, 25, maxDay].filter((t, i, arr) => arr.indexOf(t) === i)
-
     return (
         <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full">
-            <LineChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 0 }}>
+            <BarChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 0 }} barGap={2}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />
                 <XAxis
                     dataKey="day"
-                    ticks={ticks}
-                    domain={[1, maxDay]}
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
-                    minTickGap={16}
+                    minTickGap={4}
+                    tickFormatter={(v: number) => (v % 5 === 0 || v === 1 ? String(v) : "")}
                 />
                 <YAxis
                     width={56}
@@ -107,7 +109,7 @@ export function SkrMonthChart({
                     tickFormatter={(v: number) => tickCompact(v)}
                 />
                 <ChartTooltip
-                    cursor={{ strokeDasharray: "4 4" }}
+                    cursor={{ fill: "var(--muted)", opacity: 0.4 }}
                     content={
                         <ChartTooltipContent
                             indicator="line"
@@ -124,18 +126,18 @@ export function SkrMonthChart({
                                 const day = hit?.payload?.day ?? items[0]?.payload?.day
                                 if (!day) return ""
                                 const label = hit?.name === "previous" ? previousLabel : currentLabel
-                                return `Tanggal ${label}`
+                                return `Tanggal ${day} ${label}`
                             }}
                             formatter={(value, name) => (
                                 <div className="flex w-full items-center justify-between gap-4">
                                     <span className="flex items-center gap-1.5">
                                         <span
-                                            className="h-2 w-1 shrink-0 rounded-sm"
+                                            className="h-2 w-2 shrink-0 rounded-sm"
                                             style={{
                                                 background:
-                                                    name === "current"
-                                                        ? "var(--color-current)"
-                                                        : "var(--color-previous)",
+                                                name === "current"
+                                                    ? CURRENT_COLOR
+                                                    : PREVIOUS_COLOR,
                                             }}
                                         />
                                         <span className="text-muted-foreground">
@@ -155,26 +157,9 @@ export function SkrMonthChart({
                     }
                 />
                 <ChartLegend content={<ChartLegendContent />} />
-                <Line
-                    dataKey="current"
-                    type="monotone"
-                    stroke="var(--color-current)"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 3 }}
-                    connectNulls
-                />
-                <Line
-                    dataKey="previous"
-                    type="monotone"
-                    stroke="var(--color-previous)"
-                    strokeWidth={2}
-                    strokeDasharray="6 3"
-                    dot={false}
-                    activeDot={{ r: 3 }}
-                    connectNulls
-                />
-            </LineChart>
+                <Bar dataKey="current" fill={CURRENT_COLOR} radius={[3, 3, 0, 0]} maxBarSize={14} />
+                <Bar dataKey="previous" fill={PREVIOUS_COLOR} radius={[3, 3, 0, 0]} maxBarSize={14} />
+            </BarChart>
         </ChartContainer>
     )
 }

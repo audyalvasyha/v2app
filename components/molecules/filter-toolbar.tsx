@@ -30,14 +30,15 @@ interface FilterToolbarProps {
 }
 
 /**
- * Baris kontrol bersama untuk semua tabel: rentang tanggal di kiri, kotak
- * pencarian menempel di sampingnya, lalu grup aksi di kanan. Dipakai SKR dan
- * Pengiriman supaya susunannya identik di kedua menu.
+ * Baris kontrol bersama untuk semua tabel: rentang tanggal (tombol popover)
+ * di kiri, kotak pencarian menempel di sampingnya dengan tinggi yang sama,
+ * lalu grup aksi di kanan. Dipakai SKR dan Pengiriman supaya susunannya
+ * identik di kedua menu.
  */
 export function FilterToolbar({ date, search, actions, className }: FilterToolbarProps) {
     return (
-        <div className={cn("flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between", className)}>
-            <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-start">
+        <div className={cn("flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between", className)}>
+            <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
                 <DateRangeField {...date} />
                 <SearchField {...search} className="lg:max-w-sm lg:flex-1" />
             </div>

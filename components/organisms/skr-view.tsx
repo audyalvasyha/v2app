@@ -1,7 +1,15 @@
 "use client"
 
 import React, { memo, useEffect, useMemo, useRef, useState } from "react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+    BadgeCheck,
+    ChevronDown,
+    CircleDollarSign,
+    FileText,
+    Store,
+    TrendingUp,
+    Truck,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -10,16 +18,6 @@ import { SkrMonthChart } from "@/components/molecules/skr-month-chart"
 import { FilterToolbar } from "@/components/molecules/filter-toolbar"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import {
-    ArrowDownRight,
-    ArrowUpRight,
-    Boxes,
-    CalendarRange,
-    CircleDollarSign,
-    TrendingUp,
-    Truck,
-    X,
-} from "lucide-react"
 import {
     compactNilai,
     formatNilai,
@@ -32,10 +30,11 @@ import {
 } from "@/lib/skr-status"
 import {
     daysInMonth,
+    skrCustomerSummary,
     skrRanking,
     skrReasonBreakdown,
     skrTotals,
-    type SkrAggregate,
+    type SkrCustomerSummary,
     type SkrMetric,
 } from "@/lib/skr-analytics"
 import { startOfZonedDayMonthsAgo, zonedParts } from "@/lib/format"
@@ -51,6 +50,8 @@ interface SkrViewProps {
     prevMonthRows: any[]
     /** Peta plat nomor → data equipment untuk memperjelas label armada */
     equipmentByPlate: Map<string, { equipment_id?: string; description?: string }>
+    /** Peta customer_id → nama toko (hasil join tabel customers) */
+    customerById: Map<string, string>
     isLoading: boolean
     error: string | null
     /** Rentang tanggal aktif, format YYYY-MM-DD */
@@ -90,10 +91,40 @@ function monthWindows(): { current: MonthWindow; previous: MonthWindow } {
     return { current, previous }
 }
 
+/**
+ * Jendela bulan yang digeser `shift` bulan ke belakang — dipakai saat bulan
+ * berjalan belum punya data supaya grafik tetap membandingkan dua bulan
+ * yang benar-benar berisi.
+ */
+function monthWindowsShifted(
+    base: { current: MonthWindow; previous: MonthWindow },
+    shift: number,
+): { current: MonthWindow; previous: MonthWindow } {
+    const bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+    const shifted = (w: MonthWindow, months: number): MonthWindow => {
+        const year = Number(w.from.slice(0, 4))
+        const month = Number(w.from.slice(5, 7))
+        const zero = year * 12 + (month - 1) - months
+        const ny = Math.floor(zero / 12)
+        const nm = (zero % 12) + 1
+        const mm = String(nm).padStart(2, "0")
+        return {
+            from: `${ny}-${mm}-01`,
+            to: `${ny}-${mm}-${String(daysInMonth(ny, nm)).padStart(2, "0")}`,
+            label: `${bulan[nm - 1]} ${ny}`,
+        }
+    }
+    return {
+        current: shifted(base.current, shift),
+        previous: shifted(base.previous, shift),
+    }
+}
+
 function SkrViewImpl({
     details,
     prevMonthRows,
     equipmentByPlate,
+    customerById,
     isLoading,
     error,
     dateFrom,
@@ -107,10 +138,12 @@ function SkrViewImpl({
     const [categoryFilter, setCategoryFilter] = useState<FilterKey>("all")
     const [metric, setMetric] = useState<SkrMetric>("qty")
     const [rankGroup, setRankGroup] = useState<RankGroup>("armada")
+    /** customer_id yang baris detailnya sedang dibuka */
+    const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null)
 
     const searchLower = search.trim().toLowerCase()
 
-    // 1. Pencarian (plat, sales, alasan POD) + filter kategori POD
+    // 1. Pencarian (plat, sales, alasan POD, nama toko) + filter kategori POD.
     //    Hanya kolom yang benar-benar di-fetch view yang dicocokkan.
     const filtered = useMemo(() => {
         return details.filter((row) => {
@@ -118,30 +151,92 @@ function SkrViewImpl({
             const matchesCategory = categoryFilter === "all" || info.category === categoryFilter
             if (!matchesCategory) return false
             if (!searchLower) return true
+            const custId = row.customer_id == null ? "" : String(row.customer_id).trim()
+            const custName = custId ? customerById.get(custId) ?? "" : ""
             return (
                 String(row.license_no ?? "").toLowerCase().includes(searchLower) ||
                 String(row.salesman ?? "").toLowerCase().includes(searchLower) ||
-                String(row.pod_reason ?? "").toLowerCase().includes(searchLower)
+                String(row.pod_reason ?? "").toLowerCase().includes(searchLower) ||
+                custId.toLowerCase().includes(searchLower) ||
+                custName.toLowerCase().includes(searchLower)
             )
         })
-    }, [details, searchLower, categoryFilter])
+    }, [details, searchLower, categoryFilter, customerById])
 
-    // 2. Ringkasan, peringkat, alasan — dari data yang sedang difilter
+    // 2. Ringkasan, peringkat, alasan, per customer — dari data terfilter
     const totals = useMemo(() => skrTotals(filtered), [filtered])
 
-    const rankingOptions = useMemo(() => ({ equipmentByPlate }), [equipmentByPlate])
+    const rankingOptions = useMemo(
+        () => ({ equipmentByPlate, customerById }),
+        [equipmentByPlate, customerById],
+    )
     const ranking = useMemo(
         () => skrRanking(filtered, rankGroup, metric, 5, rankingOptions),
         [filtered, rankGroup, metric, rankingOptions],
     )
     const reasons = useMemo(() => skrReasonBreakdown(filtered, 6), [filtered])
+    const customers = useMemo(
+        () => skrCustomerSummary(filtered, customerById),
+        [filtered, customerById],
+    )
+    //_5 toko dengan sisa kiriman terbesar — urutan mengikuti metrik aktif
+    //(qty atau nilai), tie-break pakai metrik satunya.
+    const topCustomers = useMemo(
+        () =>
+            [...customers]
+                .sort((a, b) =>
+                    metric === "qty"
+                        ? b.qty - a.qty || b.nilai - a.nilai
+                        : b.nilai - a.nilai || b.qty - a.qty,
+                )
+                .slice(0, 5),
+        [customers, metric],
+    )
 
     const hasActiveFilter = searchLower !== "" || categoryFilter !== "all"
 
     // 3. Grafik dua bulan: sumber data = fetch khusus bila ada, selain itu
     //    details sudah mencakup kedua bulan (rentang "Semua" dsb).
-    const monthWindow = useMemo(() => monthWindows(), [])
     const chartRows = prevMonthRows.length > 0 ? prevMonthRows : details
+
+    //    Awal bulan berjalan sering belum ada data sama sekali (upload POD
+    //    selalu tertinggal beberapa hari), sehingga kolom "bulan ini" kosong.
+    //    Kalau begitu, jendela grafik digeser otomatis ke dua bulan terakhir
+    //    yang benar-benar punya data, dan labelnya ikut disesuaikan.
+    const rawWindow = useMemo(() => monthWindows(), [])
+    const monthWindow = useMemo(() => {
+        const has = (w: MonthWindow) =>
+            chartRows.some((r) => r.pod_d && r.pod_d >= w.from && r.pod_d <= w.to)
+        if (has(rawWindow.current) || !has(rawWindow.previous)) return rawWindow
+        //_Bulan berjalan kosong → mundur satu bulan: "current" = bulan lalu,
+        //"previous" = dua bulan yang lalu.
+        return monthWindowsShifted(rawWindow, 1)
+    }, [chartRows, rawWindow])
+
+    // 3b. Total per bulan untuk header grafik — mengikuti metrik aktif.
+    // Dua jendela bulan dipangkas dari baris yang sama, lalu disatukan
+    // sebelum masuk skrDailySeries agar current & previous tidak saling
+    // menghitung baris yang sama dua kali.
+    const chartTotals = useMemo(() => {
+        const slice = (iso: { from: string; to: string }) =>
+            chartRows
+                .filter((r) => r.pod_d && r.pod_d >= iso.from && r.pod_d <= iso.to)
+                .reduce((a, r) => a + (metric === "nilai" ? Number(r.nilai ?? 0) : Number(r.qty ?? 0)), 0)
+        return {
+            current: slice(monthWindow.current),
+            previous: slice(monthWindow.previous),
+        }
+    }, [chartRows, metric, monthWindow])
+    // Indikator selisih dibaca dari sisi perbaikan: sisa kiriman (SKR) yang
+    // LEBIH RENDAH dari bulan sebelumnya = bagus → tampil +X% hijau.
+    // Sebaliknya, naik dari bulan lalu = makin banyak kiriman tersisa
+    // → tampil −X% dengan warna primer (perlu perhatian).
+    const chartDelta =
+        chartTotals.previous > 0
+            ? ((chartTotals.previous - chartTotals.current) / chartTotals.previous) * 100
+            : null
+    const fmtChart = (v: number) =>
+        metric === "nilai" ? compactNilai(v) : formatQty(v)
 
     // Filter yang tidak membuahkan hasil TIDAK menggeser ke menu lain dan tidak
     // mengganti tampilan — dashboard tetap di tempat, hanya muncul peringatan.
@@ -240,7 +335,7 @@ function SkrViewImpl({
                                 <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                                     {!noRange && (
                                         <Button size="sm" className="gap-1.5" onClick={() => onDateRangeChange("", "")}>
-                                            <CalendarRange className="h-3.5 w-3.5" /> Tampilkan semua tanggal
+                                            Tampilkan semua tanggal
                                         </Button>
                                     )}
                                     {bounds.minIso && bounds.maxIso && (
@@ -282,7 +377,7 @@ function SkrViewImpl({
                             setCategoryFilter("all")
                         }}
                     >
-                        <X className="h-3.5 w-3.5" /> Tampilkan semua kategori
+                        Tampilkan semua kategori
                     </Button>
                 </div>
             )}
@@ -304,10 +399,14 @@ function SkrViewImpl({
             {/* RINGKASAN */}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <StatTile
-                    label="Total sisa kiriman (qty)"
+                    label="Sisa kiriman"
                     value={formatQty(totals.qty)}
-                    hint={`sum skr_sales_unit · ${totals.rows.toLocaleString("id-ID")} baris data`}
-                    icon={<Boxes className="h-3.5 w-3.5" />}
+                    hint={
+                        noRange
+                            ? `${totals.rows.toLocaleString("id-ID")} baris · tanpa batas tanggal`
+                            : `${totals.rows.toLocaleString("id-ID")} baris · ${isoToTanggal(dateFrom)} – ${isoToTanggal(dateTo)}`
+                    }
+                    icon={<Truck className="h-3.5 w-3.5" />}
                     emphasis
                 />
                 <StatTile
@@ -318,10 +417,10 @@ function SkrViewImpl({
                     icon={<CircleDollarSign className="h-3.5 w-3.5" />}
                 />
                 <StatTile
-                    label="Armada terlibat"
-                    value={totals.armada.toLocaleString("id-ID")}
-                    hint={`${totals.sales.toLocaleString("id-ID")} sales · ${totals.customer.toLocaleString("id-ID")} customer`}
-                    icon={<Truck className="h-3.5 w-3.5" />}
+                    label="Toko terlibat"
+                    value={totals.customer.toLocaleString("id-ID")}
+                    hint={`${totals.armada.toLocaleString("id-ID")} armada · ${totals.sales.toLocaleString("id-ID")} sales`}
+                    icon={<Store className="h-3.5 w-3.5" />}
                 />
                 <StatTile
                     label="Alasan POD terbanyak"
@@ -330,32 +429,6 @@ function SkrViewImpl({
                     title={reasons[0]?.reason}
                     icon={<TrendingUp className="h-3.5 w-3.5" />}
                 />
-            </div>
-
-            {/* GRAFIK: bulan ini vs bulan lalu, satu sumbu-X 1..31 */}
-            <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
-                    <h3 className="text-sm font-semibold">Perbandingan Bulanan</h3>
-                    <p className="text-xs text-muted-foreground">
-                        {monthWindow.current.label} vs {monthWindow.previous.label} · per tanggal (1–
-                        {daysInMonth(
-                            Number(monthWindow.current.from.slice(0, 4)),
-                            Number(monthWindow.current.from.slice(5, 7)),
-                        )}
-                        )
-                    </p>
-                </div>
-                <div className="p-4 pt-2">
-                    <SkrMonthChart
-                        currentRows={chartRows}
-                        previousRows={chartRows}
-                        currentIso={{ from: monthWindow.current.from, to: monthWindow.current.to }}
-                        previousIso={{ from: monthWindow.previous.from, to: monthWindow.previous.to }}
-                        metric={metric}
-                        currentLabel={`${monthWindow.current.label} — bulan ini`}
-                        previousLabel={`${monthWindow.previous.label} — bulan lalu`}
-                    />
-                </div>
             </div>
 
             {/* KONTROL: rentang tanggal + pencarian (susunan sama dengan Pengiriman) */}
@@ -369,7 +442,7 @@ function SkrViewImpl({
                 search={{
                     value: search,
                     onChange: setSearch,
-                    placeholder: "Cari plat, sales, atau alasan POD...",
+                    placeholder: "Cari toko, plat, sales, atau alasan POD...",
                     hint: hasActiveFilter
                         ? `${filtered.length.toLocaleString("id-ID")} baris cocok`
                         : "Ctrl + /",
@@ -423,34 +496,25 @@ function SkrViewImpl({
                             setCategoryFilter("all")
                         }}
                     >
-                        <X className="h-3.5 w-3.5" /> Bersihkan filter
+                        Bersihkan filter
                     </Button>
                 )}
             </div>
 
-            {/* TOP 5 / BOTTOM 5 — license_no (armada) & salesman */}
+            {/* GRAFIK: dua bulan terakhir yang punya data. Metrik aktif
+                (qty/nilai) berlaku untuk grafik sekaligus peringkat di
+                bawahnya — satu kontrol, dua panel, biar tidak ada angka yang
+                dianggap bertentangan. */}
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
-                    <div className="flex items-center gap-1">
-                        <Button
-                            variant={rankGroup === "armada" ? "secondary" : "ghost"}
-                            size="sm"
-                            className="h-7"
-                            onClick={() => setRankGroup("armada")}
-                        >
-                            Armada (license_no)
-                        </Button>
-                        <Button
-                            variant={rankGroup === "sales" ? "secondary" : "ghost"}
-                            size="sm"
-                            className="h-7"
-                            onClick={() => setRankGroup("sales")}
-                        >
-                            Sales (salesman)
-                        </Button>
+                    <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold">Tren Harian</h3>
+                        <span className="text-xs text-muted-foreground">
+                            {monthWindow.current.label} vs {monthWindow.previous.label}
+                        </span>
                     </div>
                     <div className="flex items-center gap-1">
-                        <span className="mr-1 text-xs text-muted-foreground">Diurutkan</span>
+                        <span className="mr-1 text-xs text-muted-foreground">Metrik</span>
                         <Button
                             variant={metric === "qty" ? "secondary" : "ghost"}
                             size="sm"
@@ -470,10 +534,104 @@ function SkrViewImpl({
                     </div>
                 </div>
 
+                {/* Total per bulan + delta — pembaca langsung tahu hasilnya
+                    tanpa harus menelusuri garis. */}
+                <div className="grid gap-px bg-border sm:grid-cols-3">
+                    <div className="bg-card px-4 py-3">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                            {monthWindow.current.label}
+                        </p>
+                        <p className="mt-1 text-lg font-semibold leading-none tabular-nums text-primary">
+                            {fmtChart(chartTotals.current)}
+                        </p>
+                    </div>
+                    <div className="bg-card px-4 py-3">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                            {monthWindow.previous.label}
+                        </p>
+                        <p className="mt-1 text-lg font-semibold leading-none tabular-nums">
+                            {chartTotals.previous > 0 ? fmtChart(chartTotals.previous) : "—"}
+                        </p>
+                    </div>
+                    <div className="bg-card px-4 py-3">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                            Selisih
+                        </p>
+                        <p
+                            className={cn(
+                                "mt-1 flex items-center gap-1.5 text-lg font-semibold leading-none tabular-nums",
+                                chartDelta == null
+                                    ? "text-muted-foreground"
+                                    : chartDelta >= 0
+                                      ? "text-emerald-600 dark:text-emerald-400"
+                                      : "text-primary",
+                            )}
+                        >
+                            {chartDelta == null
+                                ? "—"
+                                : `${chartDelta >= 0 ? "+" : "−"}${Math.abs(chartDelta).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="p-4 pt-2">
+                    <SkrMonthChart
+                        currentRows={chartRows}
+                        previousRows={chartRows}
+                        currentIso={{ from: monthWindow.current.from, to: monthWindow.current.to }}
+                        previousIso={{ from: monthWindow.previous.from, to: monthWindow.previous.to }}
+                        metric={metric}
+                        currentLabel={monthWindow.current.label}
+                        previousLabel={monthWindow.previous.label}
+                    />
+                </div>
+            </div>
+
+            {/* DETAIL PER CUSTOMER — inti pertanyaan "sisa kiriman ini atas
+                customer id berapa, nama tokonya siapa, berapa dokumen, qty,
+                dan nilainya". Baris bisa dibuka untuk melihat dokumennya. */}
+            <CustomerDetailCard
+                items={topCustomers}
+                totalCount={customers.length}
+                details={filtered}
+                metric={metric}
+                expandedKey={expandedCustomer}
+                onToggle={(key) => setExpandedCustomer((cur) => (cur === key ? null : key))}
+            />
+
+            {/* PERINGKAT: grup armada/sales/customer, mengikuti metrik aktif */}
+            <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
+                    <div className="flex items-center gap-1">
+                        {(
+                            [
+                                ["armada", "Armada"],
+                                ["sales", "Sales"],
+                            ] as [RankGroup, string][]
+                        ).map(([id, label]) => (
+                            <Button
+                                key={id}
+                                variant={rankGroup === id ? "secondary" : "ghost"}
+                                size="sm"
+                                className="h-7"
+                                onClick={() => setRankGroup(id)}
+                            >
+                                {label}
+                            </Button>
+                        ))}
+                    </div>
+                <p className="text-xs text-muted-foreground">
+                    Top & bottom 5 · metrik{" "}
+                    <span className="font-medium text-foreground">
+                        {metric === "qty" ? "qty" : "nilai"}
+                    </span>{" "}
+                    · detail toko di kartu di atas
+                </p>
+                </div>
+
                 <div className="grid xl:grid-cols-2 xl:divide-x">
                     <RankingTable
                         title="5 Teratas"
-                        icon={<ArrowUpRight className="h-3.5 w-3.5 text-primary" />}
                         items={ranking.top}
                         metric={metric}
                         rankGroup={rankGroup}
@@ -482,7 +640,6 @@ function SkrViewImpl({
                     />
                     <RankingTable
                         title="5 Terbawah"
-                        icon={<ArrowDownRight className="h-3.5 w-3.5 text-amber-500" />}
                         items={ranking.bottom}
                         metric={metric}
                         rankGroup={rankGroup}
@@ -500,43 +657,37 @@ function SkrViewImpl({
                         <p className="text-[11px] text-muted-foreground">6 teratas · nilai terbesar</p>
                     </div>
                     <ul className="divide-y">
-                        {reasons.map((r, i) => {
-                            const max = reasons[0]?.nilai ?? 0
-                            return (
-                                <li
-                                    key={r.reason}
-                                    className="flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-muted/40"
+                        {reasons.map((r, i) => (
+                            <li
+                                key={r.reason}
+                                className="flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-muted/40"
+                            >
+                                <span className="w-4 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                                    {i + 1}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate text-sm" title={r.reason}>
+                                    {r.reason}
+                                </span>
+                                <Badge
+                                    variant="outline"
+                                    className={cn(
+                                        "hidden h-5 shrink-0 px-1.5 text-[10px] sm:inline-flex",
+                                        r.className,
+                                    )}
                                 >
-                                    <span className="w-4 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
-                                        {i + 1}
-                                    </span>
-                                    <span className="min-w-0 flex-1 truncate text-sm" title={r.reason}>
-                                        {r.reason}
-                                    </span>
-                                    <Badge
-                                        variant="outline"
-                                        className={cn(
-                                            "hidden h-5 shrink-0 px-1.5 text-[10px] sm:inline-flex",
-                                            r.className,
-                                        )}
-                                    >
-                                        {r.label}
-                                    </Badge>
-                                    <span className="w-14 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
-                                        {r.rows.toLocaleString("id-ID")} b
-                                    </span>
-                                    <span className="hidden h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-muted sm:block">
-                                        <span
-                                            className="block h-full rounded-full bg-primary/70"
-                                            style={{ width: `${barWidth(r.nilai, max)}%` }}
-                                        />
-                                    </span>
-                                    <span className="w-20 shrink-0 text-right font-mono text-sm tabular-nums">
-                                        {compactNilai(r.nilai)}
-                                    </span>
-                                </li>
-                            )
-                        })}
+                                    {r.label}
+                                </Badge>
+                                <span className="w-14 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                                    {r.rows.toLocaleString("id-ID")} b
+                                </span>
+                                <span
+                                    className="shrink-0 whitespace-nowrap text-right font-mono text-sm font-medium tabular-nums"
+                                    title={formatNilai(r.nilai)}
+                                >
+                                    {compactNilai(r.nilai)}
+                                </span>
+                            </li>
+                        ))}
                     </ul>
                 </div>
             )}
@@ -555,23 +706,197 @@ function SkrViewImpl({
     )
 }
 
+/* ── Detail per customer ──────────────────────────────────────────────── */
+
+interface CustomerDetailCardProps {
+    items: SkrCustomerSummary[]
+    /** Jumlah customer seluruhnya, untuk keterangan "5 dari N" */
+    totalCount: number
+    /** Baris terfilter — sumber detail dokumen saat baris dibuka */
+    details: any[]
+    metric: SkrMetric
+    expandedKey: string | null
+    onToggle: (key: string) => void
+}
+
+/**
+ * Kartu "Sisa Kiriman per Toko": 5 toko dengan SKR terbanyak, satu baris
+ * per toko (id + nama), kolom jumlah dokumen, qty, dan nilai. Klik baris
+ * untuk membuka rincian dokumen SKR-nya.
+ */
+function CustomerDetailCard({
+    items,
+    totalCount,
+    details,
+    metric,
+    expandedKey,
+    onToggle,
+}: CustomerDetailCardProps) {
+    if (items.length === 0) return null
+
+    return (
+        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                    <Store className="h-3.5 w-3.5 text-primary" />
+                    <h3 className="text-sm font-semibold">5 Toko dengan SKR Terbesar</h3>
+                    <span className="text-xs text-muted-foreground">
+                        dari {totalCount.toLocaleString("id-ID")} customer · klik baris untuk detail dokumen
+                    </span>
+                </div>
+                <p className="hidden text-xs text-muted-foreground sm:block">
+                    Diurutkan {metric === "qty" ? "qty" : "nilai"} terbesar · Qty = unit · Nilai = rupiah
+                </p>
+            </div>
+
+            {/* Header kolom */}
+            <div className="flex items-center gap-3 border-b px-4 py-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <span className="min-w-0 flex-1">Customer</span>
+                <span className="w-16 shrink-0 text-right">Dokumen</span>
+                <span className="w-16 shrink-0 text-right">Qty</span>
+                <span className="w-24 shrink-0 text-right">Nilai</span>
+                <span className="w-5 shrink-0" />
+            </div>
+
+            <ul className="divide-y">
+                {items.map((c) => {
+                    const open = expandedKey === c.key
+                    const docRows = open
+                        ? details
+                              .filter(
+                                  (row) =>
+                                      (row.customer_id == null ? "" : String(row.customer_id).trim()) === c.key,
+                              )
+                              .sort((a, b) => (b.pod_d ?? "").localeCompare(a.pod_d ?? ""))
+                        : []
+                    return (
+                        <li key={c.key} className={cn(open && "bg-muted/30")}>
+                            <button
+                                type="button"
+                                onClick={() => onToggle(c.key)}
+                                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/40"
+                                aria-expanded={open}
+                            >
+                                <span className="min-w-0 flex-1">
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="truncate text-sm font-medium" title={c.nama}>
+                                            {c.nama}
+                                        </span>
+                                        {c.known ? (
+                                            <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-primary/70" />
+                                        ) : null}
+                                    </span>
+                                    <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">
+                                        {c.known ? `ID ${c.key}` : "ID tidak terdaftar di tabel customers"}
+                                    </span>
+                                </span>
+                                <span className="w-16 shrink-0 text-right font-mono text-sm tabular-nums">
+                                    {c.docs.toLocaleString("id-ID")}
+                                </span>
+                                <span className="w-16 shrink-0 text-right font-mono text-sm tabular-nums">
+                                    {formatQty(c.qty)}
+                                </span>
+                                <span className="w-24 shrink-0 text-right font-mono text-sm font-medium tabular-nums">
+                                    {compactNilai(c.nilai)}
+                                </span>
+                                <ChevronDown
+                                    className={cn(
+                                        "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                                        open && "rotate-180",
+                                    )}
+                                />
+                            </button>
+
+                            {open && (
+                                <div className="border-t bg-muted/20 px-4 py-2">
+                                    {docRows.length === 0 ? (
+                                        <p className="py-3 text-center text-xs text-muted-foreground">
+                                            Tidak ada dokumen pada filter ini.
+                                        </p>
+                                    ) : (
+                                        <ul className="divide-y">
+                                            {docRows.map((row, i) => (
+                                                <li
+                                                    key={`${row.pod_d ?? "x"}-${row.delivery_number ?? i}`}
+                                                    className="flex items-center gap-3 py-1.5 text-xs"
+                                                >
+                                                    <span
+                                                        className="w-32 shrink-0 truncate font-mono font-medium"
+                                                        title={row.delivery_number ?? ""}
+                                                    >
+                                                        {row.delivery_number || "—"}
+                                                    </span>
+                                                    <span className="w-24 shrink-0 font-mono tabular-nums text-muted-foreground">
+                                                        {row.pod_d ? isoToTanggal(row.pod_d) : "—"}
+                                                    </span>
+                                                    <span
+                                                        className="w-28 shrink-0 truncate font-mono font-medium"
+                                                        title={row.license_no ?? ""}
+                                                    >
+                                                        {row.license_no || "—"}
+                                                    </span>
+                                                    <span
+                                                        className="hidden w-32 shrink-0 truncate text-muted-foreground md:block"
+                                                        title={row.salesman ?? ""}
+                                                    >
+                                                        {row.salesman || "—"}
+                                                    </span>
+                                                    <span
+                                                        className="min-w-0 flex-1 truncate text-muted-foreground"
+                                                        title={row.pod_reason ?? ""}
+                                                    >
+                                                        {row.pod_reason || "(tanpa alasan)"}
+                                                    </span>
+                                                    <span className="w-14 shrink-0 text-right font-mono tabular-nums">
+                                                        {formatQty(Number(row.qty ?? 0) || 0)}
+                                                    </span>
+                                                    <span className="w-20 shrink-0 text-right font-mono tabular-nums">
+                                                        {compactNilai(Number(row.nilai ?? 0) || 0)}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                    <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                        <FileText className="h-3 w-3" />
+                                        {docRows.length.toLocaleString("id-ID")} dokumen ·{" "}
+                                        {metric === "qty"
+                                            ? `${formatQty(c.qty)} unit`
+                                            : formatNilai(c.nilai)}{" "}
+                                        total
+                                    </p>
+                                </div>
+                            )}
+                        </li>
+                    )
+                })}
+            </ul>
+        </div>
+    )
+}
+
+/* ── Peringkat ────────────────────────────────────────────────────────── */
+
 interface RankingTableProps {
     title: string
-    icon: React.ReactNode
-    items: SkrAggregate[]
+    items: import("@/lib/skr-analytics").SkrAggregate[]
     metric: SkrMetric
     rankGroup: RankGroup
     equipmentByPlate: Map<string, { equipment_id?: string; description?: string }>
     highlight?: boolean
 }
 
-/** Setengah kartu peringkat: 5 teratas atau 5 terbawah dalam satu tabel. */
-function RankingTable({ title, icon, items, metric, rankGroup, equipmentByPlate, highlight }: RankingTableProps) {
+/** Setengah kartu peringkat: 5 teratas atau 5 terbawah dalam satu daftar. */
+function RankingTable({ title, items, metric, rankGroup, equipmentByPlate, highlight }: RankingTableProps) {
     if (items.length === 0) {
         return (
             <div className="p-4">
                 <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
-                    {icon}
+                    {title === "5 Teratas" ? (
+                        <BadgeCheck className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                        <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
+                    )}
                     {title}
                 </div>
                 <p className="py-6 text-center text-xs text-muted-foreground">
@@ -585,86 +910,71 @@ function RankingTable({ title, icon, items, metric, rankGroup, equipmentByPlate,
         <div>
             <div className="flex items-center justify-between border-b px-4 py-2">
                 <div className="flex items-center gap-1.5 text-sm font-semibold">
-                    {icon}
+                    {title === "5 Teratas" ? (
+                        <BadgeCheck className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                        <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
+                    )}
                     {title}
                 </div>
                 <p className="text-xs text-muted-foreground">
                     {rankGroup === "armada" ? "plat nomor" : "salesman"}
                 </p>
             </div>
-            <Table>
-                <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                        <TableHead className="w-[40px] text-right text-xs">#</TableHead>
-                        <TableHead className="whitespace-nowrap">{rankGroup === "armada" ? "No. Polisi" : "Nama"}</TableHead>
-                        <TableHead className="whitespace-nowrap text-right">Qty</TableHead>
-                        <TableHead className="whitespace-nowrap text-right">Nilai</TableHead>
-                        <TableHead className="w-[52px] whitespace-nowrap text-right">Item</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {items.map((item, i) => {
-                        const eq = rankGroup === "armada" ? equipmentByPlate.get(item.key) : undefined
-                        const sublabel =
-                            eq && (eq.equipment_id || eq.description)
-                                ? [eq.equipment_id, eq.description].filter(Boolean).join(" · ")
-                                : undefined
-                        return (
-                            <TableRow
-                                key={item.key}
-                                className={
+            <ul className="divide-y">
+                {items.map((item, i) => {
+                    const eq = rankGroup === "armada" ? equipmentByPlate.get(item.key) : undefined
+                    const sublabel =
+                        eq && (eq.equipment_id || eq.description)
+                            ? [eq.equipment_id, eq.description].filter(Boolean).join(" · ")
+                            : undefined
+                    return (
+                        <li
+                            key={item.key}
+                            className={cn(
+                                "flex items-center gap-3 px-4 py-2 transition-colors hover:bg-muted/40",
+                                !highlight && "bg-amber-500/[0.04]",
+                            )}
+                        >
+                            <span
+                                className={cn(
+                                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-mono text-[11px] tabular-nums",
                                     highlight
-                                        ? "transition-colors hover:bg-muted/40"
-                                        : "bg-amber-500/[0.04] transition-colors hover:bg-muted/40"
-                                }
+                                        ? "bg-primary/10 font-semibold text-primary"
+                                        : "bg-muted font-medium text-muted-foreground",
+                                )}
                             >
-                                <TableCell className="py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                                    {i + 1}
-                                </TableCell>
-                                <TableCell className="max-w-[180px] py-2.5">
-                                    <div className="truncate font-mono text-sm font-medium" title={item.label}>
-                                        {item.label}
-                                    </div>
+                                {i + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                                <div className="truncate font-mono text-sm font-medium" title={item.label}>
+                                    {item.label}
+                                </div>
+                                <div className="flex items-center gap-2">
                                     {sublabel && (
-                                        <div className="truncate text-xs text-muted-foreground" title={sublabel}>
+                                        <span className="truncate text-xs text-muted-foreground" title={sublabel}>
                                             {sublabel}
-                                        </div>
+                                        </span>
                                     )}
-                                </TableCell>
-                                <TableCell
-                                    className={
-                                        metric === "qty"
-                                            ? "py-2.5 text-right font-mono text-sm font-medium tabular-nums"
-                                            : "py-2.5 text-right font-mono text-sm tabular-nums text-muted-foreground"
-                                    }
-                                >
-                                    {formatQty(item.qty)}
-                                </TableCell>
-                                <TableCell
-                                    className={
-                                        metric === "nilai"
-                                            ? "py-2.5 text-right font-mono text-sm font-medium tabular-nums"
-                                            : "py-2.5 text-right font-mono text-sm tabular-nums text-muted-foreground"
-                                    }
-                                >
-                                    {compactNilai(item.nilai)}
-                                </TableCell>
-                                <TableCell className="py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                                    {item.rows}
-                                </TableCell>
-                            </TableRow>
-                        )
-                    })}
-                </TableBody>
-            </Table>
+                                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground/70">
+                                        {item.rows} item
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="w-24 shrink-0 text-right">
+                                <div className="font-mono text-sm font-medium tabular-nums">
+                                    {metric === "qty" ? formatQty(item.qty) : compactNilai(item.nilai)}
+                                </div>
+                                <div className="text-[11px] tabular-nums text-muted-foreground">
+                                    {metric === "qty" ? compactNilai(item.nilai) : formatQty(item.qty)}
+                                </div>
+                            </div>
+                        </li>
+                    )
+                })}
+            </ul>
         </div>
     )
-}
-
-/** Skala relatif untuk bar indikator di tabel alasan POD. */
-function barWidth(value: number, max: number): number {
-    if (max <= 0 || !Number.isFinite(value)) return 0
-    return Math.max(4, Math.min(100, (value / max) * 100))
 }
 
 export const SkrView = memo(SkrViewImpl)

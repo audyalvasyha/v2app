@@ -26,7 +26,10 @@ const OUTBOUND_COLS = "freight_order,no_polisi,jam_out,jam_in,created_at"
 // View ringkasan hasil parsing di database (lihat README / SQL di bawah).
 // Hanya 5 kolom ini yang dibutuhkan dashboard, sehingga payload jauh lebih kecil.
 const SKR_VIEW = 'skr_ringkasan'
-const SKR_VIEW_COLS = 'license_no,salesman,pod_reason,skr_base_unit,pod_d,qty,nilai'
+//_customer_id & delivery_number ikut diambil supaya dashboard bisa
+//mengelompokkan sisa kiriman per toko dan menampilkan nomor dokumen
+//(join ke tabel customers dilakukan di sisi aplikasi).
+const SKR_VIEW_COLS = 'license_no,salesman,pod_reason,skr_base_unit,pod_d,qty,nilai,customer_id,delivery_number'
 
 /**
  * Deteksi error yang membuat view `skr_ringkasan` tidak bisa dipakai, baik
@@ -96,6 +99,8 @@ export default function HomePage() {
   const [serviceLogs, setServiceLogs] = useState<any[]>([])
   const [outbounds, setOutbounds] = useState<any[]>([])
   const [skrDetails, setSkrDetails] = useState<any[]>([])
+  /** Daftar customer untuk menerjemahkan customer_id → nama toko di menu SKR */
+  const [customers, setCustomers] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [outboundError, setOutboundError] = useState<string | null>(null)
   const [isOutboundFetching, setIsOutboundFetching] = useState(false)
@@ -157,6 +162,24 @@ export default function HomePage() {
       }
     }
     fetchData()
+  }, [])
+
+  //_Nama toko untuk menu SKR — hanya id + nama yang diambil, lewat view
+  //customers_ringkas supaya telephone_number & nik_salesman tidak ikut
+  //terekspos ke kunci anon. Kegagalan fetch ini tidak boleh mengganggu
+  //menu lain.
+  useEffect(() => {
+    let cancelled = false
+    supabase
+      .from('customers_ringkas')
+      .select('customer_id,customer_name')
+      .limit(20000)
+      .then(({ data, error }) => {
+        if (!cancelled && !error) setCustomers(data || [])
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // armada_outbound di-fetch terpisah sesuai rentang tanggal menu Pengiriman
@@ -225,14 +248,24 @@ export default function HomePage() {
   // mode cadangan: baca kolom mentah lalu parsing di sisi browser.
   const fetchSkr = useCallback(async (from: string, to: string) => {
     setIsSkrFetching(true)
-    // Bulan kalender berjalan + bulan sebelumnya (WIB) — dipakai grafik
-    // perbandingan "bulan ini vs bulan lalu".
-    const pNow = zonedParts(new Date())!
-    const pPrev = zonedParts(new Date(startOfZonedDayMonthsAgo(1)))!
-    const curFrom = `${pNow.year}-${String(pNow.month).padStart(2, '0')}-01`
-    const curTo = `${pNow.year}-${String(pNow.month).padStart(2, '0')}-${String(daysInMonth(pNow.year, pNow.month)).padStart(2, '0')}`
-    const prevFrom = `${pPrev.year}-${String(pPrev.month).padStart(2, '0')}-01`
-    const prevTo = `${pPrev.year}-${String(pPrev.month).padStart(2, '0')}-${String(daysInMonth(pPrev.year, pPrev.month)).padStart(2, '0')}`
+    // Tiga bulan kalender terakhir (WIB) — bulan berjalan, bulan sebelumnya,
+    // dan dua bulan yang lalu. Grafik bisa membandingkan Sep vs Agu saat
+    // bulan berjalan masih kosong (awal bulan, upload POD tertinggal),
+    // jadi jendela ketiga harus tersedia tanpa fetch ulang.
+    const windows = [0, 1, 2].map((back) => {
+      const p = zonedParts(new Date(startOfZonedDayMonthsAgo(back)))!
+      const mm = String(p.month).padStart(2, '0')
+      return {
+        from: `${p.year}-${mm}-01`,
+        to: `${p.year}-${mm}-${String(daysInMonth(p.year, p.month)).padStart(2, '0')}`,
+      }
+    })
+    const curFrom = windows[0].from
+    const curTo = windows[0].to
+    const prevFrom = windows[1].from
+    const prevTo = windows[1].to
+    const prev2From = windows[2].from
+    const prev2To = windows[2].to
     try {
       let query = supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null)
       if (from) query = query.gte('pod_d', from)
@@ -244,19 +277,22 @@ export default function HomePage() {
         setSkrUsesView(true)
         setSkrDateFiltered(true)
         setSkrDetails(data || [])
-        // Grafik butuh dua bulan penuh. Bila rentang filter sudah mencakup
-        // kedua bulan, komponen cukup memakai data yang sama — tandai dengan
-        // prev bulan kosong. Kalau tidak, fetch dua jendela bulan terpisah.
-        if (from <= prevFrom && to >= curTo) {
+        // Grafik butuh dua bulan penuh (plus satu jendela cadangan untuk
+        // auto-shift awal bulan). Bila rentang filter sudah mencakup ketiga
+        // bulan, komponen cukup memakai data yang sama — tandai dengan prev
+        // bulan kosong. Kalau tidak, fetch tiga jendela bulan terpisah.
+        if (from <= prev2From && to >= curTo) {
           setSkrPrevMonth([])
         } else {
-          const [curRes, prevRes] = await Promise.all([
+          const [curRes, prevRes, prev2Res] = await Promise.all([
             supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null).gte('pod_d', curFrom).lte('pod_d', curTo).limit(20000),
             supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null).gte('pod_d', prevFrom).lte('pod_d', prevTo).limit(20000),
+            supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null).gte('pod_d', prev2From).lte('pod_d', prev2To).limit(20000),
           ])
           setSkrPrevMonth([
             ...(curRes.error ? [] : curRes.data || []),
             ...(prevRes.error ? [] : prevRes.data || []),
+            ...(prev2Res.error ? [] : prev2Res.data || []),
           ])
         }
         return
@@ -266,7 +302,7 @@ export default function HomePage() {
       if (isViewUnavailableError(error.message)) {
         const { data: raw, error: rawError } = await supabase
           .from('skr_detail')
-          .select('license_no,salesman,pod_reason,skr_base_unit,pod_date,skr_sales_unit,skr_value')
+          .select('license_no,salesman,pod_reason,skr_base_unit,pod_date,skr_sales_unit,skr_value,customer_id,delivery_number')
           .limit(20000)
         if (rawError) {
           setSkrError(rawError.message)
@@ -280,6 +316,8 @@ export default function HomePage() {
           salesman: row.salesman,
           pod_reason: row.pod_reason,
           skr_base_unit: row.skr_base_unit,
+          customer_id: row.customer_id,
+          delivery_number: row.delivery_number,
           pod_d: podDateToIso(row.pod_date),
           qty: Number(row.skr_sales_unit ?? 0) || 0,
           nilai: parseNilai(row.skr_value),
@@ -364,6 +402,16 @@ export default function HomePage() {
     }
     return map
   }, [equipments])
+
+  //_customer_id di skr_detail bigint sedangkan customers.customer_id TEXT —
+  //join lewat normalisasi string ke peta id → nama toko.
+  const customerById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const c of customers) {
+      if (c.customer_id != null) map.set(String(c.customer_id).trim(), String(c.customer_name ?? ''))
+    }
+    return map
+  }, [customers])
 
   // Baris SKR sudah difilter tanggal oleh query bila view aktif. Pada mode
   // cadangan (view belum ada) penyaringan tetap dilakukan di sini.
@@ -514,6 +562,7 @@ export default function HomePage() {
             details={filteredSkr}
             prevMonthRows={skrPrevMonth}
             equipmentByPlate={equipmentByPlate}
+            customerById={customerById}
             isLoading={isLoading && skrError == null}
             error={skrError}
             dateFrom={skrRange.from}

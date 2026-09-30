@@ -56,6 +56,12 @@ with base as (
     d.salesman,
     d.pod_reason,
     d.skr_base_unit,
+    -- id customer dipakai dashboard untuk join ke tabel customers
+    -- (tipe di skr_detail bigint, di customers TEXT — dinormalkan
+    -- lewat string di sisi aplikasi).
+    d.customer_id,
+    -- nomor dokumen pengiriman — ditampilkan di detail per customer
+    d.delivery_number,
     d.pod_date,
     -- pod_date diisi nama bulan bahasa Inggris, mis. "23 May 2026" atau
     -- "04 April 2026". Spasi dirapikan agar to_date() pasti bisa membaca.
@@ -78,6 +84,8 @@ select
   salesman,
   pod_reason,
   skr_base_unit,
+  customer_id,
+  delivery_number,
   qty,
   nilai,
   pod_date,
@@ -128,6 +136,30 @@ from base;
 
 -- ── Grant agar anon bisa membaca view ───────────────────────────
 grant select on public.skr_ringkasan to anon, authenticated;
+
+
+-- ═══════════════════════════════════════════════════════════════
+--  View minimal customers untuk dashboard SKR
+--
+--  Tabel customers punya telephone_number & nik_salesman yang tidak
+--  perlu terekspos ke kunci anon (yang tertanam di bundle browser).
+--  View ini cuma membocorkan dua kolom yang benar-benar dipakai
+--  dashboard: customer_id + customer_name. View dibaca dengan hak
+--  akses pemilik (default Postgres), jadi RLS di customers tidak
+--  menghalangi pembacaan dua kolom ini.
+-- ═══════════════════════════════════════════════════════════════
+drop view if exists public.customers_ringkas;
+
+create view public.customers_ringkas as
+select
+  customer_id,
+  customer_name
+from public.customers;
+
+grant select on public.customers_ringkas to anon, authenticated;
+
+-- Verifikasi (harus mengembalikan baris, bukan []):
+--   select * from public.customers_ringkas limit 3;
 
 
 -- ═══════════════════════════════════════════════════════════════
