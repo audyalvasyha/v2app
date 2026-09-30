@@ -67,9 +67,9 @@ export function AboutView() {
             <div className="mt-12 grid gap-12 md:grid-cols-12 md:gap-10">
                 <div className="md:col-span-7">
                     <h1 className="text-balance text-5xl font-semibold leading-[0.95] tracking-[-0.04em] sm:text-6xl">
-                        Fleet Management
+                        Transport
                         <br />
-                        <span className="text-muted-foreground/50">System</span>
+                        <span className="text-muted-foreground/50">Management System</span>
                         <span className="text-primary">.</span>
                     </h1>
                     <p className="mt-8 max-w-xl text-pretty text-[15px] leading-relaxed text-muted-foreground">

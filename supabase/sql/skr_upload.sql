@@ -8,7 +8,11 @@
 --  baris yang sidik jarinya sudah ada DITIMPA, yang belum ada DITAMBAH,
 --  dan baris lama yang tidak ada di CSV DIBIARKAN (tidak dihapus).
 --  Sidik jari = delivery_number + pod_date + skr_base_unit + skr_sales_unit
---  (delivery_number saja tidak unik: satu DO bisa berisi beberapa item).
+--  + skr_value. Empat kolom pertama saja TIDAK cukup: ditemukan kasus nyata
+--  DO & tanggal sama, qty 0 (barang rusak/hilang), tapi nilai klaim beda
+--  (0 vs 25.800) — dua klaim itu harus tetap tersimpan sebagai dua baris.
+--  skr_value dipakai apa adanya: bila format nilainya berubah dari sistem
+--  sumber ("25,800" jadi "25800"), baris dianggap kombinasi baru.
 --
 --  JANGAN pernah memberi INSERT/UPDATE/DELETE ke role `anon`:
 --  kunci anon tertanam di bundle browser dan bisa dipakai siapa pun.
@@ -30,9 +34,10 @@ alter table public.skr_detail enable row level security;
 drop policy if exists "authenticated_tulis_skr_detail" on public.skr_detail;
 
 -- 2. Sidik jari baris. Delivery_number saja tidak unik (satu DO beberapa
---    item), jadi kombinasi ini yang menentukan "baris yang sama".
+--    item), dan DO+tanggal+unit+qty pun belum unik (kasus klaim qty 0
+--    dengan nilai berbeda), jadi skr_value ikut jadi penentu "baris sama".
 create unique index if not exists "skr_detail_fingerprint_idx"
-  on public.skr_detail (delivery_number, pod_date, skr_base_unit, skr_sales_unit);
+  on public.skr_detail (delivery_number, pod_date, skr_base_unit, skr_sales_unit, skr_value);
 
 -- 3. Fungsi upsert atomik. Gagal di tengah → seluruh batch dibatalkan.
 --    Rows dikirim sebagai JSON array dari browser (postgrest-js rpc).
@@ -74,7 +79,7 @@ begin
     nullif(trim(r.item->>'sales_office'), ''),
     nullif(trim(r.item->>'distribution_channel'), '')
   from jsonb_array_elements(rows) as r(item)
-  on conflict (delivery_number, pod_date, skr_base_unit, skr_sales_unit) do update
+  on conflict (delivery_number, pod_date, skr_base_unit, skr_sales_unit, skr_value) do update
     set license_no          = excluded.license_no,
         salesman            = excluded.salesman,
         pod_reason          = excluded.pod_reason,

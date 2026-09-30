@@ -197,7 +197,7 @@ export default function SkrInputPage() {
                 <p>
                     <span className="font-medium text-emerald-700 dark:text-emerald-400">Mode harian (upsert).</span>{" "}
                     <span className="text-muted-foreground">
-                        Baris dengan kombinasi <b>Delivery Number + Tanggal POD + SKU + Qty</b> yang sudah ada akan
+                        Baris dengan kombinasi <b>Delivery Number + Tanggal POD + SKU + Qty + Nilai</b> yang sudah ada akan
                         ditimpa, yang belum ada ditambah — dan data hari-hari sebelumnya tetap aman. Seluruh batch
                         berjalan dalam satu transaksi: gagal di tengah = tidak ada yang berubah.
                     </span>

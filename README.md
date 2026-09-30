@@ -74,8 +74,9 @@ Halaman `/skr/input` terproteksi **Supabase Auth** (admin tunggal):
 - Upload CSV dengan **pemetaan header longgar** — spasi/kapital pada header asli
   ("Delivery Number", "SKR Value", dst.) dikenali otomatis ke kolom database.
 - **Upsert harian**: kombinasi `delivery_number + pod_date + skr_base_unit +
-  skr_sales_unit` jadi sidik jari — baris yang ada ditimpa, yang baru ditambah, data
-  hari sebelumnya tetap aman.
+  skr_sales_unit + skr_value` jadi sidik jari — baris yang ada ditimpa, yang baru
+  ditambah, data hari sebelumnya tetap aman. (Nilai klaim ikut jadi kunci karena
+  ada kasus nyata DO & tanggal sama, qty 0, tapi nilai berbeda.)
 - Seluruh batch berjalan dalam **satu transaksi atomik** via RPC `upsert_skr_detail`;
   gagal di tengah berarti tidak ada yang berubah.
 - Preview 8 baris pertama + peta header sebelum unggah; unduh template CSV standar.
@@ -178,9 +179,9 @@ View `customers_ringkas` mengekspos hanya `customer_id` + `customer_name`
 
 ### Import harian (upsert)
 
-Sidik jari baris = `delivery_number + pod_date + skr_base_unit + skr_sales_unit`
-(unique index). RPC `upsert_skr_detail(jsonb)` — hanya untuk role `authenticated`,
-dipanggil dari halaman yang sudah login:
+Sidik jari baris = `delivery_number + pod_date + skr_base_unit + skr_sales_unit +
+skr_value` (unique index). RPC `upsert_skr_detail(jsonb)` — hanya untuk role
+`authenticated`, dipanggil dari halaman yang sudah login:
 
 - kombinasi sudah ada → baris ditimpa dengan nilai CSV terbaru
 - kombinasi baru → baris ditambah
