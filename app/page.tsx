@@ -18,6 +18,7 @@ import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
 import { daysInMonth } from "@/lib/skr-analytics"
 import { startOfZonedDayMonthsAgo, zonedParts } from "@/lib/format"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
+import { usePageTitle } from "@/hooks/use-page-title"
 
 // Kolom minimal yang benar-benar dipakai UI — payload lebih kecil, query lebih cepat
 const EQUIPMENT_COLS = "id,equipment_id,license_plate,description,company_code,construction_year,last_odometer,status"
@@ -476,6 +477,9 @@ export default function HomePage() {
     skr: { title: 'SKR', desc: 'Ringkasan sisa kiriman per armada dan sales, beserta bobot nilai serta alasan POD.' },
     pengiriman: { title: 'Pengiriman', desc: 'Pantau armada outbound: nomor polisi, jam keluar, jam kembali, dan durasi tempuh.' },
   }
+
+  // Title tab browser mengikuti menu aktif — rapi di riwayat tab & bookmark.
+  usePageTitle(headerInfo[activeView].title)
 
   return (
     <DashboardLayout

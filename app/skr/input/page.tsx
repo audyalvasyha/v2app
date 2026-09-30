@@ -12,9 +12,12 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { parseSkrCsv, SKR_CSV_TEMPLATE, type SkrCsvRow } from "@/lib/skr-csv"
 import { formatQty } from "@/lib/skr-status"
+import { usePageTitle } from "@/hooks/use-page-title"
 
 export default function SkrInputPage() {
     const router = useRouter()
+    // Title ikut kondisi — di riwayat tab terlihat jelas ini halaman import.
+    usePageTitle("Import CSV SKR")
     const [checking, setChecking] = useState(true)
     const [session, setSession] = useState<{ email?: string } | null>(null)
 
