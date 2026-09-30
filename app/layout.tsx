@@ -10,7 +10,7 @@ import { Geist_Mono } from 'next/font/google'
 const geistMono = Geist_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" })
 
 export const metadata: Metadata = {
-  title: "v2app - Fleet Management System",
+  title: "Midaa - Transport Management System",
   description:
     "A powerful code snippet manager with syntax highlighting, tagging, and advanced search capabilities for developers.",
     generator: 'v0.app'
