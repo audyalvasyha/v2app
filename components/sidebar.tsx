@@ -135,6 +135,16 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           collapsed={collapsed}
           onClick={() => onViewChange('pengiriman')}
         />
+
+        {/* ---------- About: menempel di bawah daftar menu ---------- */}
+        <SidebarButton
+          icon={User}
+          label="About"
+          active={activeView === 'about'}
+          collapsed={collapsed}
+          onClick={() => onViewChange('about')}
+          pushToBottom
+        />
       </nav>
     </aside>
   )
