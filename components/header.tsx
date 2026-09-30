@@ -22,7 +22,7 @@ export function Header({ theme, onToggleTheme }: HeaderProps) {
             </div>
             <div>
               <h1 className="text-xl font-bold">Midaa</h1>
-              <p className="text-xs text-muted-foreground">Fleet Management System</p>
+              <p className="text-xs text-muted-foreground">Transport Management System</p>
             </div>
           </div>
         </div>
