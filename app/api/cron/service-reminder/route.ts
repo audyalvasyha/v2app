@@ -16,6 +16,7 @@ import {
  * Environment (diatur di Vercel → Settings → Environment Variables):
  * - RESEND_API_KEY     : API key Resend (wajib agar email terkirim)
  * - REMINDER_EMAIL_TO  : alamat penerima (opsional, default audialfasha@gmail.com)
+ * - REMINDER_EMAIL_CC  : alamat CC, dipisah koma (opsional, mis. "a@x.com, b@x.com")
  * - CRON_SECRET        : bila diisi, request cron wajib membawa
  *                        header `Authorization: Bearer <CRON_SECRET>`
  *                        (Vercel Cron mengirimkannya otomatis).
@@ -82,6 +83,12 @@ export async function GET(request: Request) {
         }
 
         const to = process.env.REMINDER_EMAIL_TO?.trim() || RECIPIENT_FALLBACK
+        // CC opsional: "a@x.com, b@x.com". Alamat yang bukan email dibuang diam-diam
+        // supaya satu env var yang salah ketik tidak menggagalkan seluruh kiriman.
+        const cc = (process.env.REMINDER_EMAIL_CC ?? "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
         const overdueCount = rows.filter((r) => r.status.id === "overdue").length
         const dateLabel = new Intl.DateTimeFormat("id-ID", {
             weekday: "long",
@@ -121,6 +128,7 @@ export async function GET(request: Request) {
             body: JSON.stringify({
                 from: FROM,
                 to: [to],
+                ...(cc.length > 0 ? { cc } : {}),
                 subject,
                 html: `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:640px">
   <h2 style="margin:0 0 4px">Reminder Servis Armada</h2>
@@ -145,7 +153,7 @@ export async function GET(request: Request) {
             throw new Error(`Resend ${res.status}: ${body}`)
         }
 
-        return NextResponse.json({ sent: true, to, count: rows.length })
+        return NextResponse.json({ sent: true, to, cc, count: rows.length })
     } catch (err) {
         return NextResponse.json(
             { error: err instanceof Error ? err.message : "Gagal mengirim reminder" },
