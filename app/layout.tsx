@@ -13,7 +13,16 @@ export const metadata: Metadata = {
   title: "Midaa - Transport Management System",
   description:
     "A powerful code snippet manager with syntax highlighting, tagging, and advanced search capabilities for developers.",
-    generator: 'v0.app'
+    generator: 'v0.app',
+  // File ikon berada di public/ sehingga tidak otomatis dideteksi Next.js — ditautkan manual
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-light-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-dark-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: "/apple-icon.png",
+  },
 }
 
 export const viewport: Viewport = {
