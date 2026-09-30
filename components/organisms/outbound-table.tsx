@@ -3,10 +3,8 @@
 import React, { memo, useEffect, useMemo, useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Label } from "@/components/ui/label"
 import {
     Select,
     SelectContent,
@@ -23,24 +21,21 @@ import {
 } from "@/components/ui/pagination"
 import {
     ArrowUpDown,
-    CalendarRange,
     ChevronDown,
     ChevronUp,
     Clock,
     Download,
     LogOut,
-    Search,
     Timer,
     Truck,
     X,
 } from "lucide-react"
 import { StatTile } from "@/components/molecules/stat-tile"
+import { FilterToolbar } from "@/components/molecules/filter-toolbar"
 import {
     APP_TIMEZONE,
     WIB_OFFSET_MS,
     formatNumber,
-    zonedParts,
-    startOfZonedDay,
 } from "@/lib/format"
 import {
     durationMinutesFromTimestamps,
@@ -123,19 +118,6 @@ function tanggalWIB(value: string | null | undefined): string {
     })
 }
 
-/** Rentang awal: 30 hari terakhir (tanggal WIB hari ini) */
-function defaultFrom(): string {
-    const ms = startOfZonedDay() - 29 * 86_400_000
-    const p = zonedParts(new Date(ms))!
-    return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`
-}
-
-/** Rentang akhir: hari ini (tanggal WIB) */
-function defaultTo(): string {
-    const p = zonedParts(new Date())!
-    return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`
-}
-
 function OutboundTableImpl({
     outbounds,
     isLoading,
@@ -150,17 +132,6 @@ function OutboundTableImpl({
     const [sortKey, setSortKey] = useState<SortKey>("createdDesc")
     const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0])
     const [page, setPage] = useState(1)
-
-    // Nilai input rentang — di-commit lewat tombol "Terapkan" agar fetch
-    // tidak jalan tiap ketikan.
-    const [draftFrom, setDraftFrom] = useState(dateFrom)
-    const [draftTo, setDraftTo] = useState(dateTo)
-
-    // Sinkronkan draft saat rentang dari induk berubah (mis. reset)
-    useEffect(() => {
-        setDraftFrom(dateFrom)
-        setDraftTo(dateTo)
-    }, [dateFrom, dateTo])
 
     const searchLower = search.trim().toLowerCase()
 
@@ -363,96 +334,62 @@ function OutboundTableImpl({
                 />
             </div>
 
-            {/* KONTROL: rentang tanggal, pencarian, filter status, urutan */}
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-                <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-end">
-                    {/* FILTER RENTANG TANGGAL — commit lewat tombol, fetch di induk */}
-                    <div className="flex flex-wrap items-end gap-2 rounded-xl border bg-card p-3">
-                        <div className="space-y-1">
-                            <Label htmlFor="outbound-from" className="text-xs text-muted-foreground">
-                                Dari tanggal
-                            </Label>
-                            <Input
-                                id="outbound-from"
-                                type="date"
-                                value={draftFrom}
-                                onChange={(e) => setDraftFrom(e.target.value)}
-                                className="h-8 w-[150px]"
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="outbound-to" className="text-xs text-muted-foreground">
-                                Sampai tanggal
-                            </Label>
-                            <Input
-                                id="outbound-to"
-                                type="date"
-                                value={draftTo}
-                                onChange={(e) => setDraftTo(e.target.value)}
-                                className="h-8 w-[150px]"
-                            />
-                        </div>
+            {/* KONTROL: rentang tanggal, pencarian, urutan, export (susunan sama dengan SKR) */}
+            <FilterToolbar
+                date={{
+                    idPrefix: "outbound",
+                    from: dateFrom,
+                    to: dateTo,
+                    onApply: onDateRangeChange,
+                    isFetching,
+                }}
+                search={{
+                    value: search,
+                    onChange: setSearch,
+                    placeholder: "Cari nomor polisi atau freight order...",
+                    hint: search ? `${rows.length.toLocaleString("id-ID")} baris cocok` : "Ctrl + /",
+                }}
+                actions={
+                    <>
                         <Button
+                            variant="outline"
                             size="sm"
-                            className="h-8 gap-1.5"
-                            onClick={() => onDateRangeChange(draftFrom, draftTo)}
-                            disabled={isFetching || draftFrom === dateFrom && draftTo === dateTo}
+                            className="h-8 gap-1.5 bg-card"
+                            onClick={handleExportCsv}
+                            disabled={rows.length === 0}
                         >
-                            <CalendarRange className="h-3.5 w-3.5" />
-                            {isFetching ? "Memuat..." : "Terapkan"}
+                            <Download className="h-3.5 w-3.5" /> Export CSV
                         </Button>
-                    </div>
 
-                    <div className="relative lg:max-w-xs lg:flex-1">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Cari nomor polisi atau freight order..."
-                            className="h-8 pl-9"
-                        />
-                    </div>
-                </div>
+                        <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+                            <SelectTrigger className="h-8 w-[150px] bg-card">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="createdDesc">Terbaru</SelectItem>
+                                <SelectItem value="createdAsc">Terlama</SelectItem>
+                                <SelectItem value="orderDesc">Order tertinggi</SelectItem>
+                                <SelectItem value="orderAsc">Order terendah</SelectItem>
+                            </SelectContent>
+                        </Select>
 
-                <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1.5 bg-card"
-                        onClick={handleExportCsv}
-                        disabled={rows.length === 0}
-                    >
-                        <Download className="h-3.5 w-3.5" /> Export CSV
-                    </Button>
+                        <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                            <SelectTrigger className="h-8 w-[112px] bg-card">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {PAGE_SIZE_OPTIONS.map((n) => (
+                                    <SelectItem key={n} value={String(n)}>
+                                        {n} baris
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </>
+                }
+            />
 
-                    <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
-                        <SelectTrigger className="h-8 w-[150px] bg-card">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="createdDesc">Terbaru</SelectItem>
-                            <SelectItem value="createdAsc">Terlama</SelectItem>
-                            <SelectItem value="orderDesc">Order tertinggi</SelectItem>
-                            <SelectItem value="orderAsc">Order terendah</SelectItem>
-                        </SelectContent>
-                    </Select>
-
-                    <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
-                        <SelectTrigger className="h-8 w-[112px] bg-card">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {PAGE_SIZE_OPTIONS.map((n) => (
-                                <SelectItem key={n} value={String(n)}>
-                                    {n} baris
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
-
-            {/* Baris chip status + tombol reset rentang */}
+            {/* Baris chip status */}
             <div className="flex flex-wrap items-center gap-1.5">
                 {STATUS_FILTERS.map((opt) => {
                     const active = statusFilter === opt.id
@@ -472,16 +409,6 @@ function OutboundTableImpl({
                         </Button>
                     )
                 })}
-                {(dateFrom !== defaultFrom() || dateTo !== defaultTo()) && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 gap-1.5 text-muted-foreground"
-                        onClick={() => onDateRangeChange(defaultFrom(), defaultTo())}
-                    >
-                        <X className="h-3.5 w-3.5" /> Reset rentang
-                    </Button>
-                )}
             </div>
 
             {/* TABEL */}

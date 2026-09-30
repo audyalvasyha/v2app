@@ -11,8 +11,11 @@ import { EquipmentTable } from "@/components/organisms/equipment-table"
 import { MaintenanceTable } from "@/components/organisms/maintenance-table"
 import { ServiceMonitoringTable } from "@/components/organisms/service-monitoring-table"
 import { AboutView } from "@/components/organisms/about-view"
-import { ComingSoonView } from "@/components/organisms/coming-soon-view"
+import { SkrView } from "@/components/organisms/skr-view"
 import { OutboundTable } from "@/components/organisms/outbound-table"
+import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
+import { daysInMonth } from "@/lib/skr-analytics"
+import { startOfZonedDayMonthsAgo, zonedParts } from "@/lib/format"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 
 // Kolom minimal yang benar-benar dipakai UI — payload lebih kecil, query lebih cepat
@@ -20,6 +23,28 @@ const EQUIPMENT_COLS = "id,equipment_id,license_plate,description,company_code,c
 const HISTORY_COLS = "id,tanggal,equipment_id,license_plate,nama_barang_atau_jasa,jumlah_harga"
 const SERVICE_LOG_COLS = "equipment_id,service_date,next_service_date,next_service_odometer,odometer_at_service"
 const OUTBOUND_COLS = "freight_order,no_polisi,jam_out,jam_in,created_at"
+// View ringkasan hasil parsing di database (lihat README / SQL di bawah).
+// Hanya 5 kolom ini yang dibutuhkan dashboard, sehingga payload jauh lebih kecil.
+const SKR_VIEW = 'skr_ringkasan'
+const SKR_VIEW_COLS = 'license_no,salesman,pod_reason,skr_base_unit,pod_d,qty,nilai'
+
+/**
+ * Deteksi error yang membuat view `skr_ringkasan` tidak bisa dipakai, baik
+ * karena belum dibuat maupun karena hak aksesnya belum diberikan. Pada kasus
+ * tersebut aplikasi turun ke mode cadangan alih-alih menampilkan error.
+ */
+function isViewUnavailableError(message: string): boolean {
+    const m = message.toLowerCase()
+    const aboutView = m.includes('skr_ringkasan')
+    if (!aboutView && !m.includes('view')) return false
+    return (
+        m.includes('schema cache') ||
+        m.includes('does not exist') ||
+        m.includes('permission denied') ||
+        m.includes('not authorized') ||
+        m.includes('insufficient privilege')
+    )
+}
 
 const CACHE_KEY = "fleet-cache-v2"
 
@@ -70,9 +95,18 @@ export default function HomePage() {
   const [histories, setHistories] = useState<any[]>([])
   const [serviceLogs, setServiceLogs] = useState<any[]>([])
   const [outbounds, setOutbounds] = useState<any[]>([])
+  const [skrDetails, setSkrDetails] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [outboundError, setOutboundError] = useState<string | null>(null)
   const [isOutboundFetching, setIsOutboundFetching] = useState(false)
+  const [skrError, setSkrError] = useState<string | null>(null)
+  const [isSkrFetching, setIsSkrFetching] = useState(false)
+  /** Baris bulan sebelumnya — untuk grafik perbandingan di menu SKR */
+  const [skrPrevMonth, setSkrPrevMonth] = useState<any[]>([])
+  /** true bila data diambil lewat view (filter tanggal di database) */
+  const [skrUsesView, setSkrUsesView] = useState(false)
+  /** true bila penyaringan tanggal sudah diterapkan oleh query */
+  const [skrDateFiltered, setSkrDateFiltered] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const isRefreshing = useRef(false)
@@ -163,23 +197,187 @@ export default function HomePage() {
     }
   }, [])
 
-  // Rentang tanggal menu Pengiriman — default 30 hari terakhir (WIB).
-  const [outboundRange, setOutboundRange] = useState(() => {
-    const nowParts = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })
-    const today = nowParts
-    const from = new Date(`${today}T00:00:00+07:00`)
-    from.setDate(from.getDate() - 29)
-    const fromParts = from.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })
-    return { from: fromParts, to: today }
-  })
+  // Rentang tanggal menu Pengiriman & SKR — default 30 hari terakhir (WIB).
+  const defaultRange = () => {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })
+    const start = new Date(`${today}T00:00:00+07:00`)
+    start.setDate(start.getDate() - 29)
+    return { from: start.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" }), to: today }
+  }
+
+  const [outboundRange, setOutboundRange] = useState(defaultRange)
+  const [skrRange, setSkrRange] = useState(defaultRange)
 
   const handleOutboundRangeChange = useCallback((from: string, to: string) => {
     setOutboundRange({ from, to })
   }, [])
 
+  const handleSkrRangeChange = useCallback((from: string, to: string) => {
+    setSkrRange({ from, to })
+  }, [])
+
   useEffect(() => {
     fetchOutbounds(outboundRange.from, outboundRange.to)
   }, [fetchOutbounds, outboundRange.from, outboundRange.to])
+
+  // Dashboard SKR membaca view `skr_ringkasan` yang mengupah parsing pod_date &
+  // skr_value ke database. Bila view belum dibuat, aplikasi otomatis turun ke
+  // mode cadangan: baca kolom mentah lalu parsing di sisi browser.
+  const fetchSkr = useCallback(async (from: string, to: string) => {
+    setIsSkrFetching(true)
+    // Bulan kalender berjalan + bulan sebelumnya (WIB) — dipakai grafik
+    // perbandingan "bulan ini vs bulan lalu".
+    const pNow = zonedParts(new Date())!
+    const pPrev = zonedParts(new Date(startOfZonedDayMonthsAgo(1)))!
+    const curFrom = `${pNow.year}-${String(pNow.month).padStart(2, '0')}-01`
+    const curTo = `${pNow.year}-${String(pNow.month).padStart(2, '0')}-${String(daysInMonth(pNow.year, pNow.month)).padStart(2, '0')}`
+    const prevFrom = `${pPrev.year}-${String(pPrev.month).padStart(2, '0')}-01`
+    const prevTo = `${pPrev.year}-${String(pPrev.month).padStart(2, '0')}-${String(daysInMonth(pPrev.year, pPrev.month)).padStart(2, '0')}`
+    try {
+      let query = supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null)
+      if (from) query = query.gte('pod_d', from)
+      if (to) query = query.lte('pod_d', to)
+      const { data, error } = await query.order('pod_d', { ascending: false }).limit(20000)
+
+      if (!error) {
+        setSkrError(null)
+        setSkrUsesView(true)
+        setSkrDateFiltered(true)
+        setSkrDetails(data || [])
+        // Grafik butuh dua bulan penuh. Bila rentang filter sudah mencakup
+        // kedua bulan, komponen cukup memakai data yang sama — tandai dengan
+        // prev bulan kosong. Kalau tidak, fetch dua jendela bulan terpisah.
+        if (from <= prevFrom && to >= curTo) {
+          setSkrPrevMonth([])
+        } else {
+          const [curRes, prevRes] = await Promise.all([
+            supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null).gte('pod_d', curFrom).lte('pod_d', curTo).limit(20000),
+            supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null).gte('pod_d', prevFrom).lte('pod_d', prevTo).limit(20000),
+          ])
+          setSkrPrevMonth([
+            ...(curRes.error ? [] : curRes.data || []),
+            ...(prevRes.error ? [] : prevRes.data || []),
+          ])
+        }
+        return
+      }
+
+      // View belum tersedia → mode cadangan, parsing di sisi aplikasi.
+      if (isViewUnavailableError(error.message)) {
+        const { data: raw, error: rawError } = await supabase
+          .from('skr_detail')
+          .select('license_no,salesman,pod_reason,skr_base_unit,pod_date,skr_sales_unit,skr_value')
+          .limit(20000)
+        if (rawError) {
+          setSkrError(rawError.message)
+          return
+        }
+        setSkrError(null)
+        setSkrUsesView(false)
+        setSkrDateFiltered(false)
+        const mapped = (raw || []).map((row) => ({
+          license_no: row.license_no,
+          salesman: row.salesman,
+          pod_reason: row.pod_reason,
+          skr_base_unit: row.skr_base_unit,
+          pod_d: podDateToIso(row.pod_date),
+          qty: Number(row.skr_sales_unit ?? 0) || 0,
+          nilai: parseNilai(row.skr_value),
+        }))
+        setSkrDetails(mapped)
+        // Mode cadangan memuat seluruh baris — slice per bulan dilakukan di
+        // komponen memakai batas tanggal yang sama.
+        setSkrPrevMonth(mapped)
+        return
+      }
+
+      setSkrError(error.message)
+    } catch (e) {
+      setSkrError(e instanceof Error ? e.message : 'Gagal memuat data SKR')
+    } finally {
+      setIsSkrFetching(false)
+    }
+  }, [])
+
+  // Rentang tanggal yang benar-benar ada di data — untuk umpan balik ke user
+  // saat rentang pilihannya tidak membuahkan hasil. Ambil dengan dua query kecil.
+  const [skrBounds, setSkrBounds] = useState<SkrDateBounds>({
+    minIso: null,
+    maxIso: null,
+  })
+
+  const fetchSkrBounds = useCallback(async () => {
+    try {
+      const opts = { select: 'pod_d', not: ['pod_d', 'is', null] } as const
+      const [minRes, maxRes] = await Promise.all([
+        supabase.from(SKR_VIEW).select(opts.select).not(...opts.not).order('pod_d', { ascending: true }).limit(1),
+        supabase.from(SKR_VIEW).select(opts.select).not(...opts.not).order('pod_d', { ascending: false }).limit(1),
+      ])
+
+      // View belum ada → hitung batas dari data yang sudah dimuat
+      if (minRes.error || maxRes.error) {
+        let minIso: string | null = null
+        let maxIso: string | null = null
+        for (const row of skrDetails) {
+          const iso = row.pod_d
+          if (!iso) continue
+          if (minIso == null || iso < minIso) minIso = iso
+          if (maxIso == null || iso > maxIso) maxIso = iso
+        }
+        setSkrBounds({ minIso, maxIso })
+        return
+      }
+
+      setSkrBounds((prev) => ({
+        ...prev,
+        minIso: minRes.data?.[0]?.pod_d ?? null,
+        maxIso: maxRes.data?.[0]?.pod_d ?? null,
+      }))
+    } catch {
+      // Gagal mengambil batas rentang tidak kritis — abaikan
+    }
+    //_skrDetails sengaja jadi dependensi: pada mode cadangan batas dihitung
+    //dari baris yang sudah dimuat, jadi harus ikut berubah saat data berganti.
+  }, [skrDetails])
+
+  //_Batas hanya perlu diambil ulang saat mode cadangan; pada mode view
+  //dua query kecil di atas cukup dijalankan sekali.
+  const skrBoundsFetched = useRef(false)
+  useEffect(() => {
+    if (skrBoundsFetched.current && skrUsesView) return
+    skrBoundsFetched.current = true
+    fetchSkrBounds()
+  }, [fetchSkrBounds, skrUsesView])
+
+  useEffect(() => {
+    fetchSkr(skrRange.from, skrRange.to)
+  }, [fetchSkr, skrRange.from, skrRange.to])
+  const equipmentByPlate = useMemo(() => {
+    const map = new Map<string, { equipment_id?: string; description?: string }>()
+    for (const eq of equipments) {
+      if (eq.license_plate) {
+        map.set(String(eq.license_plate), {
+          equipment_id: eq.equipment_id,
+          description: eq.description,
+        })
+      }
+    }
+    return map
+  }, [equipments])
+
+  // Baris SKR sudah difilter tanggal oleh query bila view aktif. Pada mode
+  // cadangan (view belum ada) penyaringan tetap dilakukan di sini.
+  const filteredSkr = useMemo(() => {
+    if (skrDateFiltered) return skrDetails
+    if (!skrRange.from && !skrRange.to) return skrDetails
+    return skrDetails.filter((row) => {
+      const iso = row.pod_d
+      if (!iso) return false
+      if (skrRange.from && iso < skrRange.from) return false
+      if (skrRange.to && iso > skrRange.to) return false
+      return true
+    })
+  }, [skrDetails, skrDateFiltered, skrRange.from, skrRange.to])
 
   // Filter & turunannya di-memoize agar tidak dihitung ulang pada setiap render
   const searchLower = filters.search?.toLowerCase() ?? ""
@@ -226,7 +424,7 @@ export default function HomePage() {
     maintenance: { title: 'Semua Riwayat Maintenance', desc: 'Cari riwayat perbaikan menyeluruh berdasarkan plat nombor atau nama barang.' },
     monitoring: { title: 'Monitoring Status Servis', desc: 'Pantau jadwal servis unit berdasarkan tanggal dan odometer.' },
     about: { title: 'Tentang Aplikasi', desc: 'Kisah di balik pengembangan Fleet Management System v2.' },
-    skr: { title: 'SKR', desc: 'Surat Keterangan Result — modul ekspedisi yang sedang disiapkan.' },
+    skr: { title: 'SKR', desc: 'Ringkasan sisa kiriman per armada dan sales, beserta bobot nilai serta alasan POD.' },
     pengiriman: { title: 'Pengiriman', desc: 'Pantau armada outbound: nomor polisi, jam keluar, jam kembali, dan durasi tempuh.' },
   }
 
@@ -312,7 +510,19 @@ export default function HomePage() {
         )}
 
         {activeView === 'skr' && (
-          <ComingSoonView title="SKR" />
+          <SkrView
+            details={filteredSkr}
+            prevMonthRows={skrPrevMonth}
+            equipmentByPlate={equipmentByPlate}
+            isLoading={isLoading && skrError == null}
+            error={skrError}
+            dateFrom={skrRange.from}
+            dateTo={skrRange.to}
+            onDateRangeChange={handleSkrRangeChange}
+            totalRows={skrDetails.length}
+            bounds={skrBounds}
+            usingView={skrUsesView}
+          />
         )}
 
         {activeView === 'pengiriman' && (

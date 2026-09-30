@@ -5,6 +5,8 @@ import "./globals.css"
 
 import { Geist_Mono } from 'next/font/google'
 
+import { Toaster } from "@/components/ui/sonner"
+
 // Font utama saja — inisialisasi font tak terpakai (Source Serif, double Geist Mono)
 // membuat build lebih lambat dan menambah CSS font yang tidak dipakai
 const geistMono = Geist_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" })
@@ -47,7 +49,10 @@ export default function RootLayout({
           <link rel="dns-prefetch" href={new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin} />
         )}
       </head>
-      <body className={`${geistMono.className} antialiased`}>{children}</body>
+      <body className={`${geistMono.className} antialiased`}>
+        {children}
+        <Toaster position="top-center" richColors closeButton />
+      </body>
     </html>
   )
 }
