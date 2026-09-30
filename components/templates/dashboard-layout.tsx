@@ -3,7 +3,7 @@ import React, { memo, useState, useCallback, useEffect } from "react"
 import { Header } from "@/components/header"
 import { Sidebar } from "@/components/sidebar"
 
-export type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about'
+export type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman'
 
 const SIDEBAR_COLLAPSED_KEY = "fleet-sidebar-collapsed"
 

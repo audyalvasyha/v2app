@@ -1,8 +1,8 @@
 import React from "react"
-import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, type LucideIcon } from "lucide-react"
+import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
-type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about'
+type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman'
 
 interface SidebarProps {
   activeView: View;
@@ -44,6 +44,19 @@ function SidebarButton({ icon: Icon, label, active, collapsed, onClick, badge, p
   )
 }
 
+/** Label kecil pemisah antar kategori menu */
+function SidebarSectionLabel({ label, collapsed }: { label: string; collapsed: boolean }) {
+  if (collapsed) {
+    // Saat mini, cukup garis pemisah agar ikon menu tetap rapi
+    return <div className="mx-2 my-2 border-t border-border" role="presentation" />
+  }
+  return (
+    <div className="px-3 pt-4 pb-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/80 select-none">
+      {label}
+    </div>
+  )
+}
+
 export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, onToggleCollapsed }: SidebarProps) {
   return (
     <aside
@@ -63,8 +76,10 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
         </button>
       </div>
 
-      <nav className="flex-1 p-2 space-y-1 flex flex-col">
-        {/* Menu 0: Dashboard */}
+      <nav className="flex-1 p-2 space-y-1 flex flex-col overflow-y-auto">
+        {/* ---------- Kategori: Fleet Management ---------- */}
+        <SidebarSectionLabel label="Fleet Management" collapsed={collapsed} />
+
         <SidebarButton
           icon={LayoutDashboard}
           label="Dashboard"
@@ -73,7 +88,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           onClick={() => onViewChange('dashboard')}
         />
 
-        {/* Menu 1: Monitoring Servis */}
         <SidebarButton
           icon={Activity}
           label="Monitoring Servis"
@@ -82,7 +96,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           onClick={() => onViewChange('monitoring')}
         />
 
-        {/* Menu 2: Equipment */}
         <SidebarButton
           icon={Settings}
           label="Equipment"
@@ -96,7 +109,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           }
         />
 
-        {/* Menu 3: Histories */}
         <SidebarButton
           icon={History}
           label="Histories"
@@ -105,14 +117,23 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           onClick={() => onViewChange('maintenance')}
         />
 
-        {/* Menu 4: About me */}
+        {/* ---------- Kategori: Ekspedisi ---------- */}
+        <SidebarSectionLabel label="Ekspedisi" collapsed={collapsed} />
+
         <SidebarButton
-          icon={User}
-          label="About"
-          active={activeView === 'about'}
+          icon={Boxes}
+          label="SKR"
+          active={activeView === 'skr'}
           collapsed={collapsed}
-          onClick={() => onViewChange('about')}
-          pushToBottom
+          onClick={() => onViewChange('skr')}
+        />
+
+        <SidebarButton
+          icon={Send}
+          label="Pengiriman"
+          active={activeView === 'pengiriman'}
+          collapsed={collapsed}
+          onClick={() => onViewChange('pengiriman')}
         />
       </nav>
     </aside>

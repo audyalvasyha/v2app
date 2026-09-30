@@ -11,6 +11,7 @@ import { EquipmentTable } from "@/components/organisms/equipment-table"
 import { MaintenanceTable } from "@/components/organisms/maintenance-table"
 import { ServiceMonitoringTable } from "@/components/organisms/service-monitoring-table"
 import { AboutView } from "@/components/organisms/about-view"
+import { ComingSoonView } from "@/components/organisms/coming-soon-view"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 
 // Kolom minimal yang benar-benar dipakai UI — payload lebih kecil, query lebih cepat
@@ -143,12 +144,14 @@ export default function HomePage() {
   }, [])
 
   // Konfigurasi Header Dinamis
-  const headerInfo = {
+  const headerInfo: Record<View, { title: string; desc: string }> = {
     dashboard: { title: 'Dashboard', desc: 'Ringkasan metrik dan status operasional armada.' },
     equipment: { title: 'Daftar Equipment', desc: 'Kelola data aset dan pantau riwayat pemeliharaan secara spesifik.' },
     maintenance: { title: 'Semua Riwayat Maintenance', desc: 'Cari riwayat perbaikan menyeluruh berdasarkan plat nombor atau nama barang.' },
     monitoring: { title: 'Monitoring Status Servis', desc: 'Pantau jadwal servis unit berdasarkan tanggal dan odometer.' },
-    about: { title: 'Tentang Aplikasi', desc: 'Kisah di balik pengembangan Fleet Management System v2.' } // Tambahan baru
+    about: { title: 'Tentang Aplikasi', desc: 'Kisah di balik pengembangan Fleet Management System v2.' },
+    skr: { title: 'SKR', desc: 'Surat Keterangan Result — modul ekspedisi yang sedang disiapkan.' },
+    pengiriman: { title: 'Pengiriman', desc: 'Pantau pengiriman armada ekspedisi — modul yang sedang disiapkan.' },
   }
 
   return (
@@ -171,8 +174,8 @@ export default function HomePage() {
               {headerInfo[activeView].desc}
             </p>
 
-            {/* Sembunyikan SearchBar di mode Dashboard agar lebih rapi */}
-            {activeView !== 'dashboard' && (
+            {/* Sembunyikan SearchBar di mode Dashboard & menu Ekspedisi yang belum ada datanya */}
+            {activeView !== 'dashboard' && activeView !== 'skr' && activeView !== 'pengiriman' && (
               <SearchBar
                 filters={filters}
                 onFiltersChange={handleSearchFilterChange}
@@ -230,6 +233,14 @@ export default function HomePage() {
               }))
             }
           />
+        )}
+
+        {activeView === 'skr' && (
+          <ComingSoonView title="SKR" />
+        )}
+
+        {activeView === 'pengiriman' && (
+          <ComingSoonView title="Pengiriman" />
         )}
 
         {activeView === 'about' && (
