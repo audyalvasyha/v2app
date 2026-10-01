@@ -540,7 +540,7 @@ function DashboardContent() {
       onViewChange={handleViewChange}
       equipmentCounts={{ total: filteredEquipments.length, available: availableCount }}
     >
-      <div className="container mx-auto p-6 flex flex-col space-y-4">
+      <div className="mx-auto flex w-full max-w-[1800px] flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8">
 
         {/* Header Dinamis */}
         {activeView !== 'about' && (

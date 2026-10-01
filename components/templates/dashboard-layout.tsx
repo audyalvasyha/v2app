@@ -60,7 +60,7 @@ function DashboardLayoutImpl({
         />
 
         <main
-          className={`flex-1 min-w-0 flex flex-col bg-background transition-[margin] duration-200 ease-in-out ${
+          className={`min-w-0 flex-1 bg-background/60 transition-[margin] duration-200 ease-in-out ${
             collapsed ? 'ml-16' : 'ml-64'
           }`}
         >

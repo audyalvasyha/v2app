@@ -34,8 +34,8 @@ function SidebarButton({ icon: Icon, label, active, collapsed, onClick, badge, p
         collapsed ? 'justify-center px-0' : 'justify-between'
       } ${pushToBottom ? 'mt-auto' : ''} ${
         active
-          ? 'bg-secondary text-secondary-foreground'
-          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          ? 'bg-primary/10 text-primary shadow-sm ring-1 ring-primary/15'
+          : 'text-muted-foreground hover:bg-muted/80 hover:text-foreground'
       }`}
     >
       <div className="flex items-center gap-3">
@@ -54,7 +54,7 @@ function SidebarSectionLabel({ label, collapsed }: { label: string; collapsed: b
     return <div className="mx-2 my-2 border-t border-border" role="presentation" />
   }
   return (
-    <div className="px-3 pt-4 pb-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/80 select-none">
+    <div className="px-3 pb-2 pt-5 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/60 select-none">
       {label}
     </div>
   )
@@ -91,10 +91,10 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
     <aside
       className={`${
         collapsed ? 'w-16' : 'w-64'
-      } fixed top-16 bottom-0 left-0 z-10 border-r bg-background flex flex-col transition-[width] duration-200 ease-in-out`}
+      } fixed bottom-0 left-0 top-[4.5rem] z-10 flex flex-col border-r border-border/70 bg-card/70 backdrop-blur-xl transition-[width] duration-200 ease-in-out`}
     >
-      <div className={`p-4 border-b flex items-center ${collapsed ? 'justify-center px-2' : 'justify-between'}`}>
-        {!collapsed && <h2 className="text-sm font-bold uppercase tracking-wider">Menu Utama</h2>}
+      <div className={`flex items-center border-b border-border/70 p-4 ${collapsed ? 'justify-center px-2' : 'justify-between'}`}>
+        {!collapsed && <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Workspace</h2>}
         <button
           onClick={onToggleCollapsed}
           title={collapsed ? 'Tampilkan menu lengkap' : 'Perkecil menu (icon saja)'}
