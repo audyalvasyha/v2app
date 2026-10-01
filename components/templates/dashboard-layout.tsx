@@ -2,6 +2,7 @@ import React, { memo, useState, useCallback, useEffect } from "react"
 // Sesuaikan import ini jika Anda sudah memindahkan header & sidebar ke folder organisms
 import { Header } from "@/components/header"
 import { Sidebar } from "@/components/sidebar"
+import type { ThemePreference } from "@/hooks/use-theme"
 
 export type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman'
 
@@ -9,6 +10,7 @@ const SIDEBAR_COLLAPSED_KEY = "fleet-sidebar-collapsed"
 
 export interface DashboardLayoutProps {
   theme: "dark" | "light";
+  themePreference: ThemePreference;
   onToggleTheme: () => void;
   activeView: View;
   onViewChange: (view: View) => void;
@@ -18,6 +20,7 @@ export interface DashboardLayoutProps {
 
 function DashboardLayoutImpl({
   theme,
+  themePreference,
   onToggleTheme,
   activeView,
   onViewChange,
@@ -44,7 +47,7 @@ function DashboardLayoutImpl({
   return (
     // Tanpa overflow-hidden: halaman di-scroll lewat scroll utama dokumen (window)
     <div className="min-h-screen flex flex-col">
-      <Header theme={theme} onToggleTheme={onToggleTheme} />
+      <Header theme={theme} themePreference={themePreference} onToggleTheme={onToggleTheme} />
 
       {/* Sidebar fixed (selalu terlihat di bawah header); konten utama scroll di level dokumen */}
       <div className="flex flex-1">

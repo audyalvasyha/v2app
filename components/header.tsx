@@ -4,16 +4,18 @@ import React, { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Github, LogOut } from "lucide-react"
 import { supabase } from "@/utils/supabase"
+import type { ThemePreference } from "@/hooks/use-theme"
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog"
 import { ExportImportDialog } from "./export-import-dialog"
 import { ThemeToggle } from "./theme-toggle"
 
 interface HeaderProps {
   theme: "dark" | "light"
+  themePreference: ThemePreference
   onToggleTheme: () => void
 }
 
-export function Header({ theme, onToggleTheme }: HeaderProps) {
+export function Header({ theme, themePreference, onToggleTheme }: HeaderProps) {
   // Email user yang sedang login + tombol keluar (sesi dari klien Supabase
   // yang sama dengan AuthGate — logout di sini otomatis menampilkan login).
   const [userEmail, setUserEmail] = useState<string | null>(null)
@@ -75,7 +77,7 @@ export function Header({ theme, onToggleTheme }: HeaderProps) {
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">Keluar</span>
           </Button>
-          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+          <ThemeToggle theme={theme} preference={themePreference} onToggle={onToggleTheme} />
           <ExportImportDialog />
           <KeyboardShortcutsDialog />
 

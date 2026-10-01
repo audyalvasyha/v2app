@@ -141,7 +141,7 @@ export default function HomePage() {
 }
 
 function DashboardContent() {
-  const { theme, toggleTheme } = useTheme()
+  const { theme, preference: themePreference, toggleTheme } = useTheme()
   // Jadikan 'dashboard' sebagai view default
   const [activeView, setActiveView] = useState<View>('dashboard')
 
@@ -534,6 +534,7 @@ function DashboardContent() {
   return (
     <DashboardLayout
       theme={theme}
+      themePreference={themePreference}
       onToggleTheme={toggleTheme}
       activeView={activeView}
       onViewChange={handleViewChange}
