@@ -104,6 +104,41 @@ dashboard utama:
 - Preview 8 baris pertama + peta header sebelum unggah; unduh template CSV standar.
 - Middleware mengarahkan subdomain `skr.transportbaganbatu.com` ke halaman ini.
 
+### Tanya Data (chatbot AI)
+
+Panel mengambang di kanan bawah setiap halaman — tanya data dalam bahasa
+sehari-hari, misal "SKR kita kenapa tinggi bulan ini?", dan jawabannya
+dihitung dari angka asli di database, bukan dikarang.
+
+Alurnya dua tahap: pertanyaanmu diubah jadi SQL, SQL jalan, lalu hasilnya
+dibalik ke AI untuk ditulis menjadi kalimat. AI **tidak pernah** melihat
+angka sebelum query benar-benar dieksekusi, sehingga tidak mungkin
+mengarang angka. Tabel hasil mentah dan SQL-nya bisa dibuka di setiap
+jawaban supaya jawabannya selalu bisa diperiksa.
+
+- **View ringkasan**: `ai_skr_bulanan`, `ai_skr_mom` (bandingkan bulan ini
+  vs bulan lalu), `ai_skr_alasan`, `ai_biaya_bulanan` — angka sudah
+  bertipe numerik, jadi model tidak salah menjumlahkan.
+- **Keamanan**: query hanya bisa `SELECT`, dibatasi 200 baris dan timeout
+  8 detik. Dijalankan dengan **JWT milik user yang sedang login**, bukan
+  service role, sehingga RLS dari `auth_lockdown.sql` tetap berlaku —
+  tidak ada jalur baca yang bisa dilewati lewat kolom chat.
+
+#### Setup
+
+1. Jalankan `supabase/sql/ai_query.sql` di SQL Editor (sekali, aman diulang).
+   **Setelah `auth_lockdown.sql`** — supaya grant untuk `authenticated` ada.
+2. Isi `GOOGLE_API_KEY` di Vercel (Project → Settings → Environment
+   Variables), lalu redeploy. **Jangan** pakai prefix `NEXT_PUBLIC_`
+   atau key ikut ke bundle browser.
+3. Verifikasi (jalankan di SQL Editor):
+   ```sql
+   select public.exec_ai_query('select bulan, total_nilai from ai_skr_bulanan order by bulan desc limit 3');
+   select public.exec_ai_query('delete from skr_detail');  -- harus DITOLAK
+   ```
+
+---
+
 ### Tentang
 - Spesifikasi teknis, cakupan kemampuan aplikasi, dan profil pengembang.
 
@@ -180,6 +215,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-public-key>
 # Project Settings → API → service_role. JANGAN pakai prefix NEXT_PUBLIC
 # agar tidak pernah ikut ke bundle browser.
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+
+# Untuk fitur chatbot Tanya Data — ambil di Google AI Studio.
+# WAJIB tanpa prefix NEXT_PUBLIC_, kalau tidak key-nya masuk bundle browser.
+GOOGLE_API_KEY=<gemini-api-key>
+# Opsional: override model (default gemini-2.5-flash)
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
 Dua variabel pertama wajib; service-role baru dibutuhkan setelah akses data
@@ -261,10 +302,14 @@ lib/
   skr-analytics.ts      # Agregasi SKR: totals, ranking, tren harian, per toko
   skr-csv.ts            # Parser CSV + pemetaan header + template
   skr-csv.test.ts       # Unit test parser (Vitest)
+  ai/
+    schema.ts          # Deskripsi DB untuk prompt AI (server-only)
+    schema-client.ts   # Saran pertanyaan (aman untuk browser)
+    gemini.ts          # Pemanggilan Gemini: SQL → data → jawaban
 middleware.ts           # Rewrite subdomain skr.* ke /skr/input
 scripts/
   find-unused.mjs       # Audit dead-code (file & dependency tak terjangkau)
-supabase/sql/           # Skrip view, RPC & lockdown RLS (SQL Editor)
+supabase/sql/           # Skrip view, RPC, chatbot & lockdown RLS (SQL Editor)
 utils/
   supabase.ts           # Klien Supabase lazy + defensif (browser)
   supabase-admin.ts     # Klien service-role (server/cron saja)
