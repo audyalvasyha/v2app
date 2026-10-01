@@ -1,6 +1,9 @@
-import React from "react"
-import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, type LucideIcon } from "lucide-react"
+"use client"
+
+import React, { useEffect, useState } from "react"
+import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, LogOut, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { supabase } from "@/utils/supabase"
 
 type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman'
 
@@ -58,6 +61,32 @@ function SidebarSectionLabel({ label, collapsed }: { label: string; collapsed: b
 }
 
 export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, onToggleCollapsed }: SidebarProps) {
+  // Akun pemilik sesi — email tampil di sidebar, tombol Keluar pindah ke sini
+  // dari header agar area atas tetap lapang (branding + kontrol tampilan).
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth
+      .getSession()
+      .then(({ data }) => setUserEmail(data.session?.user.email ?? null))
+      .catch(() => setUserEmail(null))
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) =>
+      setUserEmail(s?.user.email ?? null),
+    )
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    // Bersihkan cache data armada agar tidak tertinggal di perangkat setelah
+    // keluar (sama dengan CACHE_KEY di app/page.tsx).
+    try {
+      localStorage.removeItem("fleet-cache-v2")
+    } catch {
+      /* localStorage tidak tersedia — abaikan */
+    }
+  }
+
   return (
     <aside
       className={`${
@@ -145,6 +174,36 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           onClick={() => onViewChange('about')}
           pushToBottom
         />
+
+        {/* ---------- Akun & Keluar ---------- */}
+        <div className={`border-t border-border pt-2 ${collapsed ? '' : 'mt-1'}`}>
+          {collapsed ? (
+            <button
+              onClick={handleSignOut}
+              title={userEmail ? `Keluar — ${userEmail}` : 'Keluar'}
+              aria-label="Keluar dari akun"
+              className="flex w-full items-center justify-center rounded-md px-0 py-2.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+            </button>
+          ) : (
+            <div className="px-1">
+              <p
+                className="truncate px-2 pb-1.5 text-[11px] text-muted-foreground"
+                title={userEmail ?? undefined}
+              >
+                {userEmail ?? 'Belum login'}
+              </p>
+              <button
+                onClick={handleSignOut}
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <LogOut className="h-4 w-4 shrink-0" />
+                <span>Keluar</span>
+              </button>
+            </div>
+          )}
+        </div>
       </nav>
     </aside>
   )

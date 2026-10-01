@@ -92,7 +92,7 @@ function DashboardViewImpl({ equipments, histories, serviceLogs, isLoading, onNa
 // Skeleton dengan bentuk yang sama persis seperti konten — layout tidak "lompat" saat data siap
 function DashboardSkeleton() {
     return (
-        <div className="flex flex-col gap-6 pb-4">
+        <div className="flex flex-col gap-4 pb-4">
             {/* Kartu metrik */}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -364,7 +364,7 @@ function DashboardContent({
     }, [equipments, histories, serviceLogs, today])
 
     return (
-        <div className="flex flex-col gap-6 pb-4">
+        <div className="flex flex-col gap-4 pb-4">
             {/* KARTU METRIK */}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <StatTile
