@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react"
 import { LogIn, ShieldCheck } from "lucide-react"
-import { supabase } from "@/utils/supabase"
+import { isSupabaseConfigured, supabase } from "@/utils/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -29,9 +29,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [signingIn, setSigningIn] = useState(false)
+    const configured = isSupabaseConfigured()
 
     // Sesi dicek sekali saat mount; perubahan sesi (logout di tab lain) ikut.
     useEffect(() => {
+        if (!configured) {
+            setChecking(false)
+            return
+        }
+
         supabase.auth
             .getSession()
             .then(({ data }) => setUserEmail(data.session?.user.email ?? null))
@@ -60,6 +66,24 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                     <Skeleton className="h-10 w-full" />
                     <Skeleton className="h-10 w-full" />
                 </div>
+            </main>
+        )
+    }
+
+    if (!configured) {
+        return (
+            <main className="flex min-h-screen items-center justify-center bg-background p-4">
+                <section className="w-full max-w-md rounded-2xl border bg-card p-6 text-center shadow-sm">
+                    <div className="mx-auto mb-4 flex size-11 items-center justify-center rounded-full bg-muted">
+                        <ShieldCheck className="size-5 text-muted-foreground" />
+                    </div>
+                    <h1 className="text-lg font-semibold">Aplikasi siap digunakan</h1>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                        Login dan data dashboard membutuhkan konfigurasi Supabase. Tambahkan
+                        NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY untuk
+                        mengaktifkan akses aplikasi.
+                    </p>
+                </section>
             </main>
         )
     }
