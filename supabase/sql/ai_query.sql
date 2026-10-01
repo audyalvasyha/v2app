@@ -127,8 +127,23 @@ grant execute on function public.exec_ai_query(text) to authenticated;
 --  Semua angka sudah berupa tipe numerik sungguhan.
 -- ═══════════════════════════════════════════════════════════════
 
+-- Semua view dib-drop sekali di sini, dalam SATU perintah.
+--
+-- Kenapa satu perintah: ai_skr_mom bergantung pada ai_skr_bulanan,
+-- jadi drop ai_skr_bulanan duluan gagal dengan
+-- "2BP01: cannot drop view ... because other objects depend on it".
+-- Menggabungkan keempatnya dengan CASCADE menyelesaikan urutan
+-- dependensi tanpa harus membalik urutan drop tiap view.
+--
+-- CASCADE aman di sini karena satu-satunya objek yang bergantung
+-- adalah keempat view milik skrip ini sendiri — semuanya dibuat
+-- ulang dua baris di bawah.
+drop view if exists public.ai_skr_mom,
+                public.ai_skr_alasan,
+                public.ai_biaya_bulanan,
+                public.ai_skr_bulanan cascade;
+
 -- SKR per bulan — sumber jawaban untuk "SKR kenapa tinggi bulan ini?"
-drop view if exists public.ai_skr_bulanan;
 create view public.ai_skr_bulanan as
 select
   to_char(date_trunc('month', pod_d), 'YYYY-MM')          as bulan,
@@ -143,7 +158,6 @@ where pod_d is not null
 group by 1;
 
 -- SKR per alasan POD — sumber jawaban untuk "alasan redelivery apa yang naik?"
-drop view if exists public.ai_skr_alasan;
 create view public.ai_skr_alasan as
 select
   pod_reason                                        as alasan,
@@ -156,7 +170,6 @@ group by 1;
 
 -- Perbandingan bulan ini vs bulan lalu — inilah yang dipakai buat
 -- menjawab "kenapa naik" (butuh dua bulan, bukan satu).
-drop view if exists public.ai_skr_mom;
 create view public.ai_skr_mom as
 select
   b.bulan,
@@ -175,7 +188,6 @@ left join public.ai_skr_bulanan l
 order by b.bulan desc;
 
 -- Biaya perbaikan per bulan + unit termahal di bulan itu
-drop view if exists public.ai_biaya_bulanan;
 create view public.ai_biaya_bulanan as
 select
   to_char(date_trunc('month', tanggal), 'YYYY-MM')  as bulan,
