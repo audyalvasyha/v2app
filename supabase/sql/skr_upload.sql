@@ -71,8 +71,17 @@ begin
     nullif(trim(r.item->>'pod_reason'), ''),
     nullif(trim(r.item->>'skr_base_unit'), ''),
     nullif(trim(r.item->>'pod_date'), ''),
-    nullif(coalesce(r.item->>'skr_sales_unit', '0') ~ '^-?[0-9]+$',
-           (r.item->>'skr_sales_unit')::bigint),
+    --_qty dikirim browser sebagai angka, tapi di sini selalu berupa TEKS
+    -- (->> menghasilkan jsonb -> text). Nilai yang bukan bilangan bulat
+    -- (mis. kosong) disimpan NULL, bukan menggagalkan seluruh batch.
+    --_JANGAN pernah menulis coalesce(regex, ::bigint): itu mencampur boolean
+    -- dengan bigint tanpa tipe bersama dan PostgreSQL akan menolak dengan
+    -- "operator does not exist: boolean = bigint" — gagal di setiap upload.
+    case
+      when btrim(r.item->>'skr_sales_unit') ~ '^-?[0-9]+$'
+        then btrim(r.item->>'skr_sales_unit')::bigint
+      else null
+    end,
     nullif(trim(r.item->>'skr_value'), ''),
     nullif(trim(r.item->>'customer_id'), ''),
     nullif(trim(r.item->>'delivery_number'), ''),
