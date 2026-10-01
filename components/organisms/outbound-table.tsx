@@ -32,11 +32,7 @@ import {
 } from "lucide-react"
 import { StatTile } from "@/components/molecules/stat-tile"
 import { FilterToolbar } from "@/components/molecules/filter-toolbar"
-import {
-    APP_TIMEZONE,
-    WIB_OFFSET_MS,
-    formatNumber,
-} from "@/lib/format"
+import { APP_TIMEZONE, formatNumber } from "@/lib/format"
 import {
     durationMinutesFromTimestamps,
     formatDuration,
@@ -98,12 +94,49 @@ function menitKeJam(totalMinutes: number): string {
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
 }
 
-/** "14:30" — jam & menit dalam WIB dari timestamp ISO */
+/**
+ * "14:30" — jam:menit untuk kolom `jam_out` / `jam_in`.
+ *
+ * Nilai di database sudah tersimpan dalam waktu Asia/Jakarta, jadi klien
+ * TIDAK lagi menggeser +7 jam — penggeseran itu membuat jam tampil 7 jam
+ * lebih maju dari nilai aslinya. Dua bentuk nilai tetap ditangani:
+ *  - ada penanda zona ("...T07:11:00+07:00" / "...Z") → konversi resmi ke
+ *    Asia/Jakarta, aman lintas zona;
+ *  - tanpa penanda zona ("...T07:11:00") → angka di dalam string dipakai
+ *    apa adanya sebagai waktu Jakarta.
+ */
 function formatJam(value: string | null | undefined): string {
-    const t = toTime(value)
-    if (!t) return "—"
-    const shifted = new Date(t + WIB_OFFSET_MS)
-    return `${String(shifted.getUTCHours()).padStart(2, "0")}:${String(shifted.getUTCMinutes()).padStart(2, "0")}`
+    const s = value == null ? "" : String(value).trim()
+    if (!s) return "—"
+
+    if (/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(s)) {
+        const d = new Date(s)
+        if (Number.isNaN(d.getTime())) return "—"
+        const parts = new Intl.DateTimeFormat("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            timeZone: APP_TIMEZONE,
+        }).formatToParts(d)
+        const h = parts.find((p) => p.type === "hour")?.value ?? "00"
+        const m = parts.find((p) => p.type === "minute")?.value ?? "00"
+        return `${h}:${m}`
+    }
+
+    // Tanpa penanda zona: jam:menit di dalam string sudah waktu Jakarta.
+    const match = /(\d{1,2}):(\d{2})/.exec(s)
+    return match ? `${match[1].padStart(2, "0")}:${match[2]}` : "—"
+}
+
+/**
+ * Menit sejak tengah malam (waktu Jakarta) — diturunkan dari formatJam supaya
+ * tabel dan kartu rata-rata selalu menampilkan jam yang identik.
+ */
+function menitJakarta(value: string | null | undefined): number | null {
+    const jam = formatJam(value)
+    if (jam === "—") return null
+    const [h, m] = jam.split(":").map(Number)
+    return h * 60 + m
 }
 
 /** "30 Sep 2026" dalam WIB — menerima tanggal YYYY-MM-DD maupun timestamp */
@@ -190,23 +223,13 @@ function OutboundTableImpl({
             const durasi = durationMinutesFromTimestamps(row.jam_out, row.jam_in)
             if (durasi != null) durations.push(durasi)
 
-            // Rata-rata jam masuk: menit sejak tengah malam WIB dari setiap jam_in
-            if (row.jam_in && String(row.jam_in).trim().length > 0) {
-                const t = new Date(row.jam_in).getTime()
-                if (!Number.isNaN(t)) {
-                    const shifted = new Date(t + WIB_OFFSET_MS)
-                    jamInMinutes.push(shifted.getUTCHours() * 60 + shifted.getUTCMinutes())
-                }
-            }
+            // Rata-rata jam masuk & keluar — memakai helper yang sama dengan
+            // kolom tabel, jadi angkanya tidak bisa meleset dari barisnya.
+            const masuk = menitJakarta(row.jam_in)
+            if (masuk != null) jamInMinutes.push(masuk)
 
-            // Rata-rata jam keluar: menit sejak tengah malam WIB dari setiap jam_out
-            if (row.jam_out && String(row.jam_out).trim().length > 0) {
-                const t = new Date(row.jam_out).getTime()
-                if (!Number.isNaN(t)) {
-                    const shifted = new Date(t + WIB_OFFSET_MS)
-                    jamOutMinutes.push(shifted.getUTCHours() * 60 + shifted.getUTCMinutes())
-                }
-            }
+            const keluar = menitJakarta(row.jam_out)
+            if (keluar != null) jamOutMinutes.push(keluar)
         }
 
         return {
