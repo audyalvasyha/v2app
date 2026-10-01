@@ -170,22 +170,38 @@ group by 1;
 
 -- Perbandingan bulan ini vs bulan lalu — inilah yang dipakai buat
 -- menjawab "kenapa naik" (butuh dua bulan, bukan satu).
+--
+-- Memakai LAG(), BUKAN self-join dengan aritmetika tanggal.
+--
+-- Versi sebelumnya menulis `b.bulan::date`, padahal kolom `bulan`
+-- bertipe TEXT berformat 'YYYY-MM'. PostgreSQL menolak cast itu dengan
+-- error 22007 "invalid input syntax for type date: \"2026-07\"" — tipe
+-- date mensyaratkan YYYY-MM-DD lengkap, format bulan saja tidak sah.
+-- Efeknya view ini tidak pernah bisa dibaca sama sekali.
+--
+-- LAG() mengambil baris sebelumnya menurut urutan bulan, sehingga tidak
+-- ada cast maupun aritmetika tanggal yang bisa gagal. Urutan teks
+-- 'YYYY-MM' sudah kronologis dengan sendirinya, jadi ORDER BY bulan
+-- sudah benar tanpa konversi apa pun.
 create view public.ai_skr_mom as
 select
-  b.bulan,
-  b.jml_dokumen,
-  b.total_qty,
-  b.total_nilai,
-  l.jml_dokumen    as jml_dokumen_lalu,
-  l.total_qty      as total_qty_lalu,
-  l.total_nilai    as total_nilai_lalu,
-  case when l.total_nilai is not null and l.total_nilai <> 0
-       then round(((b.total_nilai - l.total_nilai) / l.total_nilai) * 100, 1)
+  bulan,
+  jml_dokumen,
+  total_qty,
+  total_nilai,
+  lag(jml_dokumen) over w as jml_dokumen_lalu,
+  lag(total_qty)   over w as total_qty_lalu,
+  lag(total_nilai) over w as total_nilai_lalu,
+  case
+    when lag(total_nilai) over w is not null and lag(total_nilai) over w <> 0
+      then round(
+        ((total_nilai - lag(total_nilai) over w) / lag(total_nilai) over w) * 100,
+        1
+      )
   end as persen_nilai_vs_lalu
-from public.ai_skr_bulanan b
-left join public.ai_skr_bulanan l
-  on l.bulan = to_char(date_trunc('month', b.bulan::date) - interval '1 month', 'YYYY-MM')
-order by b.bulan desc;
+from public.ai_skr_bulanan
+-- window didefinisikan sekali, dipakai berkali-kali di atas
+window w as (order by bulan);
 
 -- Biaya perbaikan per bulan + unit termahal di bulan itu
 create view public.ai_biaya_bulanan as
