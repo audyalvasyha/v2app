@@ -1,20 +1,56 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import dynamic from "next/dynamic"
 import { ArrowUpRight } from "lucide-react"
 import { useTheme } from "@/hooks/use-theme"
 import { supabase } from "@/utils/supabase"
 import { SearchBar, EquipmentFilters } from "@/components/search-bar"
+import { Skeleton } from "@/components/ui/skeleton"
 
 import { DashboardLayout, type View } from "@/components/templates/dashboard-layout"
 import { AuthGate } from "@/components/auth-gate"
-import { DashboardView } from "@/components/organisms/dashboard-view" // Import Dashboard Baru
-import { EquipmentTable } from "@/components/organisms/equipment-table"
-import { MaintenanceTable } from "@/components/organisms/maintenance-table"
-import { ServiceMonitoringTable } from "@/components/organisms/service-monitoring-table"
-import { AboutView } from "@/components/organisms/about-view"
-import { SkrView } from "@/components/organisms/skr-view"
-import { OutboundTable } from "@/components/organisms/outbound-table"
+
+// Tiap menu dimuat sebagai chunk terpisah: chart (recharts ≈ 100 KB+) dan tabel
+// besar cuma diunduh saat tabnya dibuka, bukan saat dashboard pertama dimuat.
+// SSR dimatikan karena halaman ini sudah wholly client-side (AuthGate
+// menampilkan skeleton sampai sesi terverifikasi), jadi tidak ada konten
+// yang hilang dari HTML awal.
+const ViewFallback = () => (
+  <div className="space-y-3">
+    <Skeleton className="h-8 w-48" />
+    <Skeleton className="h-64 w-full" />
+  </div>
+)
+
+const DashboardView = dynamic(
+  () => import("@/components/organisms/dashboard-view").then((m) => m.DashboardView),
+  { ssr: false, loading: ViewFallback },
+)
+const EquipmentTable = dynamic(
+  () => import("@/components/organisms/equipment-table").then((m) => m.EquipmentTable),
+  { ssr: false, loading: ViewFallback },
+)
+const MaintenanceTable = dynamic(
+  () => import("@/components/organisms/maintenance-table").then((m) => m.MaintenanceTable),
+  { ssr: false, loading: ViewFallback },
+)
+const ServiceMonitoringTable = dynamic(
+  () => import("@/components/organisms/service-monitoring-table").then((m) => m.ServiceMonitoringTable),
+  { ssr: false, loading: ViewFallback },
+)
+const AboutView = dynamic(() => import("@/components/organisms/about-view").then((m) => m.AboutView), {
+  ssr: false,
+  loading: ViewFallback,
+})
+const SkrView = dynamic(() => import("@/components/organisms/skr-view").then((m) => m.SkrView), {
+  ssr: false,
+  loading: ViewFallback,
+})
+const OutboundTable = dynamic(
+  () => import("@/components/organisms/outbound-table").then((m) => m.OutboundTable),
+  { ssr: false, loading: ViewFallback },
+)
 import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
 import { daysInMonth } from "@/lib/skr-analytics"
 import { startOfZonedDayMonthsAgo, zonedParts } from "@/lib/format"

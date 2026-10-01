@@ -109,6 +109,18 @@ dashboard utama:
 
 ---
 
+## Catatan Performa
+
+- **Dead-code**: komponen & dependensi sisa template v0 sudah dibersihkan.
+  Cek berkala dengan `node scripts/find-unused.mjs` — daftar file yang tak
+  terjangkau dari entrypoint `app/`, plus kandidat dependensi yang bisa dicabut.
+- **Code splitting per tab**: tiap menu dimuat lewat `next/dynamic`
+  (`ssr: false`) sehingga chart `recharts` dan tabel besar baru diunduh saat
+  tabnya dibuka.
+- **Build**: type checking aktif saat `next build` (`ignoreBuildErrors: false`).
+
+---
+
 ## Tumpukan Teknologi
 
 | Lapisan | Teknologi |
@@ -241,7 +253,7 @@ components/
   sidebar.tsx           # Navigasi, bisa dikecilkan
   search-bar.tsx        # Pencarian + filter status
 hooks/
-  use-theme.ts, use-keyboard-shortcuts.ts, use-mobile.ts, use-page-title.ts
+  use-theme.ts, use-keyboard-shortcuts.ts, use-page-title.ts
 lib/
   format.ts             # Format rupiah, angka, tanggal, zona WIB
   service-status.ts     # Perhitungan status jadwal servis
@@ -250,9 +262,12 @@ lib/
   skr-csv.ts            # Parser CSV + pemetaan header + template
   skr-csv.test.ts       # Unit test parser (Vitest)
 middleware.ts           # Rewrite subdomain skr.* ke /skr/input
-supabase/sql/           # Skrip view & RPC (jalankan manual di SQL Editor)
+scripts/
+  find-unused.mjs       # Audit dead-code (file & dependency tak terjangkau)
+supabase/sql/           # Skrip view, RPC & lockdown RLS (SQL Editor)
 utils/
-  supabase.ts           # Klien Supabase lazy + defensif
+  supabase.ts           # Klien Supabase lazy + defensif (browser)
+  supabase-admin.ts     # Klien service-role (server/cron saja)
 ```
 
 Pola **Atomic Design** dipakai konsisten: `ui` → `molecules` → `organisms` → `templates`.

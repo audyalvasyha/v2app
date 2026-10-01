@@ -14,7 +14,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatTile } from "@/components/molecules/stat-tile"
-import { SkrMonthChart } from "@/components/molecules/skr-month-chart"
+import dynamic from "next/dynamic"
+
+// Grafik ikut boundary bersama dengan grafik dashboard (satu chunk recharts).
+const SkrMonthChart = dynamic(() =>
+    import("@/components/molecules/charts").then((m) => m.SkrMonthChart),
+    { loading: () => <Skeleton className="h-[220px] w-full" /> },
+)
 import { FilterToolbar } from "@/components/molecules/filter-toolbar"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"

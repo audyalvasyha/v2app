@@ -1,4 +1,5 @@
-import React, { memo, useMemo, lazy, Suspense } from "react"
+import React, { memo, useMemo, Suspense } from "react"
+import dynamic from "next/dynamic"
 import {
     Card,
     CardContent,
@@ -53,11 +54,13 @@ import {
 } from "lucide-react"
 
 // Chart di-lazy-load sebagai komponen utuh (chunk terpisah dari bundle dashboard).
-// Import dinamis per-named-export dari recharts (CJS) tidak reliable di Turbopack,
-// jadi yang di-lazy adalah file komponennya, bukan simbol recharts-nya.
-const LazyCostChart = lazy(() => import("@/components/organisms/cost-chart"))
-const LazyUnitCostRankingChart = lazy(
-    () => import("@/components/organisms/unit-cost-ranking-chart"),
+// Ketiganya keluar dari modul boundary yang sama (components/molecules/charts)
+// supaya Turbopack membuat SATU chunk recharts, bukan salinan per grafik.
+const LazyCostChart = dynamic(() =>
+    import("@/components/molecules/charts").then((m) => m.CostChart),
+)
+const LazyUnitCostRankingChart = dynamic(() =>
+    import("@/components/molecules/charts").then((m) => m.UnitCostRankingChart),
 )
 
 interface DashboardViewProps {
