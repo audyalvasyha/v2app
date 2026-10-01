@@ -38,12 +38,24 @@ const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest"
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 /**
- * Daftar model cadangan. Saat ini layanan Gemini sesekali membalas
- * "high demand" pada model tertentu (403/429) meskipun model lain
- * sehat; mencoba model berikutnya membuat fitur tetap jalan saat
- * satu endpoint sedang sibuk.
+ * Daftar model cadangan.
+ *
+ * Layanan Gemini sesekali membalas "high demand" pada model tertentu
+ * (sebagai 503) meski model lain sehat — mencoba model berikutnya
+ * membuat fitur tetap jalan saat satu endpoint sedang padat.
+ *
+ * Nama di sini harus ada di daftar Models API; nama yang salah akan
+ * dibalas 404 dan percobaan itu mubazir. `gemini-flash-latest` dan
+ * `gemini-flash-lite-latest` adalah alias resmi yang ikut naik versi
+ * sendiri, jadi keduanya tidak perlu diubah saat Google merilis model
+ * baru. Semua nama di bawah sudah dicek terhadap Models API.
  */
-const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-flash-lite"]
+const FALLBACK_MODELS = [
+  "gemini-flash-latest",
+  "gemini-3.8-flash",
+  "gemini-flash-lite-latest",
+  "gemini-3.7-flash",
+]
 
 /** Error yang layak dicoba ulang: rate limit, kuota habis, atau model sibuk. */
 function isRetryableStatus(status: number, message: string): boolean {
