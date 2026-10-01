@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import { Bot, ChevronDown, Loader2, Send, Sparkles, X } from "lucide-react"
+import { ChevronDown, Loader2, Send, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AI_SUGGESTIONS } from "@/lib/ai/schema-client"
@@ -120,23 +120,31 @@ export function AIChat() {
 
   return (
     <>
-      {/* Tombol mengambang */}
+      {/* Tombol mengambang — bentuk pil supaya label ikut terbaca */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Tutup asisten AI" : "Buka asisten AI"}
-        className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-5 text-primary-foreground shadow-lg transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {open ? <X className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
+        {open ? <X className="h-5 w-5 shrink-0" /> : <Sparkles className="h-5 w-5 shrink-0" />}
+        <span className="text-sm font-semibold">{open ? "Tutup" : "Tanya Midaa"}</span>
       </button>
 
       {open && (
-        <div className="fixed bottom-24 right-6 z-40 flex h-[min(36rem,calc(100vh-8rem))] w-[min(24rem,calc(100vw-3rem))] flex-col overflow-hidden rounded-xl border bg-card shadow-xl">
+        // Permukaan panel sengaja memakai `bg-muted`, BUKAN `bg-card`:
+        // token --card identik dengan --background di mode terang, sehingga
+        // panel sebelumnya menyatu dengan latar dan terlihat seperti lubang.
+        // --muted jelas berbeda di kedua tema, dan kepala panel diberi
+        // lapisan primary supaya terbaca sebagai permukaan tersendiri.
+        <div className="fixed bottom-24 right-6 z-40 flex h-[min(36rem,calc(100vh-8rem))] w-[min(24rem,calc(100vw-3rem))] flex-col overflow-hidden rounded-2xl border border-border bg-muted shadow-2xl">
           {/* Kepala */}
-          <div className="flex items-center gap-2 border-b px-4 py-3">
-            <Sparkles className="h-4 w-4 text-primary" />
+          <div className="flex items-center gap-2 border-b border-border bg-primary/10 px-4 py-3">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15">
+              <Sparkles className="h-4 w-4 text-primary" />
+            </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold leading-tight">Tanya data</p>
+              <p className="text-sm font-semibold leading-tight">Tanya Midaa</p>
               <p className="text-xs text-muted-foreground">Jawaban dihitung dari database</p>
             </div>
           </div>
@@ -153,7 +161,7 @@ export function AIChat() {
                     key={s}
                     type="button"
                     onClick={() => ask(s)}
-                    className="block w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+                    className="block w-full rounded-lg border border-border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-primary/10"
                   >
                     {s}
                   </button>
@@ -180,7 +188,7 @@ export function AIChat() {
               e.preventDefault()
               ask(input)
             }}
-            className="flex gap-2 border-t p-3"
+            className="flex gap-2 border-t border-border p-3"
           >
             <Input
               ref={inputRef}
@@ -256,7 +264,7 @@ function MessageBubble({
                 Lihat query
               </button>
               {sqlOpen && (
-                <pre className="mt-1 overflow-x-auto rounded-md bg-muted p-2 text-[11px] leading-relaxed">
+                <pre className="mt-1 overflow-x-auto rounded-md border border-border bg-card p-2 text-[11px] leading-relaxed">
                   {message.result.sql}
                 </pre>
               )}
@@ -288,9 +296,9 @@ function ResultTable({ rows }: { rows: Array<Record<string, unknown>> }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-md border border-border bg-card">
       <table className="w-full text-xs">
-        <thead className="bg-muted/50">
+        <thead className="bg-muted">
           <tr>
             {columns.map((column) => (
               <th key={column} className="whitespace-nowrap px-2 py-1.5 text-left font-medium">
@@ -301,7 +309,7 @@ function ResultTable({ rows }: { rows: Array<Record<string, unknown>> }) {
         </thead>
         <tbody>
           {rows.slice(0, 20).map((row, index) => (
-            <tr key={index} className="border-t">
+            <tr key={index} className="border-t border-border">
               {columns.map((column) => (
                 <td key={column} className="whitespace-nowrap px-2 py-1.5">
                   {formatCell(row[column])}
@@ -312,7 +320,7 @@ function ResultTable({ rows }: { rows: Array<Record<string, unknown>> }) {
         </tbody>
       </table>
       {rows.length > 20 && (
-        <p className="border-t px-2 py-1.5 text-[11px] text-muted-foreground">
+        <p className="border-t border-border px-2 py-1.5 text-[11px] text-muted-foreground">
           Menampilkan 20 dari {rows.length} baris.
         </p>
       )}

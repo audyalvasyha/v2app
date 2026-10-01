@@ -107,7 +107,27 @@ interface GeminiResponse {
   candidates?: Array<{ content?: { parts?: GeminiPart[] } }>
   promptFeedback?: { blockReason?: string }
   error?: { message?: string }
+  usageMetadata?: {
+    promptTokenCount?: number
+    candidatesTokenCount?: number
+    totalTokenCount?: number
+  }
 }
+
+/** Batas token keluaran per tahap — lihat penjelasan di callGeminiOnce. */
+const MAX_TOKENS_SQL = 1024
+const MAX_TOKENS_NARASI = 512
+
+/**
+ * Baris maksimal yang dikirim ke tahap narasi.
+ *
+ * Query boleh mengembalikan 200 baris (batas `exec_ai_query`), tapi
+ * mengirim semuanya ke model itu boros besar: 200 baris × belasan kolom
+ * bisa memakan puluhan ribu token, padahal untuk menulis ringkasan
+ * empat kalimat cukup beberapa baris pertama. Tabel lengkapnya tetap
+ * ditampilkan di UI — yang dibatasi hanya yang dibaca model.
+ */
+const MAX_ROWS_FOR_NARRATION = 40
 
 /**
  * Panggil Gemini dan kembalikan teks balasan.
@@ -116,7 +136,21 @@ interface GeminiResponse {
  * determinisme lebih berharga daripada keragaman bahasa, karena
  * query yang sama harus menghasilkan SQL yang sama.
  */
-async function callGeminiOnce(prompt: string, model: string): Promise<string> {
+/**
+ * Panggil satu model sekali.
+ *
+ * `maxOutputTokens` sengaja diminta per-panggilan, bukan angka besar
+ * yang sama untuk semua: tahap SQL hanya menghasilkan satu kalimat SQL,
+ * tahap narasi menghasilkan maksimal empat kalimat. Memasang 2048 di
+ * keduanya membiarkan model menulis jauh lebih banyak daripada yang
+ * dibutuhkan — dan di paket gratis Google, token keluaran ikut dihitung
+ * terhadap kuota.
+ */
+async function callGeminiOnce(
+  prompt: string,
+  model: string,
+  maxOutputTokens: number,
+): Promise<string> {
   const key = getApiKey()
 
   let response: Response
@@ -126,7 +160,7 @@ async function callGeminiOnce(prompt: string, model: string): Promise<string> {
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 2048 },
+        generationConfig: { temperature: 0, maxOutputTokens },
       }),
     })
   } catch {
@@ -138,6 +172,18 @@ async function callGeminiOnce(prompt: string, model: string): Promise<string> {
   // klasifikasi harus membaca teksnya, bukan hanya kode status.
   const body = (await response.json().catch(() => null)) as GeminiResponse | null
   const message = body?.error?.message ?? ""
+
+  // Catat pemakaian token ke log server. Di paket gratis Google, kuota
+  // adalah batas yang paling sering bikin fitur mati mendadak; tanpa
+  // angka ini penyebabnya cuma bisa ditebak. Tidak dikirim ke browser.
+  if (body?.usageMetadata) {
+    console.log("[ai] token", {
+      model,
+      masuk: body.usageMetadata.promptTokenCount,
+      keluar: body.usageMetadata.candidatesTokenCount,
+      total: body.usageMetadata.totalTokenCount,
+    })
+  }
 
   // 404 = nama model tidak dikenal atau tidak tersedia untuk akun ini.
   // Nama model ikut disebut supaya mudah diperbaiki.
@@ -182,7 +228,7 @@ async function callGeminiOnce(prompt: string, model: string): Promise<string> {
  * sehat. Dengan begitu fitur tidak mati total hanya karena satu endpoint
  * sedang padat.
  */
-async function callGemini(prompt: string): Promise<string> {
+async function callGemini(prompt: string, maxOutputTokens: number): Promise<string> {
   const candidates = Array.from(
     new Set([MODEL, ...FALLBACK_MODELS].filter(Boolean)),
   )
@@ -191,7 +237,7 @@ async function callGemini(prompt: string): Promise<string> {
 
   for (const model of candidates) {
     try {
-      return await callGeminiOnce(prompt, model)
+      return await callGeminiOnce(prompt, model, maxOutputTokens)
     } catch (error) {
       // Hanya kondisi sementara yang layak dicoba ke model lain.
       // Key ditolak akan gagal di semua percobaan, jadi langsung dilempar
@@ -245,6 +291,7 @@ Permintaan user: ${question}
 
 Balas HANYA dengan JSON seperti ini, tanpa penjelasan lain:
 {"sql": "<query select>", "ringkasan": "<1 kalimat tentang apa yang dicek>"}`,
+    MAX_TOKENS_SQL,
   )
 
   const parsed = extractJson<{ sql?: unknown; ringkasan?: unknown }>(sqlResponse)
@@ -273,7 +320,8 @@ Balas HANYA dengan JSON seperti ini, tanpa penjelasan lain:
   // ── Eksekusi dengan hak akses user ────────────────────────────
   const rows = await runQuery(sql)
 
-  // ── Tahap 2: narasi berbasis data ─────────────────────────────
+  // Nol baris: jawab langsung tanpa memanggil model sama sekali —
+  // memanggilnya hanya akan menghasilkan kalimat basi dan membuang kuota.
   if (rows.length === 0) {
     return {
       sql,
@@ -284,24 +332,35 @@ Balas HANYA dengan JSON seperti ini, tanpa penjelasan lain:
     }
   }
 
+  // ── Tahap 2: narasi berbasis data ─────────────────────────────
+  //
+  // PENTING (hemat token): tahap ini TIDAK lagi mengirim AI_SCHEMA_DOC.
+  // Deskripsi skema hanya berguna untuk menyusun SQL; di sini model cuma
+  // perlu menuliskan angka yang sudah ada. Mengirimnya ulang membuat
+  // ~92% isi prompt terbuang, dan itu terjadi di setiap pertanyaan.
+  //
+  // Baris juga dipotong ke MAX_ROWS_FOR_NARRATION — lihat alasannya di
+  // definisi konstanta itu.
+  const rowsForModel = rows.slice(0, MAX_ROWS_FOR_NARRATION)
   const answer = await callGemini(
-    `${AI_SCHEMA_DOC}
+    `Kamu menulis jawaban singkat untuk operator armada trucking "Midaa", dalam BAHASA INDONESIA.
 
 User bertanya: ${question}
 
-Hasil query (JSON, sudah diformat dari database):
-${JSON.stringify(rows)}
+Data hasil query database (JSON):
+${JSON.stringify(rowsForModel)}
 
-Tulis jawaban dalam BAHASA INDONESIA yang ringkas untuk operator lapangan:
-- Maksimal 4 kalimat pendek. Langsung tohok, tanpa basa-basi.
-- Pakai HANYA angka yang ada di JSON di atas. Kalau angkanya tidak ada,
-  katakan tidak ada — jangan menebak.
-- Sebut causes-nya kalau polanya terlihat (mis. naik karena volume naik,
-  atau naik karena nilai per dokumen naik).
+Tulis jawaban:
+- Maksimal 4 kalimat pendek. Langsung ke pokoknya, tanpa basa-basi.
+- Pakai HANYA angka yang ada di JSON di atas. Kalau tidak ada, katakan
+  tidak ada — jangan menebak.
+- Sebut penyebabnya kalau polanya terlihat (mis. naik karena jumlah
+  dokumen naik, atau karena nilai per dokumen naik).
 - Nominal rupiah ditulis dengan titik ribuan (contoh: 1.500.000).
-- Jangan mengulang query SQL dalam jawaban.
+- Jangan mengulang SQL. Jangan pakai markdown.
 
-Balas hanya teks jawaban, tanpa JSON, tanpa markdown.`,
+Balas hanya teks jawaban.`,
+    MAX_TOKENS_NARASI,
   )
 
   return { sql, rows, answer }
