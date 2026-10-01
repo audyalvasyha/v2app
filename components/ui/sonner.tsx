@@ -1,14 +1,17 @@
 'use client'
 
-import { useTheme } from 'next-themes'
-import { Toaster as Sonner, ToasterProps } from 'sonner'
+import { useTheme } from '@/hooks/use-theme'
+import { Toaster as Sonner, type ToasterProps } from 'sonner'
 
+// Toast mengikuti tema aplikasi yang sama (device / pilihan manual di header).
+// Sebelumnya pakai next-themes, tapi ThemeProvider-nya tidak pernah dimount
+// sehingga selalu jatuh ke default — sekarang cukup hook internal kita.
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = 'system' } = useTheme()
+  const { theme } = useTheme()
 
   return (
     <Sonner
-      theme={theme as ToasterProps['theme']}
+      theme={theme}
       className="toaster group"
       style={
         {

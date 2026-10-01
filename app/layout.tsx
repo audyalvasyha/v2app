@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({ subsets: ["latin"], weight: ["400", "500", "600",
 export const metadata: Metadata = {
   title: "Midaa - Transport Management System",
   description:
-    "A powerful code snippet manager with syntax highlighting, tagging, and advanced search capabilities for developers.",
+    "Midaa — sistem manajemen armada: inventaris equipment, riwayat maintenance, monitoring jadwal servis, pengiriman, dan ringkasan sisa kiriman SKR.",
     generator: 'v0.app',
   // File ikon berada di public/ sehingga tidak otomatis dideteksi Next.js — ditautkan manual
   icons: {
@@ -41,6 +41,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        {/* Terapkan tema sebelum halaman digambar supaya pengguna device dark
+            tidak melihat kedipan putih. Logikanya sama dengan hooks/use-theme.ts:
+            pilihan manual di localStorage menang, selain itu ikut sistem. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem("snippet-manager-theme");var t=(s==="dark"||s==="light")?s:(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.classList.toggle("dark",t==="dark");}catch(e){}})();`,
+          }}
+        />
         {/* Koneksi ke Supabase dipanaskan lebih awal — menghemat handshake TLS pada fetch data pertama */}
         {process.env.NEXT_PUBLIC_SUPABASE_URL && (
           <link rel="preconnect" href={new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin} crossOrigin="anonymous" />
