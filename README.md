@@ -219,8 +219,10 @@ SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 # Untuk fitur chatbot Tanya Data — ambil di Google AI Studio.
 # WAJIB tanpa prefix NEXT_PUBLIC_, kalau tidak key-nya masuk bundle browser.
 GOOGLE_API_KEY=<gemini-api-key>
-# Opsional: override model (default gemini-2.5-flash)
-GEMINI_MODEL=gemini-2.5-flash
+# Opsional: override model. Jangan set ke gemini-2.5-flash — model itu sudah
+# tidak tersedia untuk key baru (balas 404). Default memakai alias
+# gemini-flash-latest yang selalu menunjuk ke flash terbaru.
+GEMINI_MODEL=gemini-flash-latest
 ```
 
 Dua variabel pertama wajib; service-role baru dibutuhkan setelah akses data

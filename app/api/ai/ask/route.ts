@@ -104,11 +104,19 @@ export async function POST(request: Request) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof AiError) {
-      const status = error.kind === "config" || error.kind === "auth" ? 500 : 400
+      // 503 untuk rate limit: ini kondisi sementara, bukan permintaan
+      // yang salah. Status 400 akan membuat klien (dan kamu saat debug)
+      // mengira pertanyaannya bermasalah, padahal masalahnya di sisi kita.
+      const status =
+        error.kind === "config" || error.kind === "auth"
+          ? 500
+          : error.kind === "rate"
+            ? 503
+            : 400
       return NextResponse.json({ error: error.message }, { status })
     }
     // Jangan kirim detail tak terduga ke browser — bisa memuat
-    // informasi_internal yang tidak perlu dilihat pengguna.
+    // informasi internal yang tidak perlu dilihat pengguna.
     console.error("[ai/ask] tidak terduga:", error)
     return NextResponse.json(
       { error: "Terjadi kesalahan saat memproses pertanyaan." },

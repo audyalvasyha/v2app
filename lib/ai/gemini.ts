@@ -25,8 +25,37 @@ import { AI_SCHEMA_DOC } from "./schema"
  * GOOGLE_API_KEY ke bundle browser.
  */
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash"
+/**
+ * Model default.
+ *
+ * PENTING: jangan hardcode nama model lama. `gemini-2.5-flash` sudah
+ * "no longer available to new users" (error 404 dari Google), yang
+ * membuat fitur mati total bagi siapa pun yang membuat key baru.
+ * `gemini-flash-latest` selalu menunjuk ke flash terbaru yang tersedia.
+ * Bisa ditimpa lewat GEMINI_MODEL kalau perlu.
+ */
+const MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest"
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+
+/**
+ * Daftar model cadangan. Saat ini layanan Gemini sesekali membalas
+ * "high demand" pada model tertentu (403/429) meskipun model lain
+ * sehat; mencoba model berikutnya membuat fitur tetap jalan saat
+ * satu endpoint sedang sibuk.
+ */
+const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-flash-lite"]
+
+/** Error yang layak dicoba ulang: rate limit, kuota habis, atau model sibuk. */
+function isRetryableStatus(status: number, message: string): boolean {
+  if (status === 429) return true
+  const m = message.toLowerCase()
+  return (
+    m.includes("high demand") ||
+    m.includes("exceeded your current quota") ||
+    m.includes("resource_exhausted") ||
+    m.includes("overloaded")
+  )
+}
 
 export interface AiQueryResult {
   /** SQL yang dijalankan — ditampilkan ke user agar bisa diaudit. */
@@ -75,12 +104,12 @@ interface GeminiResponse {
  * determinisme lebih berharga daripada keragaman bahasa, karena
  * query yang sama harus menghasilkan SQL yang sama.
  */
-async function callGemini(prompt: string): Promise<string> {
+async function callGeminiOnce(prompt: string, model: string): Promise<string> {
   const key = getApiKey()
 
   let response: Response
   try {
-    response = await fetch(`${API_BASE}/${MODEL}:generateContent`, {
+    response = await fetch(`${API_BASE}/${model}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
@@ -92,31 +121,78 @@ async function callGemini(prompt: string): Promise<string> {
     throw new AiError("Tidak bisa menghubungi layanan AI. Coba lagi sebentar.", "unknown")
   }
 
-  if (response.status === 429) {
-    throw new AiError("Batas pemakaian AI tercapai. Coba lagi nanti.", "rate")
+  // Pesan error selalu dibaca lebih dulu: kondisi seperti kuota habis
+  // atau "high demand" muncul sebagai 403/400, bukan 429 — jadi
+  // klasifikasi harus membaca teksnya, bukan hanya kode status.
+  const body = (await response.json().catch(() => null)) as GeminiResponse | null
+  const message = body?.error?.message ?? ""
+
+  // 404 = nama model tidak dikenal atau tidak tersedia untuk akun ini.
+  // Nama model ikut disebut supaya mudah diperbaiki.
+  if (response.status === 404) {
+    throw new AiError(`Model AI "${model}" tidak tersedia untuk akun ini.`, "auth")
   }
-  if (response.status === 400 || response.status === 401 || response.status === 403) {
-    const body = (await response.json().catch(() => null)) as GeminiResponse | null
+
+  if (isRetryableStatus(response.status, message)) {
+    throw new AiError(message || "Batas pemakaian AI tercapai. Coba lagi nanti.", "rate")
+  }
+
+  if (response.status === 401 || response.status === 403) {
     throw new AiError(
-      body?.error?.message ?? "API key AI ditolak. Periksa GOOGLE_API_KEY di Vercel.",
+      message || "API key AI ditolak. Periksa GOOGLE_API_KEY di Vercel.",
       "auth",
     )
+  }
+  if (response.status === 400) {
+    throw new AiError(message || "Permintaan AI tidak valid.", "sql")
   }
   if (!response.ok) {
     throw new AiError(`Layanan AI mengembalikan error (${response.status}).`, "unknown")
   }
 
-  const body = (await response.json()) as GeminiResponse
-
-  // Model bisa menolak menjawab (misal prompt injection dari data).
+  // Model bisa menolak menjawab (mis. prompt injection dari data).
   // Perlakukan sebagai "tidak ada jawaban", bukan crash.
-  if (body.promptFeedback?.blockReason) {
+  if (body?.promptFeedback?.blockReason) {
     throw new AiError("Pertanyaan itu tidak bisa dijawab dari data yang tersedia.", "no_answer")
   }
 
-  const text = body.candidates?.[0]?.content?.parts?.map((p) => p.text).join("")?.trim()
+  const text = body?.candidates?.[0]?.content?.parts?.map((p) => p.text).join("")?.trim()
   if (!text) throw new AiError("Layanan AI tidak mengembalikan jawaban.", "no_answer")
   return text
+}
+
+/**
+ * Panggil Gemini dengan fallback antar-model.
+ *
+ * Model pertama yang dipakai adalah MODEL (atau GEMINI_MODEL). Kalau
+ * model itu sedang sibuk atau kuartanya habis, coba model cadangan —
+ * karena "high demand" bersifat sementara dan model lain sering tetap
+ * sehat. Dengan begitu fitur tidak mati total hanya karena satu endpoint
+ * sedang padat.
+ */
+async function callGemini(prompt: string): Promise<string> {
+  const candidates = Array.from(
+    new Set([MODEL, ...FALLBACK_MODELS].filter(Boolean)),
+  )
+
+  let lastError: AiError | null = null
+
+  for (const model of candidates) {
+    try {
+      return await callGeminiOnce(prompt, model)
+    } catch (error) {
+      // Hanya kondisi sementara yang layak dicoba ke model lain.
+      // Key ditolak akan gagal di semua percobaan, jadi langsung dilempar
+      // supaya tidak menghabiskan kuota dengan percobaan sia-sia.
+      if (error instanceof AiError && error.kind !== "rate") throw error
+      lastError = error instanceof AiError ? error : null
+    }
+  }
+
+  throw (
+    lastError ??
+    new AiError("Layanan AI sedang tidak tersedia. Coba lagi sebentar.", "rate")
+  )
 }
 
 /** Ambil objek JSON pertama yang ada di teks balasan model. */
