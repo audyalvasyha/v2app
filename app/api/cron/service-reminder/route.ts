@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { supabase } from "@/utils/supabase"
+import { getSupabaseAdmin } from "@/utils/supabase-admin"
 import {
     evaluateServiceStatus,
     remainingDaysLabel,
@@ -20,6 +21,10 @@ import {
  * - CRON_SECRET        : bila diisi, request cron wajib membawa
  *                        header `Authorization: Bearer <CRON_SECRET>`
  *                        (Vercel Cron mengirimkannya otomatis).
+ * - SUPABASE_SERVICE_ROLE_KEY : bila diisi, kueri data memakai klien
+ *                        service-role (bypass RLS). Wajib setelah
+ *                        supabase/sql/auth_lockdown.sql dijalankan, karena
+ *                        role anon tidak lagi bisa membaca tabel.
  */
 
 export const runtime = "nodejs"
@@ -43,9 +48,12 @@ export async function GET(request: Request) {
     }
 
     try {
+        // Service role key = kueri server bebas RLS (butuh setelah RLS dikunci
+        // untuk user terdaftar). Bila belum di-set, jatuh ke klien anon.
+        const db = getSupabaseAdmin() ?? supabase
         const [eqRes, logRes] = await Promise.all([
-            supabase.from("equipment").select(EQUIPMENT_COLS),
-            supabase
+            db.from("equipment").select(EQUIPMENT_COLS),
+            db
                 .from("service_logs")
                 .select(SERVICE_LOG_COLS)
                 .order("service_date", { ascending: false }),
@@ -155,9 +163,13 @@ export async function GET(request: Request) {
 
         return NextResponse.json({ sent: true, to, cc, count: rows.length })
     } catch (err) {
-        return NextResponse.json(
-            { error: err instanceof Error ? err.message : "Gagal mengirim reminder" },
-            { status: 500 },
-        )
+        const message = err instanceof Error ? err.message : "Gagal mengirim reminder"
+        // Petunjuk khusus: setelah RLS dikunci (auth_lockdown.sql), klien anon
+        // tidak lagi bisa membaca — cron butuh SUPABASE_SERVICE_ROLE_KEY.
+        const hint =
+            !process.env.SUPABASE_SERVICE_ROLE_KEY && /permission denied/i.test(message)
+                ? " — set SUPABASE_SERVICE_ROLE_KEY di environment (data kini dikunci khusus user terdaftar)."
+                : ""
+        return NextResponse.json({ error: message + hint }, { status: 500 })
     }
 }

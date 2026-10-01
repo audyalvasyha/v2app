@@ -7,6 +7,7 @@ import { supabase } from "@/utils/supabase"
 import { SearchBar, EquipmentFilters } from "@/components/search-bar"
 
 import { DashboardLayout, type View } from "@/components/templates/dashboard-layout"
+import { AuthGate } from "@/components/auth-gate"
 import { DashboardView } from "@/components/organisms/dashboard-view" // Import Dashboard Baru
 import { EquipmentTable } from "@/components/organisms/equipment-table"
 import { MaintenanceTable } from "@/components/organisms/maintenance-table"
@@ -90,7 +91,20 @@ function writeCache(equipments: any[], histories: any[], serviceLogs: any[]) {
   }
 }
 
+/**
+ * Dashboard kini di balik gerbang login: hanya user terdaftar (Supabase Auth)
+ * yang bisa mengakses. Seluruh isi halaman dipindah ke DashboardContent agar
+ * fetch data baru berjalan setelah sesi terverifikasi.
+ */
 export default function HomePage() {
+  return (
+    <AuthGate>
+      <DashboardContent />
+    </AuthGate>
+  )
+}
+
+function DashboardContent() {
   const { theme, toggleTheme } = useTheme()
   // Jadikan 'dashboard' sebagai view default
   const [activeView, setActiveView] = useState<View>('dashboard')

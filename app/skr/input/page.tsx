@@ -141,8 +141,8 @@ export default function SkrInputPage() {
                         <h1 className="text-base font-semibold">Import SKR — Admin</h1>
                     </div>
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                        Halaman khusus admin untuk mengganti data SKR. Dashboard utama di
-                        transportbaganbatu.com tidak terpengaruh dan tetap bisa dibaca tanpa login.
+                        Halaman khusus admin untuk mengganti data SKR. Dashboard utama
+                        memakai login yang sama — satu akun untuk semuanya.
                     </p>
                     <div className="space-y-1.5">
                         <Label htmlFor="email">Email</Label>

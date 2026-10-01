@@ -15,6 +15,27 @@ tim administrasi membaca angka yang sama.
 
 ## Fitur
 
+### Akses Login (Autentikasi)
+Seluruh aplikasi berada di balik **gerbang login Supabase Auth** — hanya user
+terdaftar yang bisa mengakses:
+
+- Pengunjung yang belum masuk otomatis disodori halaman login; sesi tersimpan
+  dan tetap aktif antar kunjungan sampai tombol **Keluar** ditekan di header
+  (yang juga menampilkan email yang sedang login).
+- Akun yang sama dipakai dashboard dan halaman import SKR
+  (`skr.transportbaganbatu.com`) — satu login untuk semuanya.
+- **Membuat user baru**: Supabase Dashboard → Authentication → Users →
+  Add user (email + password).
+- **Penting — matikan pendaftaran mandiri**: Authentication → Sign In /
+  Providers → Email → matikan "Allow new users to sign up", supaya orang luar
+  tidak bisa membuat akun sendiri dan lolos sebagai user terdaftar.
+- **Penguncian data (disarankan)**: jalankan `supabase/sql/auth_lockdown.sql`
+  di SQL Editor (sekali, aman diulang) supaya API Supabase menolak pembacaan
+  tanpa login — tanpa ini, kunci anon yang tertanam di browser masih bisa
+  dipakai menarik data langsung lewat API. Setelah script dijalankan, cron
+  reminder wajib memakai `SUPABASE_SERVICE_ROLE_KEY` (lihat Konfigurasi
+  Environment).
+
 ### Dashboard
 Ringkasan satu layar untuk inventaris unit, ketersediaan, biaya, dan jadwal servis.
 
@@ -69,7 +90,8 @@ lewat view `skr_ringkasan`):
 - Status keberangkatan per durasi tempuh; export CSV dari sisi klien.
 
 ### Import SKR (sub-app `skr.transportbaganbatu.com`)
-Halaman `/skr/input` terproteksi **Supabase Auth** (admin tunggal):
+Halaman `/skr/input` terproteksi **Supabase Auth** — login yang sama dengan
+dashboard utama:
 
 - Upload CSV dengan **pemetaan header longgar** — spasi/kapital pada header asli
   ("Delivery Number", "SKR Value", dst.) dikenali otomatis ke kolom database.
@@ -140,10 +162,19 @@ Buat berkas `.env.local` di root proyek:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-public-key>
+
+# Wajib setelah supabase/sql/auth_lockdown.sql dijalankan — dipakai cron
+# reminder membaca data melewati RLS. Ambil di Supabase Dashboard →
+# Project Settings → API → service_role. JANGAN pakai prefix NEXT_PUBLIC
+# agar tidak pernah ikut ke bundle browser.
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 ```
 
-Keduanya wajib. Klien Supabase dibuat secara **lazy** dan defensif: jika env belum terisi,
-aplikasi tetap berjalan dan menampilkan pesan error di dalam UI — bukan halaman kosong.
+Dua variabel pertama wajib; service-role baru dibutuhkan setelah akses data
+dikunci khusus user terdaftar (sebelum itu cron masih berjalan dengan klien
+anon). Klien Supabase dibuat secara **lazy** dan defensif: jika env belum
+terisi, aplikasi tetap berjalan dan menampilkan pesan error di dalam UI —
+bukan halaman kosong.
 
 Di Vercel, kedua variabel yang sama diisi di Project → Settings → Environment Variables
 untuk environment Production dan Preview.
