@@ -181,6 +181,22 @@ function SkrViewImpl({
         [filtered, rankGroup, metric, rankingOptions],
     )
     const reasons = useMemo(() => skrReasonBreakdown(filtered, 6), [filtered])
+
+    //_5 Teratas Redelivery: peringkat & alasan difokuskan ke kategori
+    // redelivery, menggantikan "5 Terbawah" dan "Alasan POD Terbanyak"
+    //(semua alasan) yang sebelumnya menempati dua kartu tersebut.
+    const redeliveryRows = useMemo(
+        () => filtered.filter((row) => skrCategory(row.pod_reason).category === "redelivery"),
+        [filtered],
+    )
+    const redeliveryRanking = useMemo(
+        () => skrRanking(redeliveryRows, rankGroup, metric, 5, rankingOptions),
+        [redeliveryRows, rankGroup, metric, rankingOptions],
+    )
+    const redeliveryReasons = useMemo(
+        () => reasons.filter((r) => skrCategory(r.reason).category === "redelivery").slice(0, 5),
+        [reasons],
+    )
     const customers = useMemo(
         () => skrCustomerSummary(filtered, customerById),
         [filtered, customerById],
@@ -645,25 +661,26 @@ function SkrViewImpl({
                         highlight
                     />
                     <RankingTable
-                        title="5 Terbawah"
-                        items={ranking.bottom}
+                        title="5 Teratas Redelivery"
+                        items={redeliveryRanking.top}
                         metric={metric}
                         rankGroup={rankGroup}
                         equipmentByPlate={equipmentByPlate}
+                        emptyHint="Tidak ada baris redelivery pada filter ini."
                     />
                 </div>
             </div>
 
-            {/* SEBARAN ALASAN POD — satu baris per alasan, tinggi baris tetap
-                pendek supaya padat dan tidak pernah meluber di layar sempit. */}
-            {reasons.length > 0 && (
+            {/* SEBARAN ALASAN REDELIVERY — hanya kategori redelivery,
+                maksimal 5 baris, tinggi baris tetap pendek supaya padat. */}
+            {redeliveryReasons.length > 0 && (
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                     <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2">
-                        <h3 className="text-sm font-semibold">Alasan POD Terbanyak</h3>
-                        <p className="text-[11px] text-muted-foreground">6 teratas · nilai terbesar</p>
+                        <h3 className="text-sm font-semibold">Alasan Redelivery Terbanyak</h3>
+                        <p className="text-[11px] text-muted-foreground">5 teratas · nilai terbesar</p>
                     </div>
                     <ul className="divide-y">
-                        {reasons.map((r, i) => (
+                        {redeliveryReasons.map((r, i) => (
                             <li
                                 key={r.reason}
                                 className="flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-muted/40"
@@ -890,15 +907,29 @@ interface RankingTableProps {
     rankGroup: RankGroup
     equipmentByPlate: Map<string, { equipment_id?: string; description?: string }>
     highlight?: boolean
+    /** Pesan khusus saat daftar kosong (default: pesan umum). */
+    emptyHint?: string
 }
 
-/** Setengah kartu peringkat: 5 teratas atau 5 terbawah dalam satu daftar. */
-function RankingTable({ title, items, metric, rankGroup, equipmentByPlate, highlight }: RankingTableProps) {
+/** Setengah kartu peringkat: daftar peringkat di dalam satu kartu. */
+function RankingTable({
+    title,
+    items,
+    metric,
+    rankGroup,
+    equipmentByPlate,
+    highlight,
+    emptyHint,
+}: RankingTableProps) {
+    // Kartu bernama "5 Teratas*" (termasuk Redelivery) memakai ikon utama
+    // supaya sejajar; hanya sisanya yang memakai ikon amber.
+    const leadingIcon = title.startsWith("5 Teratas")
+
     if (items.length === 0) {
         return (
             <div className="p-4">
                 <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
-                    {title === "5 Teratas" ? (
+                    {leadingIcon ? (
                         <BadgeCheck className="h-3.5 w-3.5 text-primary" />
                     ) : (
                         <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
@@ -906,7 +937,7 @@ function RankingTable({ title, items, metric, rankGroup, equipmentByPlate, highl
                     {title}
                 </div>
                 <p className="py-6 text-center text-xs text-muted-foreground">
-                    Tidak ada data pada filter ini.
+                    {emptyHint ?? "Tidak ada data pada filter ini."}
                 </p>
             </div>
         )
@@ -915,15 +946,15 @@ function RankingTable({ title, items, metric, rankGroup, equipmentByPlate, highl
     return (
         <div>
             <div className="flex items-center justify-between border-b px-4 py-2">
-                <div className="flex items-center gap-1.5 text-sm font-semibold">
-                    {title === "5 Teratas" ? (
-                        <BadgeCheck className="h-3.5 w-3.5 text-primary" />
+                <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
+                    {leadingIcon ? (
+                        <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-primary" />
                     ) : (
-                        <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
+                        <TrendingUp className="h-3.5 w-3.5 shrink-0 text-amber-500" />
                     )}
-                    {title}
+                    <span className="truncate">{title}</span>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="shrink-0 text-xs text-muted-foreground">
                     {rankGroup === "armada" ? "plat nomor" : "salesman"}
                 </p>
             </div>
