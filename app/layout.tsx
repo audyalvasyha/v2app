@@ -38,12 +38,16 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  // suppressHydrationWarning pada <html> wajib ada: script di dalam head
+  // memodifikasi class <html> SEBELUM React hydrate, sehingga DOM di sisi
+  // klien sudah punya class="dark" sementara hasil render server tidak.
+  // Tanpa flag itu React menganggapnya hydration mismatch dan melempar error.
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Terapkan tema sebelum halaman digambar supaya pengguna device dark
             tidak melihat kedipan putih. Logikanya sama dengan hooks/use-theme.ts:
-            pilihan manual di localStorage menang, selain itu ikut sistem. */}
+            "dark"/"light" = pilihan manual, "system"/kosong = ikut device. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var s=localStorage.getItem("snippet-manager-theme");var t=(s==="dark"||s==="light")?s:(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.classList.toggle("dark",t==="dark");}catch(e){}})();`,

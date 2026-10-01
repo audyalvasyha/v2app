@@ -83,7 +83,15 @@ begin
       else null
     end,
     nullif(trim(r.item->>'skr_value'), ''),
-    nullif(trim(r.item->>'customer_id'), ''),
+    --_customer_id bertipe bigint di skr_detail (customers.customer_id
+    -- justru TEXT, jadi keduanya tidak bisa langsung disamakan).
+    --_->> selalu menghasilkan text dan PostgreSQL tidak melakukan cast
+    -- otomatis untuk ekspresi bertipe text — harus dicast eksplisit.
+    case
+      when btrim(r.item->>'customer_id') ~ '^-?[0-9]+$'
+        then btrim(r.item->>'customer_id')::bigint
+      else null
+    end,
     nullif(trim(r.item->>'delivery_number'), ''),
     nullif(trim(r.item->>'sales_office'), ''),
     nullif(trim(r.item->>'distribution_channel'), '')
