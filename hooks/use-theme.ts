@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 type Theme = "dark" | "light"
 
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>("dark")
+  const [theme, setTheme] = useState<Theme>("light")
 
   useEffect(() => {
     // Load theme from localStorage on mount
