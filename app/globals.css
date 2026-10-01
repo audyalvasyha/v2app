@@ -4,25 +4,25 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.975 0.008 250);
-  --foreground: oklch(0.18 0.02 250);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.02 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.02 250);
-  --primary: oklch(0.52 0.19 255);
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(222.2 84% 4.9%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: oklch(0.15 0 0);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: oklch(0.15 0 0);
+  --primary: hsl(222.2 47.4% 11.2%);
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.94 0.025 250);
-  --secondary-foreground: oklch(0.25 0.05 255);
-  --muted: oklch(0.95 0.012 250);
-  --muted-foreground: oklch(0.5 0.03 250);
-  --accent: oklch(0.93 0.04 250);
-  --accent-foreground: oklch(0.25 0.08 255);
-  --destructive: oklch(0.58 0.2 25);
+  --secondary: hsl(210 40% 96%);
+  --secondary-foreground: oklch(0.15 0 0);
+  --muted: hsl(210 40% 96%);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: hsl(210 40% 96%);
+  --accent-foreground: oklch(0.15 0 0);
+  --destructive: hsl(0 84.2% 60.2%);
   --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.9 0.018 250);
-  --input: oklch(0.9 0.018 250);
-  --ring: oklch(0.52 0.19 255);
+  --border: hsl(214.3 31.8% 91.4%);
+  --input: hsl(214.3 31.8% 91.4%);
+  --ring: hsl(222.2 84% 4.9%);
   --chart-1: hsl(12 76% 61%);
   --chart-2: hsl(173 58% 39%);
   --chart-3: hsl(197 37% 24%);
@@ -46,12 +46,12 @@
 }
 
 .dark {
-  --background: oklch(0.115 0.018 255);
-  --foreground: oklch(0.94 0.012 250);
-  --card: oklch(0.15 0.022 255);
-  --card-foreground: oklch(0.94 0.012 250);
-  --popover: oklch(0.16 0.025 255);
-  --popover-foreground: oklch(0.94 0.012 250);
+  --background: oklch(0.1 0 0);
+  --foreground: oklch(0.93 0 0);
+  --card: oklch(0.12 0 0);
+  --card-foreground: oklch(0.93 0 0);
+  --popover: oklch(0.12 0 0);
+  --popover-foreground: oklch(0.93 0 0);
   --primary: #FF3C00;
   --primary-foreground: #FCFCFC;
   --secondary: oklch(0.2 0 0);
