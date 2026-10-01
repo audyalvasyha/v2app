@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 import { DashboardLayout, type View } from "@/components/templates/dashboard-layout"
 import { AuthGate } from "@/components/auth-gate"
+import { AIChat } from "@/components/molecules/ai-chat"
 
 // Tiap menu dimuat sebagai chunk terpisah: chart (recharts ≈ 100 KB+) dan tabel
 // besar cuma diunduh saat tabnya dibuka, bukan saat dashboard pertama dimuat.
@@ -660,6 +661,10 @@ function DashboardContent() {
         )}
 
       </div>
+
+      {/* Tanya data — hanya muncul setelah sesi terverifikasi lewat AuthGate,
+          jadi tidak pernah bisa diakses pengunjung yang belum login. */}
+      <AIChat />
     </DashboardLayout>
   )
 }
