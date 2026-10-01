@@ -13,7 +13,7 @@ export function usePageTitle(title: string | null | undefined) {
     useEffect(() => {
         if (typeof document === "undefined") return
         const previous = document.title
-        document.title = title ? `${title} — Midaa` : DEFAULT_TITLE
+        document.title = title ? `${title} — Transport Management System` : DEFAULT_TITLE
         return () => {
             document.title = previous
         }
