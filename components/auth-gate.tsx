@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import React, { useEffect, useState } from "react"
 import { LogIn, ShieldCheck } from "lucide-react"
 import { supabase } from "@/utils/supabase"
@@ -73,9 +74,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                     className="w-full max-w-sm space-y-5 rounded-xl border bg-card p-6 shadow-sm"
                 >
                     <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-                            <span className="text-lg font-bold text-primary-foreground">@</span>
-                        </div>
+                        <Image
+                            src="/icon.svg"
+                            alt="Logo Midaa"
+                            width={40}
+                            height={40}
+                            className="h-10 w-10 rounded-lg"
+                            priority
+                        />
                         <div>
                             <h1 className="text-lg font-bold leading-tight">Midaa</h1>
                             <p className="text-xs text-muted-foreground">Transport Management System</p>

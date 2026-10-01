@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Github } from "lucide-react"
 import type { ThemePreference } from "@/hooks/use-theme"
@@ -24,16 +25,21 @@ export function Header({ theme, themePreference, onToggleTheme }: HeaderProps) {
     <header className="sticky top-0 z-20 border-b border-border/70 bg-background/90 backdrop-blur-xl">
       <div className="flex h-[4.5rem] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/20">
-            <span className="text-lg font-black text-primary-foreground">{"M"}</span>
-          </div>
+          <Image
+            src="/icon.svg"
+            alt="Logo Midaa"
+            width={40}
+            height={40}
+            className="size-10 shrink-0 rounded-2xl"
+            priority
+          />
           <div className="min-w-0">
             <h1 className="truncate text-base font-bold tracking-tight sm:text-lg">Midaa</h1>
             <p className="hidden text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground sm:block">Fleet intelligence</p>
           </div>
         </div>
 
-<div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <ThemeToggle theme={theme} preference={themePreference} onToggle={onToggleTheme} />
           <KeyboardShortcutsDialog />
 
