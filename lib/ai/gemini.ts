@@ -97,6 +97,16 @@ export class AiError extends Error {
   constructor(
     message: string,
     readonly kind: "config" | "auth" | "rate" | "no_answer" | "sql" | "unknown" = "unknown",
+    /**
+     * Detail teknis apa adanya (mis. pesan asli PostgreSQL).
+     *
+     * Sengaja terpisah dari `message`: yang dilihat user sudah
+     * diterjemahkan jadi kalimat ramah, tapi model perlu melihat
+     * pesan aslinya untuk memperbaiki query-nya. Tanpa ini, satu
+     * kesalahan nama kolom langsung berakhir dengan jawaban "gagal
+     * dijalankan" padahal sebenarnya bisa diperbaiki sendiri.
+     */
+    readonly detail?: string,
   ) {
     super(message)
     this.name = "AiError"
@@ -159,6 +169,31 @@ const TEMPERATURE_NARASI = 0.7
  * ditampilkan di UI — yang dibatasi hanya yang dibaca model.
  */
 const MAX_ROWS_FOR_NARRATION = 40
+
+/**
+ * Berapa kali model boleh mencoba menulis ulang query yang gagal.
+ *
+ * Text-to-SQL tanpa percobaan ulang itu rapuh: satu nama kolom yang
+ * meleset sudah cukup untuk membuat seluruh pertanyaan gagal, padahal
+ * skema yang sama ada di depan mata model. Satu percobaan perbaikan
+ * hampir selalu berhasil, dua sudah lebih dari yang perlu.
+ *
+ * Biayanya satu panggilan model tambahan, dan HANYA dibayar kalau
+ * query pertamanya benar-benar gagal — kasus yang jarang.
+ */
+const MAX_SQL_ATTEMPTS = 2
+
+/** Batas token untuk jawaban singkat tanpa query (sapaan, identitas, umum). */
+const MAX_TOKENS_CHAT = 400
+
+/**
+ * Berapa butir memori baru yang boleh keluar dari satu jawaban.
+ *
+ * Dipisah dari `MAX_MEMORY_ITEMS` di memory.ts: itu batas total yang
+ * disimpan di database, sedangkan ini batas yang boleh diminta model
+ * per percakapan supaya daftar ingatan tidak cepat penuh.
+ */
+const MAX_NEW_MEMORIES = 2
 
 /**
  * Panggil satu model sekali.
@@ -300,6 +335,139 @@ export interface RunQueryFn {
   (sql: string): Promise<Array<Record<string, unknown>>>
 }
 
+/** Potongan SQL yang boleh diulang ke model saat memperbaiki query. */
+const MAX_REPAIR_SQL_LENGTH = 600
+
+/**
+ * Susun prompt tahap 1.
+ *
+ * `failures` berisi hasil percobaan yang sudah gagal. Isinya bukan
+ * pesan error mentah untuk dibaca user, tapi bekal bagi model supaya
+ * tahu persis salah di mana query sebelumnya — nama kolom yang tidak
+ * ada, fungsi yang salah tipe, dan seterusnya.
+ */
+function buildSqlPrompt(
+  question: string,
+  historyBlock: string,
+  failures: SqlFailure[],
+): string {
+  const parts = [AI_SCHEMA_DOC, historyBlock]
+
+  if (failures.length > 0) {
+    parts.push(
+      "",
+      "## Percobaan sebelumnya GAGAL — perbaiki, jangan ulangi",
+      ...failures.map(
+        (f, i) =>
+          `Percobaan ${i + 1}:` +
+          `\nSQL: ${f.sql.slice(0, MAX_REPAIR_SQL_LENGTH)}` +
+          `\nError: ${f.error}`,
+      ),
+      "",
+      "Baca error itu baik-baik. Nama kolom dan nama fungsi HARUS ditulis",
+      "persis seperti tertulis di skema di atas, tidak boleh ditebak.",
+      "Kalau memang tidak ada kolom yang cocok, pakai kolom terdekat yang",
+      "nilainya setara, atau balas dengan sql kosong.",
+    )
+  }
+
+  parts.push(
+    "",
+    `Permintaan user: ${question}`,
+    "",
+    "Balas HANYA dengan JSON seperti ini, tanpa penjelasan lain:",
+    '{"sql": "<query select>", "ringkasan": "<1 kalimat tentang apa yang dicek>"}',
+    "",
+    "PENTING soal sql kosong:",
+    "Kalau pertanyaannya TIDAK bisa dijawab dengan SELECT di atas — misalnya",
+    "sapaan, tanya siapa kamu, minta perkenalan, atau menanyakan fakta umum",
+    "di luar data armada/SKR — maka tulis \"sql\": \"\" dan isi ringkasan",
+    "dengan jawaban singkatnya. JANGAN memaksakan query yang tidak nyambung",
+    "hanya supaya terlihat sibuk.",
+  )
+
+  return parts.join("\n")
+}
+
+interface SqlFailure {
+  sql: string
+  error: string
+}
+
+/**
+ * Ambil pesan Postgres asli dari error.
+ *
+ * `AiError.detail` dipakai kalau ada (route handler sudah memisahkannya
+ * dari kalimat yang dilihat user). Kalau tidak, `message` dipakai
+ * sebagai cadangan supaya blok perbaikan tetap punya sesuatu.
+ */
+function sqlErrorDetail(error: unknown): string {
+  if (error instanceof AiError) return error.detail || error.message
+  if (error instanceof Error) return error.message
+  return "Error tidak diketahui."
+}
+
+/**
+ * Jawab pertanyaan yang TIDAK butuh query database.
+ *
+ * Dipakai untuk sapaan, "siapa kamu", dan pertanyaan identitas. Yang
+ * dibedakan dari tahap narasi: tidak ada data sama sekali, jadi
+ * angka tidak boleh muncul. Model boleh memakai persona dan ingatan,
+ * tapi tidak boleh mengarang nama, peran, atau kemampuannya sendiri.
+ */
+async function answerChatQuestion(
+  question: string,
+  memories: string[],
+): Promise<{ answer: string; remembered: string[] }> {
+  const raw = await callGemini(
+    [
+      AI_PERSONA,
+      "",
+      buildMemoryBlock(memories),
+      "",
+      `User bertanya: ${question}`,
+      "",
+      "Catatan: pertanyaan ini TIDAK dijawab dari query database, dan",
+      "kamu tidak melihat data apa pun. Jawab singkat dan jujur, boleh",
+      "pakai isi ingatan di atas kalau relevan. Kalau memang tidak tahu,",
+      "bilang tidak tahu.",
+      "",
+      "Balas HANYA dengan JSON, tanpa penjelasan lain:",
+      '{"jawaban": "<teks jawaban>", "ingat": ["<butir yang layak diingat>"]}',
+    ].join("\n"),
+    MAX_TOKENS_CHAT,
+    TEMPERATURE_NARASI,
+  )
+
+  return parseNarration(raw)
+}
+
+/**
+ * Baca JSON {jawaban, ingat} dari balasan model.
+ *
+ * Model kadang membalas teks biasa dan mengabaikan format JSON.
+ * Daripada membuang seluruh panggilan, teks mentah dipakai sebagai
+ * jawaban — isinya tetap kalimat yang benar, hanya bagian memorinya
+ * yang kosong.
+ */
+function parseNarration(raw: string): { answer: string; remembered: string[] } {
+  const narration = extractJson<{ jawaban?: unknown; ingat?: unknown }>(raw)
+  const answer =
+    typeof narration?.jawaban === "string" && narration.jawaban.trim()
+      ? narration.jawaban.trim()
+      : raw
+
+  const remembered = Array.isArray(narration?.ingat)
+    ? narration.ingat
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter((item) => item.length >= 3)
+        .slice(0, MAX_NEW_MEMORIES)
+    : []
+
+  return { answer, remembered }
+}
+
 /**
  * Konteks tambahan yang boleh ikut dipertimbangkan saat menjawab.
  *
@@ -333,59 +501,92 @@ export async function answerQuestion(
   // yang benar kalau model tahu apa yang dimaksud "yang".
   //
   // Memori jangka panjang SENGAJA tidak ikut di tahap ini. Isinya
-  // kalimat_prefensi user, bukan filter query, dan menambahkannya
-  // hanya quiser menambah token tanpa memperbaiki SQL.
+  // kalimat preferensi user, bukan filter query, dan menambahkannya
+  // hanya menambah token tanpa memperbaiki SQL.
   const historyBlock = buildHistoryBlock(context.history ?? [])
-  const sqlResponse = await callGemini(
-    [
-      AI_SCHEMA_DOC,
-      historyBlock,
-      "",
-      `Permintaan user: ${question}`,
-      "",
-      "Balas HANYA dengan JSON seperti ini, tanpa penjelasan lain:",
-      '{"sql": "<query select>", "ringkasan": "<1 kalimat tentang apa yang dicek>"}',
-    ].join("\n"),
-    MAX_TOKENS_SQL,
-    TEMPERATURE_SQL,
-  )
+  const failures: SqlFailure[] = []
 
-  const parsed = extractJson<{ sql?: unknown; ringkasan?: unknown }>(sqlResponse)
-  const sql = typeof parsed?.sql === "string" ? parsed.sql.trim().replace(/;\s*$/, "") : ""
+  let sql = ""
+  let ringkasan = ""
+  let rows: Array<Record<string, unknown>> = []
 
-  // Model kadang menjawab "data ini tidak tersedia" tanpa SQL.
-  // Itu jawaban yang benar dan harus diteruskan apa adanya.
-  if (!sql) {
-    return {
-      sql: "",
-      rows: [],
-      answer:
-        typeof parsed?.ringkasan === "string" && parsed.ringkasan.trim()
-          ? parsed.ringkasan.trim()
-          : "Data untuk pertanyaan itu belum tersedia di dasbor ini.",
-      remembered: [],
+  for (let attempt = 1; attempt <= MAX_SQL_ATTEMPTS; attempt++) {
+    const sqlResponse = await callGemini(
+      buildSqlPrompt(question, historyBlock, failures),
+      MAX_TOKENS_SQL,
+      TEMPERATURE_SQL,
+    )
+
+    const parsed = extractJson<{ sql?: unknown; ringkasan?: unknown }>(sqlResponse)
+    const candidate =
+      typeof parsed?.sql === "string" ? parsed.sql.trim().replace(/;\s*$/, "") : ""
+    if (typeof parsed?.ringkasan === "string") ringkasan = parsed.ringkasan.trim()
+
+    // Model kadang menjawab "data ini tidak tersedia" tanpa SQL.
+    // Itu jawaban yang benar dan harus diteruskan apa adanya.
+    if (!candidate) break
+
+    // Validasi dasar di sisi server. Fungsi SQL `exec_ai_query` juga
+    // memvalidasi sendiri — ini lapisan kedua supaya query yang jelas-jelas
+    // salah tidak sempat menyentuh database.
+    if (!/^\s*(select|with)\s/i.test(candidate)) {
+      throw new AiError("Model menghasilkan query yang tidak diizinkan.", "sql")
+    }
+
+    try {
+      rows = await runQuery(candidate)
+      sql = candidate
+      break
+    } catch (error) {
+      // Percobaan terakhir: error diteruskan apa adanya supaya
+      // route handler bisa menulis detail aslinya ke log server.
+      if (attempt === MAX_SQL_ATTEMPTS) throw error
+      failures.push({ sql: candidate, error: sqlErrorDetail(error) })
     }
   }
 
-  // Validasi dasar di sisi server. Fungsi SQL `exec_ai_query` juga
-  // memvalidasi sendiri — ini lapisan kedua supaya query yang jelas-jelas
-  // salah tidak sempat menyentuh database.
-  if (!/^\s*(select|with)\s/i.test(sql)) {
-    throw new AiError("Model menghasilkan query yang tidak diizinkan.", "sql")
+  // ── Jalur tanpa SQL ────────────────────────────────────────────
+  //
+  // Dua kemungkinan sampai ke sini, dan keduanya BUKAN error:
+  //   1. Model memutuskan pertanyaannya tidak bisa dijawab dari
+  //      database (mis. "siapa kamu", "terima kasih").
+  //   2. Datanya memang tidak tersedia.
+  //
+  // Keduanya dijawab lewat panggilan model sendiri yang memakai
+  // persona + memori, TANPA data. Dulu jalur ini langsung memakai
+  // `ringkasan` dari tahap SQL apa adanya, dan hasilnya jadi aneh:
+  // pertanyaan identitas dijawab dengan query sia-sia, dan
+  // Midaa mengarang nama peran sendiri ("Midaa Fleet Analytics
+  // Assistant") yang tidak ada di mana pun.
+  //
+  // Memakai persona di sini juga membuat ingatan yang tersimpan
+  // ("pengembangmu adalah Audy Al Vasyah") bisa dipakai menjawab
+  // pertanyaan identitas — itu justru gunanya memori.
+  if (!sql) {
+    const chat = await answerChatQuestion(question, context.memories ?? [])
+    return {
+      sql: "",
+      rows: [],
+      answer: chat.answer || ringkasan || "Data untuk pertanyaan itu belum tersedia di dasbor ini.",
+      remembered: chat.remembered,
+    }
   }
-
-  // ── Eksekusi dengan hak akses user ────────────────────────────
-  const rows = await runQuery(sql)
 
   // Nol baris: jawab langsung tanpa memanggil model sama sekali —
   // memanggilnya hanya akan menghasilkan kalimat basi dan membuang kuota.
+  //
+  // Kalimatnya sengaja NETRAL. Dulu yang ditulis di sini menyebut
+  // "rentang tanggalnya kepilih terlalu sempit", padahal penyebabnya
+  // belum tentu begitu: bisa jadi memang tidak ada data > 24 jam, bukan
+  // karena filter terlalu sempit. Menyebutkan penyebab yang belum
+  // diketahui membuat user mengejar masalah yang tidak ada.
   if (rows.length === 0) {
     return {
       sql,
       rows,
       answer:
-        "Sudah aku cek, tapi tidak ada baris yang cocok. " +
-        "Kalau biasanya ada, mungkin rentang tanggalnya kepilih terlalu sempit — coba longgarkan sedikit.",
+        "Sudah aku cek dan tidak ada data yang cocok dengan filter itu. " +
+        "Kalau biasanya ada, coba longgarkan rentang tanggalnya atau plat yang dicari.",
       remembered: [],
     }
   }
@@ -426,32 +627,17 @@ export async function answerQuestion(
       "  untuk sesuatu, format export yang diminta berulang.",
       "- Bentuk kalimatnya harus bisa dipakai ulang sendiri di percakapan",
       "  berikutnya, contoh: \"User selalu memakai rentang 3 bulan\".",
+      "  Kalimatnya berbahasa Indonesia yang wajar, tanpa simbol aneh.",
       "- JANGAN simpan angka hasil query, nilai, atau tanggal — semuanya cepat basi.",
       "- JANGAN simpan apa pun yang cuma berlaku untuk pertanyaan ini.",
-      "- Maksimal 2 butir, masing-masing satu kalimat pendek tanpa tanda kutip.",
+      `- Maksimal ${MAX_NEW_MEMORIES} butir, masing-masing satu kalimat pendek tanpa tanda kutip.`,
       "- Kalau tidak ada yang layak diingat, kirim array kosong.",
     ].join("\n"),
     MAX_TOKENS_NARASI,
     TEMPERATURE_NARASI,
   )
 
-  // Model kadang membalas teks biasa dan mengabaikan format JSON.
-  // Daripada membuang seluruh panggilan, teks mentah itu dipakai
-  // sebagai jawaban — isinya tetap kalimat yang benar, hanya bagian
-  // memorinya yang kosong.
-  const narration = extractJson<{ jawaban?: unknown; ingat?: unknown }>(raw)
-  const answer =
-    typeof narration?.jawaban === "string" && narration.jawaban.trim()
-      ? narration.jawaban.trim()
-      : raw
-
-  const remembered = Array.isArray(narration?.ingat)
-    ? narration.ingat
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter((item) => item.length >= 3)
-        .slice(0, 2)
-    : []
+  const { answer, remembered } = parseNarration(raw)
 
   return { sql, rows, answer, remembered }
 }

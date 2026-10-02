@@ -193,7 +193,12 @@ export async function POST(request: Request) {
         // not exist" bisa langsung dilihat query mana yang menyebabkannya —
         // tanpa itu, kita cuma menebak dari pesan error Postgres.
         console.error("[ai/ask] SQL gagal:", { sql, error: error.message })
-        throw new AiError(friendlySqlError(error.message), "sql")
+        // Dua lapis informasi: `message` yang dilihat user sudah
+        // diterjemahkan jadi kalimat ramah, sementara `detail`
+        // menyimpan pesan Postgres apa adanya. Detail inilah yang
+        // dibaca model saat mencoba memperbaiki query-nya sendiri —
+        // tanpa itu, dia hanya diberi tahu "gagal" tanpa alasan.
+        throw new AiError(friendlySqlError(error.message), "sql", error.message)
       }
       return (data as Array<Record<string, unknown>>) ?? []
       },

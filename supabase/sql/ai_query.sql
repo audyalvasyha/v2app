@@ -239,14 +239,38 @@ order by 1 desc;
 create view public.ai_outbound_parsed as
 select
   no_polisi,
+  freight_order,
   (jam_out)::timestamptz as jam_out_ts,
-  (jam_in)::timestamptz  as jam_in_ts
+  (jam_in)::timestamptz  as jam_in_ts,
+  -- Durasi per perjalanan dalam MENIT, sudah dikonversi di sini.
+  --
+  -- Kenapa perlu kolom ini: pertanyaan "ada yang lebih 24 jam?"
+  -- sebelumnya tidak bisa dijawab tanpa model menulis sendiri
+  -- `extract(epoch from (jam_in_ts - jam_out_ts)) / 60 > 1440`,
+  -- dan bentuk itu mudah salah ketik atau salah tanda kurung — yang
+  -- berakhir sebagai "function does not exist" atau 0 baris palsu.
+  --
+  -- CASE (bukan sekadar ekspresi) supaya jam_in yang lebih dulu dari
+  -- jam_out tidak menghasilkan durasi negatif. Kasus seperti ini
+  -- memang pernah muncul karena jam_out diisi belakangan, dan durasi
+  -- negatif membuat jawaban "tidak ada yang lebih dari 24 jam" jadi
+  -- bohong.
+  case
+    when (jam_in)::timestamptz is null then null
+    when (jam_in)::timestamptz < (jam_out)::timestamptz then null
+    else round((extract(epoch from ((jam_in)::timestamptz - (jam_out)::timestamptz)) / 60)::numeric, 1)
+  end as durasi_menit
 from public.armada_outbound
 where jam_out ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
   and (jam_in is null or jam_in ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}');
 
 -- Rata-rata per hari, dalam MENIT sejak tengah malam WIB (bukan jam),
 -- supaya model tinggal membagi 60 saat menulis jawaban.
+--
+-- rata2_menit_durasi memakai kolom durasi_menit (bukan ekspresi epoch
+-- langsung) supaya definisi durasi hanya ada di SATU tempat. Kalau
+-- rumus ini ditulis ulang di sini, dia bisa menyimpang dari view di
+-- atas tanpa ada yang menyadarinya.
 create view public.ai_outbound_harian as
 select
   to_char(date(jam_out_ts at time zone 'Asia/Jakarta'), 'YYYY-MM-DD') as tanggal,
@@ -257,9 +281,7 @@ select
     extract(hour   from jam_out_ts at time zone 'Asia/Jakarta') * 60
     + extract(minute from jam_out_ts at time zone 'Asia/Jakarta')
   ))                                                                as rata2_menit_keluar,
-  round(avg(
-    extract(epoch from (jam_in_ts - jam_out_ts)) / 60
-  ))                                                                as rata2_menit_durasi
+  round(avg(durasi_menit))                                          as rata2_menit_durasi
 from public.ai_outbound_parsed
 where jam_out_ts is not null
 group by 1
@@ -277,9 +299,7 @@ select
     extract(hour   from jam_out_ts at time zone 'Asia/Jakarta') * 60
     + extract(minute from jam_out_ts at time zone 'Asia/Jakarta')
   ))                           as rata2_menit_keluar,
-  round(avg(
-    extract(epoch from (jam_in_ts - jam_out_ts)) / 60
-  ))                           as rata2_menit_durasi
+  round(avg(durasi_menit))       as rata2_menit_durasi
 from public.ai_outbound_parsed
 where jam_out_ts is not null
 group by 1
@@ -294,6 +314,19 @@ grant select on public.ai_skr_bulanan, public.ai_skr_alasan,
 
 -- ═══════════════════════════════════════════════════════════════
 --  Verifikasi — jalankan setelah script di atas
+--
+--  0) Pertanyaan "ada outbound yang lebih dari 24 jam?" harus jalan
+--     dan boleh mengembalikan 0 baris (artinya memang tidak ada,
+--     bukan query yang salah):
+--
+--   select public.exec_ai_query(
+--     'select no_polisi, freight_order, durasi_menit
+--        from ai_outbound_parsed
+--       where durasi_menit > 1440
+--       order by durasi_menit desc limit 20');
+--
+--     Durasi negatif tidak boleh muncul di sini — durasi negatif
+--     diabaikan (jadi NULL) di view ai_outbound_parsed.
 --
 --  1) Fungsi harus menolak operasi tulis:
 --
