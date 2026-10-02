@@ -172,14 +172,14 @@ jawaban supaya jawabannya selalu bisa diperiksa.
 
 #### Setup
 
-1. Jalankan `supabase/sql/ai_query.sql` di SQL Editor (sekali, aman diulang).
-   **Setelah `auth_lockdown.sql`** — supaya grant untuk `authenticated` ada.
-   Jalankan ulang script ini setiap kali view-nya berubah; script ini
-   drop-view/create, jadi aman diulang.
-1b. Opsional tapi disarankan: jalankan juga `supabase/sql/ai_memory.sql`
-   untuk mengaktifkan memori jangka panjang. Tanpa script ini Tanya Data
-   tetap jalan normal, hanya tidak mengingat apa-apa (panel **Ingatan**
-   akan menampilkan petunjuk setup).
+1. Jalankan berurutan di SQL Editor (semua aman diulang):
+   `auth_lockdown.sql` → `salesman.sql` → `skr_ringkasan.sql` →
+   `ai_query.sql` → `ai_memory.sql`.
+   Urutan itu penting: `auth_lockdown.sql` prepares grant untuk
+   `authenticated`, `skr_ringkasan.sql` me-join ke tabel `salesman`, dan
+   `ai_query.sql` membaca keduanya. `ai_memory.sql` opsional — tanpa
+   script ini Tanya Midaa tetap jalan normal, hanya tidak mengingat
+   apa-apa (panel **Ingatan** akan menampilkan petunjuk setup).
 2. Isi `GOOGLE_API_KEY` di Vercel (Project → Settings → Environment
    Variables), lalu redeploy. **Jangan** pakai prefix `NEXT_PUBLIC_`
    atau key ikut ke bundle browser.
@@ -190,6 +190,8 @@ jawaban supaya jawabannya selalu bisa diperiksa.
    -- kolom durasi_menit harus ada; 0 baris berarti memang tidak ada
    -- outbound yang lebih 24 jam
    select public.exec_ai_query('select no_polisi, durasi_menit from ai_outbound_parsed where durasi_menit > 1440 order by durasi_menit desc limit 20');
+   -- kolom salesman_nama harus ada di view skr_ringkasan
+   select public.exec_ai_query('select salesman, salesman_nama, supervisor, kode_area from ai_sales_bulanan limit 5');
    ```
 
 ---
@@ -317,6 +319,7 @@ untuk environment Production dan Preview.
 | `service_logs` | Jadwal servis: terakhir & berikutnya (tanggal + odometer) |
 | `armada_outbound` | Pengiriman: freight order, plat, jam keluar/kembali |
 | `customers` | Master customer: `customer_id`, `customer_name` |
+| `salesman` | Master salesperson: NIK 8 digit, nama, supervisor, kode area, no HP |
 
 ### SKR: `skr_detail` dan view `skr_ringkasan`
 
@@ -333,6 +336,34 @@ View `customers_ringkas` mengekspos hanya `customer_id` + `customer_name`
 langsung ke `customers` untuk role `authenticated` sendiri juga dibatasi
 per-kolom oleh `auth_lockdown.sql`, jadi kedua kolom PII tersebut tidak
 bisa dibaca dari mana pun kecuali lewat service role.
+
+### Salesman: `salesman`
+
+Dulu semua yang muncul di dashboard dan Tanya Midaa adalah kode
+`S090091477` — tidak terbaca dan tidak bisa dicari. Tabel `salesman`
+memetakan kode itu ke nama aslinya, plus supervisor dan kode area.
+
+| Kolom | Isi |
+| --- | --- |
+| `nik` | 8 digit **tanpa** prefix `S` (`90091477`) — PK |
+| `nama` | Nama salesperson |
+| `supervisor` | Atasan/area leader |
+| `kode_area` | Kode wilayah, mis. `C096`, `C09A` |
+| `telepon` | Digit saja tanpa kode negara (`82171846672`) |
+
+Kolom `nik` **bukan** sekadar `skr_detail.salesman` tanpa huruf `S`:
+format SKR adalah `S` + `0` + 8 digit, sedangkan tabel ini 8 digit tanpa
+nol depan. Join di view memakai regex `^S0([0-9]{8})$`.
+
+Tabel ini tidak punya hak baca untuk `anon` (kunci anon tertanam di
+bundle browser) karena `telepon` adalah PII — hanya `authenticated` yang
+bisa membacanya. Nomor HP juga sengaja tidak ikut ke view `skr_ringkasan`:
+nama, supervisor, dan kode area sudah cukup untuk dashboard.
+
+`skr_ringkasan` sekarang punya kolom tambahan `salesman_nama`, `supervisor`, dan
+`kode_area`. Kalau `salesman_nama` NULL, berarti NIK-nya belum terdaftar
+di master — tabel dan Tanya Midaa otomatis menampilkan NIK sebagai
+gantinya.
 
 ### Import harian (upsert)
 

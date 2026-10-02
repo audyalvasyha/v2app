@@ -67,7 +67,10 @@ export function skrTotals(rows: any[]): SkrTotals {
         categories[m.category] += 1
 
         if (row.license_no) armadas.add(String(row.license_no))
-        if (row.salesman) sales.add(String(row.salesman))
+        // Hitung per salesman berdasarkan NAMA kalau tersedia. Kalau
+        // master sales-nya belum punya entri, NIK tetap dipakai supaya
+        // jumlahnya tidak undercount — hanya tampilannya yang berbeda.
+        if (row.salesman) sales.add(salesmanLabel(row))
         if (row.customer_id != null) customers.add(String(row.customer_id))
     }
 
@@ -82,13 +85,25 @@ export function skrTotals(rows: any[]): SkrTotals {
     }
 }
 
+/**
+ * Label salesman untuk ditampilkan: nama kalau ada, NIK sebagai cadangan.
+ *
+ * Dipisah dari skrGroupKey supaya "berapa banyak salesman" dan "kelompok
+ * mana" memakai nilai yang sama — kalau tidak, dashboard bisa
+ * menampilkan jumlah yang tidak cocok dengan penjumlahan di tabelnya.
+ */
+export function salesmanLabel(row: any): string {
+    const nama = row?.salesman_nama == null ? "" : String(row.salesman_nama).trim()
+    return nama || (row?.salesman == null ? "" : String(row.salesman).trim())
+}
+
 /** Kunci kelompok + label yang enak dibaca. */
 export function skrGroupKey(row: any, by: "armada" | "sales" | "customer"): string {
     const raw =
         by === "armada"
             ? row.license_no
             : by === "sales"
-              ? row.salesman
+              ? salesmanLabel(row)
               : row.customer_id
     const text = raw == null ? "" : String(raw).trim()
     return text || "(tidak diisi)"

@@ -69,7 +69,31 @@ const SKR_VIEW = 'skr_ringkasan'
 //_customer_id & delivery_number ikut diambil supaya dashboard bisa
 //mengelompokkan sisa kiriman per toko dan menampilkan nomor dokumen
 //(join ke tabel customers dilakukan di sisi aplikasi).
-const SKR_VIEW_COLS = 'license_no,salesman,pod_reason,skr_base_unit,pod_d,qty,nilai,customer_id,delivery_number'
+const SKR_VIEW_COLS_BASE = 'license_no,salesman,pod_reason,skr_base_unit,pod_d,qty,nilai,customer_id,delivery_number'
+
+// `salesman_nama` (hasil join ke tabel master `salesman`) ditambahkan
+// supaya tabel menampilkan nama, bukan kode S090091477.
+//
+// Kolom ini OPSIONAL dan itu disengaja. View di database diperbarui
+// lewat SQL Editor, sedangkan kode ini ter-deploy lebih dulu — jadi
+// ada jendela waktu di mana view belum punya kolom tersebut. Tanpa
+// penanganan di bawah, PostgREST membalas "column does not exist",
+// isViewUnavailableError() menandainya sebagai "view tidak ada", dan
+// seluruh halaman SKR jatuh ke mode baca skr_detail mentah: jauh lebih
+// lambat dan memuat 20.000 baris ke browser. Jadi: coba dengan kolom,
+// kalau ditolak, sisipkan dan ingat untuk seterusnya.
+const SKR_VIEW_COLS = `${SKR_VIEW_COLS_BASE},salesman_nama`
+
+let salesNameUnavailable = false
+
+function skrViewCols(): string {
+  return salesNameUnavailable ? SKR_VIEW_COLS_BASE : SKR_VIEW_COLS
+}
+
+/** Error PostgREST karena view belum punya kolom salesman_nama. */
+function isMissingSalesmanColumn(message: string): boolean {
+  return message.toLowerCase().includes('salesman_nama')
+}
 
 /**
  * Deteksi error yang membuat view `skr_ringkasan` tidak bisa dipakai, baik
@@ -320,10 +344,21 @@ function DashboardContent() {
     const prev2From = windows[2].from
     const prev2To = windows[2].to
     try {
-      let query = supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null)
-      if (from) query = query.gte('pod_d', from)
-      if (to) query = query.lte('pod_d', to)
-      const { data, error } = await query.order('pod_d', { ascending: false }).limit(20000)
+      const runMainQuery = async (cols: string) => {
+        let query = supabase.from(SKR_VIEW).select(cols).not('pod_d', 'is', null)
+        if (from) query = query.gte('pod_d', from)
+        if (to) query = query.lte('pod_d', to)
+        return query.order('pod_d', { ascending: false }).limit(20000)
+      }
+
+      let { data, error } = await runMainQuery(skrViewCols())
+
+      // View versi lama belum punya salesman_nama → ulangi tanpa kolom itu
+      // (nilai display akan jatuh ke NIK, functionality tetap utuh).
+      if (error && isMissingSalesmanColumn(error.message)) {
+        salesNameUnavailable = true
+        ;({ data, error } = await runMainQuery(skrViewCols()))
+      }
 
       if (!error) {
         setSkrError(null)
@@ -337,10 +372,11 @@ function DashboardContent() {
         if (from <= prev2From && to >= curTo) {
           setSkrPrevMonth([])
         } else {
+          const cols = skrViewCols()
           const [curRes, prevRes, prev2Res] = await Promise.all([
-            supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null).gte('pod_d', curFrom).lte('pod_d', curTo).limit(20000),
-            supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null).gte('pod_d', prevFrom).lte('pod_d', prevTo).limit(20000),
-            supabase.from(SKR_VIEW).select(SKR_VIEW_COLS).not('pod_d', 'is', null).gte('pod_d', prev2From).lte('pod_d', prev2To).limit(20000),
+            supabase.from(SKR_VIEW).select(cols).not('pod_d', 'is', null).gte('pod_d', curFrom).lte('pod_d', curTo).limit(20000),
+            supabase.from(SKR_VIEW).select(cols).not('pod_d', 'is', null).gte('pod_d', prevFrom).lte('pod_d', prevTo).limit(20000),
+            supabase.from(SKR_VIEW).select(cols).not('pod_d', 'is', null).gte('pod_d', prev2From).lte('pod_d', prev2To).limit(20000),
           ])
           setSkrPrevMonth([
             ...(curRes.error ? [] : curRes.data || []),
@@ -367,6 +403,11 @@ function DashboardContent() {
         const mapped = (raw || []).map((row) => ({
           license_no: row.license_no,
           salesman: row.salesman,
+          // Mode cadangan membaca skr_detail langsung, yang tidak punya
+          // kolom salesman_nama (hasil join ada di view). Kosongkan saja:
+          // display sudah jatuh ke NIK, sama seperti sebelum ada master
+          // sales ini.
+          salesman_nama: null,
           pod_reason: row.pod_reason,
           skr_base_unit: row.skr_base_unit,
           customer_id: row.customer_id,

@@ -161,6 +161,9 @@ function SkrViewImpl({
             const custName = custId ? customerById.get(custId) ?? "" : ""
             return (
                 String(row.license_no ?? "").toLowerCase().includes(searchLower) ||
+                // Nama salesman ikut dicari, bukan hanya NIK-nya — orang
+                // lebih sering mengetik "ROY" daripada "90091477".
+                String(row.salesman_nama ?? "").toLowerCase().includes(searchLower) ||
                 String(row.salesman ?? "").toLowerCase().includes(searchLower) ||
                 String(row.pod_reason ?? "").toLowerCase().includes(searchLower) ||
                 custId.toLowerCase().includes(searchLower) ||
@@ -860,9 +863,13 @@ function CustomerDetailCard({
                                                     </span>
                                                     <span
                                                         className="hidden w-32 shrink-0 truncate text-muted-foreground md:block"
-                                                        title={row.salesman ?? ""}
+                                                        title={
+                                                            row.salesman_nama
+                                                                ? `${row.salesman_nama} (${row.salesman})`
+                                                                : (row.salesman ?? "")
+                                                        }
                                                     >
-                                                        {row.salesman || "—"}
+                                                        {row.salesman_nama || row.salesman || "—"}
                                                     </span>
                                                     <span
                                                         className="min-w-0 flex-1 truncate text-muted-foreground"
