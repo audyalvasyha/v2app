@@ -91,6 +91,10 @@ export function AIChat() {
   // Tombol "ingat ini": menyala = kalimat yang sedang diketik akan
   // disimpan ke ingatan apa pun jawabannya.
   const [rememberNext, setRememberNext] = useState(false)
+  // Pesan kegagalan sekalian isi memori. Tanpa ini, insert yang ditolak
+  // server membuat tombol + seakan-akan berhasil padahal tidak ada yang
+  // tersimpan — persis yang terjadi di versi sebelumnya.
+  const [memoryError, setMemoryError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -162,6 +166,7 @@ export function AIChat() {
     if (!content || memoryBusy) return
 
     setMemoryBusy(true)
+    setMemoryError(null)
     try {
       const { data } = await supabase.auth.getSession()
       const accessToken = data.session?.access_token
@@ -180,9 +185,13 @@ export function AIChat() {
       if (response.ok) {
         setMemoryInput("")
         await refreshMemories()
+        return
       }
+
+      const payload = await response.json().catch(() => null)
+      setMemoryError(payload?.error ?? "Catatan gagal disimpan. Coba lagi sebentar ya.")
     } catch {
-      // Ditangani lewat daftar memori yang tidak berubah.
+      setMemoryError("Tidak bisa menghubungi server. Cek koneksi internet kamu.")
     } finally {
       setMemoryBusy(false)
     }
@@ -446,6 +455,12 @@ export function AIChat() {
                         </li>
                       ))}
                     </ul>
+                  )}
+
+                  {memoryError && (
+                    <p className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                      {memoryError}
+                    </p>
                   )}
 
                   <form

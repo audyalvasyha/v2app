@@ -106,6 +106,7 @@ export async function loadMemories(client: SupabaseClient): Promise<MemorySnapsh
  */
 export async function saveMemories(
   client: SupabaseClient,
+  userId: string,
   contents: string[],
 ): Promise<MemoryItem[]> {
   const fresh = contents.map(normalizeMemoryContent).filter((c) => c.length >= 3)
@@ -128,6 +129,14 @@ export async function saveMemories(
 
   const rows = unique.slice(0, 3).map((content) => ({
     id: crypto.randomUUID(),
+    // WAJIB diisi eksplisit: kolomnya NOT NULL dan tidak punya default,
+    // jadi kalau dilewatkan insert selalu ditolak (23502) dan tidak ada
+    // satu pun memori yang pernah tersimpan.
+    //
+    // Nilai ini juga divalidasi ulang oleh policy RLS
+    // (user_id = auth.uid()), jadi menyalin userId milik orang lain
+    // tetap gagal di level database — bukan cuma di kode.
+    user_id: userId,
     content,
   }))
 

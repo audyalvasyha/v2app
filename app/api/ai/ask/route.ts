@@ -215,7 +215,7 @@ export async function POST(request: Request) {
     // tetap yang memutuskan, karena dia yang buang duplikat dan memangkas
     // daftar lama.
     const forced = rememberThis ? [question.trim().slice(0, 300)] : []
-    const saved = await saveMemories(userClient, [...result.remembered, ...forced])
+    const saved = await saveMemories(userClient, userId, [...result.remembered, ...forced])
 
     return NextResponse.json({
       sql: result.sql,

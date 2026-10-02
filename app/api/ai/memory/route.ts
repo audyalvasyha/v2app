@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const saved = await saveMemories(auth.value.client, [normalized])
+  const saved = await saveMemories(auth.value.client, auth.value.userId, [normalized])
   if (saved.length === 0) {
     return NextResponse.json(
       { error: "Catatan tidak bisa disimpan. Jalankan supabase/sql/ai_memory.sql lebih dulu." },
