@@ -122,8 +122,12 @@ mengarang angka. Tabel hasil mentah dan SQL-nya bisa dibuka di setiap
 jawaban supaya jawabannya selalu bisa diperiksa.
 
 - **View ringkasan**: `ai_skr_bulanan`, `ai_skr_mom` (bandingkan bulan ini
-  vs bulan lalu), `ai_skr_alasan`, `ai_biaya_bulanan` — angka sudah
-  bertipe numerik, jadi model tidak salah menjumlahkan.
+  vs bulan lalu), `ai_skr_alasan`, `ai_biaya_bulanan`, plus
+  `ai_outbound_harian` / `ai_outbound_bulanan` / `ai_outbound_parsed`
+  untuk pengiriman — angka sudah bertipe numerik, jadi model tidak salah
+  menjumlahkan. `jam_out` dan `jam_in` ternyata bertipe **TEXT** di
+  database, jadi parsing dipindah ke view (bukan casting di dalam query
+  model) supaya tidak pernah salah tipe lagi.
 - **Gaya jawaban santai & ramah**: jawaban ditulis seperti rekan kerja yang
   nemenin cek data (bukan gaya laporan), maksimal 4 kalimat, satu
   paragraf, tanpa markdown. Data & angka tetap terkunci hasil query.

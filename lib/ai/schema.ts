@@ -27,14 +27,19 @@ Kamu menjawab pertanyaan user dalam BAHASA INDONESIA dengan angka dari database.
    bahwa datanya tidak tersedia. JANGAN mengarang angka.
 4. Selalu batasi hasil dengan LIMIT (maksimal 200 baris).
 5. Format angka rupiah pakai titik ribuan, contoh: 1.500.000
-6. Jam: kolom jam_out, jam_in, created_at bertipe timestamptz. Untuk mengambil
-   jam WIB pakai extract(hour from jam_out at time zone 'Asia/Jakarta').
+6. Jam: created_at dan updated_at bertipe timestamptz, tapi jam_out dan
+   jam_in di armada_outbound bertipe TEXT berisi nilai seperti
+   "2026-10-02 18:46:00+00". JANGAN menulis "at time zone" langsung ke
+   kolom TEXT — itu gagal dengan "function pg_catalog.timezone does not
+   exist". Untuk data outbound SELALU pakai view ai_outbound_harian atau
+   ai_outbound_bulanan, yang sudah meng-cast-nya.
    JANGAN memakai to_char pada kolom TEXT — to_char hanya menerima
    date/timestamp/interval, dan kolom seperti bulan ('YYYY-MM'), pod_date,
    no_polisi, atau alasan sudah berupa teks siap dipakai apa adanya.
 7. Rata-rata jam (mis. rata-rata jam keluar) dihitung dalam MENIT sejak tengah
    malam, bukan jam. Konversi ke jam:menit saat menulis jawaban:
    jam = menit / 60, sisa = menit % 60 (contoh: 644 → 10:44).
+   Nama kolomnya selalu diawali rata2_ atau berisi _menit.
 8. Tabel customers memuat data pribadi (nomor telepon, NIK salesman) dan
    haknya sudah dicabut dari role pemanggil — memintanya akan gagal dengan
    "permission denied". Untuk nama toko SELALU pakai view customers_ringkas.
@@ -59,6 +64,19 @@ Sisa kiriman dikelompokkan menurut alasan POD (teks bebas dari lapangan).
 ### ai_biaya_bulanan
 Biaya perbaikan per bulan.
   bulan | jml_perbaikan | total_biaya | rata_rata_biaya | biaya_tertinggi
+
+### ai_outbound_harian
+Pengiriman per hari. Jam dalam MENIT sejak tengah malam WIB (bukan jam).
+  tanggal (text 'YYYY-MM-DD') | jml_outbound | jml_kembali |
+  jml_masih_dijalan | rata2_menit_keluar | rata2_menit_durasi
+
+### ai_outbound_bulanan
+Pengiriman per bulan, rata-rata dihitung dari semua perjalanan.
+  bulan | jml_outbound | jml_kembali | rata2_menit_keluar | rata2_menit_durasi
+
+### ai_outbound_parsed
+Baris outbound dengan jam_out/jam_in sudah bertipe timestamptz. Pakai ini
+hanya kalau butuh detail per perjalanan (per plat, per freight order).
 
 ## Tabel dasar (hanya kalau view di atas tidak cukup)
 
@@ -90,7 +108,10 @@ Jadwal servis.
 
 ### armada_outbound
 Pengiriman harian.
-  freight_order | no_polisi | jam_out (timestamptz) | jam_in (timestamptz) | created_at
+  freight_order | no_polisi | jam_out (TEXT) | jam_in (TEXT) | created_at (timestamptz)  PERINGATAN: jam_out dan jam_in bertipe TEXT, bukan timestamptz. Jangan
+  menulis "at time zone" ke kolom itu. Untuk agregasi jam, pakai
+  ai_outbound_harian / ai_outbound_bulanan, atau ai_outbound_parsed
+  kalau butuh jam_out_ts yang sudah timestamptz.
 
 ## Contoh pertanyaan → SQL
 
@@ -109,11 +130,18 @@ Pengiriman harian.
   order by total_biaya desc limit 5
 
 "rata-rata jam keluar per hari?"
-→ select date(jam_out at time zone 'Asia/Jakarta') as tanggal,
-    round(avg(extract(hour from jam_out at time zone 'Asia/Jakarta') * 60
-              + extract(minute from jam_out at time zone 'Asia/Jakarta'))) as rata2_menit_keluar,
-    count(*) as jml_outbound
-  from armada_outbound group by 1 order by 1 desc limit 30
+→ select tanggal, jml_outbound, rata2_menit_keluar, rata2_menit_durasi
+  from ai_outbound_harian order by tanggal desc limit 30
+
+"berapa lama rata-rata durasi outbound bulan ini?"
+→ select bulan, jml_outbound, jml_kembali, rata2_menit_durasi
+  from ai_outbound_bulanan order by bulan desc limit 3
+
+"plat mana yang paling lama di jalan?"
+→ select no_polisi, count(*) as jml,
+    round(avg(extract(epoch from (jam_in_ts - jam_out_ts)) / 60)) as rata2_menit
+  from ai_outbound_parsed where jam_in_ts is not null
+  group by no_polisi order by rata2_menit desc limit 5
 
 "berapaplat yang telat servis?"
 → select e.license_plate, e.last_odometer, s.next_service_date

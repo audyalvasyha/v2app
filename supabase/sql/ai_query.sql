@@ -141,7 +141,10 @@ grant execute on function public.exec_ai_query(text) to authenticated;
 drop view if exists public.ai_skr_mom,
                 public.ai_skr_alasan,
                 public.ai_biaya_bulanan,
-                public.ai_skr_bulanan cascade;
+                public.ai_skr_bulanan,
+                public.ai_outbound_harian,
+                public.ai_outbound_bulanan,
+                public.ai_outbound_parsed cascade;
 
 -- SKR per bulan — sumber jawaban untuk "SKR kenapa tinggi bulan ini?"
 create view public.ai_skr_bulanan as
@@ -216,8 +219,76 @@ where tanggal is not null
 group by 1
 order by 1 desc;
 
+-- ═══════════════════════════════════════════════════════════════
+--  Outbound: jam_out / jam_in bertipe TEXT
+---- PERBAIKAN: kolom jam_out dan jam_in di armada_outbound sebenarnya
+--  TEXT berisi nilai seperti "2026-10-02 18:46:00+00", BUKAN
+--  timestamptz. Deskripsi skema yang dulu bilang timestamptz membuat
+--  model menulis `jam_out at time zone 'Asia/Jakarta'`, yang gagal
+--  dengan "function pg_catalog.timezone(unknown, text) does not exist".
+--
+--  Diperbaiki dengan memindahkan parsing ke view, sama seperti yang
+--  sudah dilakukan untuk SKR: model tidak pernah lagi menyentuh kolom
+--  TEXT itu, jadi tidak mungkin salah tipe.
+--
+--  Filter regex dipakai sebelum cast karena view tidak bisa menangkap
+--  error. Satu baris berisi tanggal rusak akan menggagalkan seluruh
+--  query, jadi baris yang tidak cocok polanya dibuang lebih dulu.
+-- ═══════════════════════════════════════════════════════════════
+
+create view public.ai_outbound_parsed as
+select
+  no_polisi,
+  (jam_out)::timestamptz as jam_out_ts,
+  (jam_in)::timestamptz  as jam_in_ts
+from public.armada_outbound
+where jam_out ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  and (jam_in is null or jam_in ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}');
+
+-- Rata-rata per hari, dalam MENIT sejak tengah malam WIB (bukan jam),
+-- supaya model tinggal membagi 60 saat menulis jawaban.
+create view public.ai_outbound_harian as
+select
+  to_char(date(jam_out_ts at time zone 'Asia/Jakarta'), 'YYYY-MM-DD') as tanggal,
+  count(*)                                                          as jml_outbound,
+  count(jam_in_ts)                                                  as jml_kembali,
+  count(*) filter (where jam_in_ts is null)                         as jml_masih_dijalan,
+  round(avg(
+    extract(hour   from jam_out_ts at time zone 'Asia/Jakarta') * 60
+    + extract(minute from jam_out_ts at time zone 'Asia/Jakarta')
+  ))                                                                as rata2_menit_keluar,
+  round(avg(
+    extract(epoch from (jam_in_ts - jam_out_ts)) / 60
+  ))                                                                as rata2_menit_durasi
+from public.ai_outbound_parsed
+where jam_out_ts is not null
+group by 1
+order by 1 desc;
+
+-- Rata-rata per bulan dihitung langsung dari baris per perjalanan, bukan
+-- dari rata-rata harian: rata-rata dari rata-rata memberi bobot undue
+-- ke hari yang hanya punya satu perjalanan.
+create view public.ai_outbound_bulanan as
+select
+  to_char(date_trunc('month', jam_out_ts at time zone 'Asia/Jakarta'), 'YYYY-MM') as bulan,
+  count(*)                       as jml_outbound,
+  count(jam_in_ts)               as jml_kembali,
+  round(avg(
+    extract(hour   from jam_out_ts at time zone 'Asia/Jakarta') * 60
+    + extract(minute from jam_out_ts at time zone 'Asia/Jakarta')
+  ))                           as rata2_menit_keluar,
+  round(avg(
+    extract(epoch from (jam_in_ts - jam_out_ts)) / 60
+  ))                           as rata2_menit_durasi
+from public.ai_outbound_parsed
+where jam_out_ts is not null
+group by 1
+order by 1 desc;
+
 grant select on public.ai_skr_bulanan, public.ai_skr_alasan,
-                 public.ai_skr_mom,    public.ai_biaya_bulanan
+                 public.ai_skr_mom,    public.ai_biaya_bulanan,
+                 public.ai_outbound_parsed, public.ai_outbound_harian,
+                 public.ai_outbound_bulanan
   to authenticated;
 
 

@@ -83,6 +83,35 @@ function withinRateLimit(userId: string): boolean {
  * yang sudah dipotong — sisanya dibuang diam-diam, bukan error, karena
  * riwayat yang rusak tidak seharusnya membuat pertanyaan gagal.
  */
+/**
+ * Terjemahkan error PostgreSQL mentah jadi kalimat yang bisa dibaca user.
+ *
+ * Pesan bawaan Postgres — seperti "function pg_catalog.timezone(unknown,
+ * text) does not exist" — berguna buat developer, tapi membingungkan buat
+ * operator yang cuma mau tahu datanya. Detail aslinya tetap ditulis ke
+ * log server (lihat pemanggilan console.error di bawah), jadi tidak ada
+ * informasi yang hilang; yang diganti hanya lapisan yang dilihat user.
+ *
+ * Pesan yang memang sudah dirancang ramah user (dari exec_ai_query,
+ * mis. "Hanya query SELECT yang diizinkan") diteruskan apa adanya.
+ */
+function friendlySqlError(message: string): string {
+  const lower = message.toLowerCase()
+  if (lower.includes("does not exist")) {
+    return (
+      "Query-nya belum nyambung dengan struktur data, jadi gagal dijalankan. " +
+      "Detailnya sudah aku catat di server — coba tanya dengan kalimat yang sedikit berbeda ya."
+    )
+  }
+  if (lower.includes("invalid input syntax")) {
+    return "Ada bagian data yang formatnya tidak terbaca, jadi gagal dihitung. Coba longgarkan filter tanggalnya."
+  }
+  if (lower.includes("syntax error")) {
+    return "Query-nya gagal dijalankan. Detailnya sudah aku catat di server."
+  }
+  return message
+}
+
 function parseHistory(raw: unknown): Array<{ role: "user" | "assistant"; content: string }> {
   if (!Array.isArray(raw)) return []
   return raw
@@ -162,7 +191,7 @@ export async function POST(request: Request) {
         // not exist" bisa langsung dilihat query mana yang menyebabkannya —
         // tanpa itu, kita cuma menebak dari pesan error Postgres.
         console.error("[ai/ask] SQL gagal:", { sql, error: error.message })
-        throw new AiError(error.message, "sql")
+        throw new AiError(friendlySqlError(error.message), "sql")
       }
       return (data as Array<Record<string, unknown>>) ?? []
       },
