@@ -128,10 +128,12 @@ function parseHistory(raw: unknown): Array<{ role: "user" | "assistant"; content
 export async function POST(request: Request) {
   let question: unknown
   let rawHistory: unknown = []
+  let rememberThis: unknown = false
   try {
     const body = await request.json()
     question = body?.question
     rawHistory = body?.history
+    rememberThis = body?.remember === true
   } catch {
     return NextResponse.json({ error: "Body harus berupa JSON." }, { status: 400 })
   }
@@ -205,7 +207,15 @@ export async function POST(request: Request) {
     // Kalau tabelnya belum ada (script SQL belum dijalankan) atau insert
     // gagal, jawaban di bawah tetap dikirim — kemampuan mengingat tidak
     // boleh menjatuhkan fitur yang sudah berhasil dihitung.
-    const saved = await saveMemories(userClient, result.remembered)
+    // Tombol "ingat ini" di panel chat: kalau menyala, kalimat user
+    // sendiri ikut disimpan apa adanya, tanpa menunggu keputusan model.
+    //
+    // Alasannya: ekstraksi otomatis itu saran, bukan jaminan — dan user
+    // yang menekan tombol sudah menyatakan niatnya dengan sendirinya. saveMemories
+    // tetap yang memutuskan, karena dia yang buang duplikat dan memangkas
+    // daftar lama.
+    const forced = rememberThis ? [question.trim().slice(0, 300)] : []
+    const saved = await saveMemories(userClient, [...result.remembered, ...forced])
 
     return NextResponse.json({
       sql: result.sql,

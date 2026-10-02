@@ -88,6 +88,9 @@ export function AIChat() {
   const [memoryInput, setMemoryInput] = useState("")
   const [memoryBusy, setMemoryBusy] = useState(false)
   const [memoryAvailable, setMemoryAvailable] = useState(true)
+  // Tombol "ingat ini": menyala = kalimat yang sedang diketik akan
+  // disimpan ke ingatan apa pun jawabannya.
+  const [rememberNext, setRememberNext] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -237,6 +240,10 @@ export function AIChat() {
 
     setInput("")
     setLoading(true)
+    // Tombol "ingat ini" hanya berlaku untuk satu pertanyaan, jadi
+    // langsung dimatikan lagi supaya kalimat berikutnya tidak ikut
+    // tersimpan tanpa disadari.
+    setRememberNext(false)
 
     // Id placeholder dibuat SEBELUM kirim dan dipakai untuk mencocokkan
     // jawaban. Versi lama mencocokkan berdasarkan `content === ""` —
@@ -278,6 +285,9 @@ export function AIChat() {
             role: m.role,
             content: m.content,
           })),
+          // Salam satu: server akan menyimpan kalimat ini apa adanya ke
+          // ai_memory, tanpa bergantung pada keputusan model.
+          remember: rememberNext,
         }),
       })
 
@@ -321,7 +331,7 @@ export function AIChat() {
     } finally {
       setLoading(false)
     }
-  }, [loading, messages, refreshMemories])
+  }, [loading, messages, refreshMemories, rememberNext])
 
   return (
     <>
@@ -512,11 +522,23 @@ export function AIChat() {
             }}
             className="flex gap-2 border-t border-border p-3"
           >
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={loading}
+              onClick={() => setRememberNext((v) => !v)}
+              title="Simpan pertanyaan ini ke ingatan Midaa"
+              aria-pressed={rememberNext}
+              className={`shrink-0 ${rememberNext ? "text-primary" : "text-muted-foreground"}`}
+            >
+              <Brain className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`} />
+            </Button>
             <Input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Tanya apa saja…"
+              placeholder={rememberNext ? "Ketik yang mau diingat…" : "Tanya apa saja…"}
               maxLength={500}
               disabled={loading}
               aria-label="Pertanyaan untuk asisten AI"
@@ -576,6 +598,21 @@ function MessageBubble({
 
       {message.result && (
         <>
+          {message.result.remembered && message.result.remembered.length > 0 && (
+            <p className="flex items-start gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5 text-xs text-foreground">
+              <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span>
+                Aku simpan ini:{" "}
+                {message.result.remembered.map((item, i) => (
+                  <span key={item}>
+                    {i > 0 && "; "}
+                    {item}
+                  </span>
+                ))}
+              </span>
+            </p>
+          )}
+
           {message.result.rows.length > 0 ? (
             <ResultTable rows={message.result.rows} />
           ) : (
