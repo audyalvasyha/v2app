@@ -541,7 +541,13 @@ function DashboardContent() {
       onViewChange={handleViewChange}
       equipmentCounts={{ total: filteredEquipments.length, available: availableCount }}
     >
-      <div className="container mx-auto p-6 flex flex-col space-y-4">
+      {/* Padding bawah lebih besar dari `p-6`: baris paling bawah halaman
+          (kontrol paginasi) berada di kanan bawah, dan tombol mengambang
+          Tanya Midaa juga fixed di sana. Tanpa ruang extra ini, paginasi
+          tidak bisa di-scroll keluar dari bawah tombol — user praktis
+          tidak bisa menekan "Berikutnya".
+          `pb-28` = 7rem, cukup untuk tombol h-12 plus jarak aman. */}
+      <div className="container mx-auto flex flex-col space-y-4 px-6 pt-6 pb-28">
 
         {/* Header Dinamis */}
         {activeView !== 'about' && (

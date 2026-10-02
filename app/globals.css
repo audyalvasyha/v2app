@@ -37,6 +37,16 @@
   --sidebar-accent-foreground: oklch(0.15 0 0);
   --sidebar-border: oklch(0.9 0 0);
   --sidebar-ring: oklch(0.55 0.22 263);
+  /* Permukaan panel Tanya Midaa.
+     Sengaja token sendiri, bukan --muted: di mode terang --muted
+     (hsl 210 40% 96%) nyaris sama dengan --background putih, sehingga
+     panel terlihat seperti lubang di layar, bukan lapisan di atasnya.
+     Nilai di sini dipilih dari pengukuran kontras, bukan dari
+     perkiraan: L=0.9 C=0.045 memberi rasio 1.35:1 terhadap putih —
+     cukup jelas untuk mata, tanpa membuat panel terasa seperti blok
+     biru berat. Teks di atasnya (L=0.21) tetap 12:1. */
+  --ai-panel: oklch(0.9 0.045 266);
+  --ai-panel-foreground: oklch(0.21 0.03 266);
   --shadow-x: 0px;
   --shadow-y: 1px;
   --shadow-blur: 2px;
@@ -78,6 +88,12 @@
   --sidebar-accent-foreground: oklch(0.93 0 0);
   --sidebar-border: oklch(0.25 0 0);
   --sidebar-ring: oklch(0.6 0.24 263);
+  /* Mode gelap: panel dibuat lebih TERANG dari --background (0.1) dan
+     diberi tint, persis kebalikan dari mode terang. L=0.29 memberi
+     rasio 1.46:1 terhadap latar — jauh lebih jelas daripada --muted
+     lama (0.2) yang hanya 1.05:1, praktis tak terlihat. */
+  --ai-panel: oklch(0.29 0.045 266);
+  --ai-panel-foreground: oklch(0.95 0.012 266);
   --shadow-x: 0px;
   --shadow-y: 1px;
   --shadow-blur: 2px;
@@ -126,6 +142,8 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-ai-panel: var(--ai-panel);
+  --color-ai-panel-foreground: var(--ai-panel-foreground);
   --font-serif: 'Source Serif 4', 'Source Serif 4 Fallback';
   /* computed shadow variables below - do not modify */
   --shadow-2xs: var(--shadow-x) var(--shadow-y) color-mix(in srgb, var(--shadow-color) calc(var(--shadow-opacity) * 100%), transparent);

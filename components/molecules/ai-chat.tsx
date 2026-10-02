@@ -95,8 +95,41 @@ export function AIChat() {
   // server membuat tombol + seakan-akan berhasil padahal tidak ada yang
   // tersimpan — persis yang terjadi di versi sebelumnya.
   const [memoryError, setMemoryError] = useState<string | null>(null)
+  // Tombol mengambang menyingkir saat user scroll ke bawah. Fixed
+  // positioning berarti tombol ini selalu menutupi isi kanan bawah
+  // layar, dan di halaman tabel isi itu sering kali kontrol paginasi.
+  const [fabHidden, setFabHidden] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Sembunyikan tombol saat scroll turun, tampilkan lagi saat scroll naik
+  // atau berhenti. Arah scroll dibaca dari selisih posisi, bukan dari
+  // event scroll-nya sendiri, karena event itu tidak membawa arah.
+  useEffect(() => {
+    let lastY = window.scrollY
+    let idleTimer: ReturnType<typeof setTimeout> | undefined
+
+    const onScroll = () => {
+      const y = window.scrollY
+      const goingDown = y > lastY + 4
+      const goingUp = y < lastY - 4
+      lastY = y
+
+      if (goingUp) setFabHidden(false)
+      else if (goingDown) setFabHidden(true)
+
+      // Diam sebentar -> tampilkan lagi, supaya tombol tidak menggantung
+      // hilang setelah user berhenti scroll untuk membaca.
+      if (idleTimer) clearTimeout(idleTimer)
+      idleTimer = setTimeout(() => setFabHidden(false), 700)
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => {
+      window.removeEventListener("scroll", onScroll)
+      if (idleTimer) clearTimeout(idleTimer)
+    }
+  }, [])
 
   // Scroll ke pesan terbaru setiap ada perubahan — tanpa ini, jawaban
   // panjang akan muncul di bawah area yang sedang dilihat.
@@ -344,26 +377,42 @@ export function AIChat() {
 
   return (
     <>
-      {/* Tombol mengambang — bentuk pil supaya label ikut terbaca */}
+      {/* Tombol mengambang — bentuk pil supaya label ikut terbaca.
+          `translate-y` + `opacity` dipakai untuk menyembunyikannya saat
+          user sedang scroll ke bawah: di posisi fixed, tombol ini
+          menutupi apa pun yang ada di kanan bawah layar — termasuk
+          paginasi tabel. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Tutup asisten AI" : "Buka asisten AI"}
-        className="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-5 text-primary-foreground shadow-lg transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={`fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-5 text-primary-foreground shadow-lg transition-all duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          fabHidden && !open ? "pointer-events-none translate-y-20 opacity-0" : "translate-y-0 opacity-100"
+        }`}
       >
         {open ? <X className="h-5 w-5 shrink-0" /> : <Sparkles className="h-5 w-5 shrink-0" />}
         <span className="text-sm font-semibold">{open ? "Tutup" : "Tanya Midaa"}</span>
       </button>
 
       {open && (
-        // Permukaan panel sengaja memakai `bg-muted`, BUKAN `bg-card`:
-        // token --card identik dengan --background di mode terang, sehingga
-        // panel sebelumnya menyatu dengan latar dan terlihat seperti lubang.
-        // --muted jelas berbeda di kedua tema, dan kepala panel diberi
-        // lapisan primary supaya terbaca sebagai permukaan tersendiri.
-        <div className="fixed bottom-24 right-6 z-40 flex h-[min(36rem,calc(100vh-8rem))] w-[min(24rem,calc(100vw-3rem))] flex-col overflow-hidden rounded-2xl border border-border bg-muted shadow-2xl">
+        // Permukaan panel memakai token khusus `bg-ai-panel`, bukan
+        // `bg-muted` atau `bg-card`:
+        //
+        // - `--card` identik dengan `--background` di mode terang, jadi
+        //   panel lama terlihat seperti lubang di layar, bukan lapisan.
+        // - `--muted` (hsl 210 40% 96%) juga nyaris putih, dan di mode
+        //   gelap (oklch 0.2) masih terlalu dekat dengan latar 0.1.
+        //
+        // Token baru di `app/globals.css` sengaja berbeda di kedua tema:
+        // terang = biru muda yang jelas bukan putih, gelap = lebih terang
+        // dari latar. Dua-duanya dibaca sebagai "permukaan di atas".
+        //
+        // Lebarnya 24rem -> 26rem (+8%): pertanyaannya sering panjang dan
+        // jawaban berangka banyak, jadi 384px membuat tabel melebar dan
+        // area teks jadi sempit.
+        <div className="fixed bottom-28 right-5 z-40 flex h-[min(38rem,calc(100vh-9rem))] w-[min(26rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-ai-panel-foreground/15 bg-ai-panel text-ai-panel-foreground shadow-2xl">
           {/* Kepala */}
-          <div className="flex items-center gap-2 border-b border-border bg-primary/10 px-4 py-3">
+          <div className="flex items-center gap-2 border-b border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.06] px-4 py-3">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15">
               <Sparkles className="h-4 w-4 text-primary" />
             </span>
@@ -405,11 +454,11 @@ export function AIChat() {
 
           {/* Memori — bisa disembunyikan supaya tidak memakan tinggi panel */}
           {memoryOpen && (
-            <div className="max-h-56 shrink-0 space-y-2 overflow-y-auto border-b border-border bg-card px-3 py-3">
+            <div className="max-h-56 shrink-0 space-y-2 overflow-y-auto border-b border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.04] px-3 py-3">
               {!memoryAvailable ? (
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   Memori belum aktif. Jalankan{" "}
-                  <code className="rounded bg-muted px-1 py-0.5">supabase/sql/ai_memory.sql</code>{" "}
+                  <code className="rounded bg-ai-panel-foreground/10 px-1 py-0.5">supabase/sql/ai_memory.sql</code>{" "}
                   di Supabase SQL Editor, lalu buka panel ini lagi. Sampai itu,
                   Tanya Data tetap jalan normal — cuma tidak mengingat apa-apa.
                 </p>
@@ -441,7 +490,7 @@ export function AIChat() {
                       {memories.map((item) => (
                         <li
                           key={item.id}
-                          className="flex items-start gap-2 rounded-md border border-border bg-muted/60 px-2 py-1.5 text-xs"
+                          className="flex items-start gap-2 rounded-md border border-ai-panel-foreground/15 bg-ai-panel-foreground/[0.05] px-2 py-1.5 text-xs"
                         >
                           <span className="flex-1 leading-relaxed">{item.content}</span>
                           <button
@@ -508,7 +557,7 @@ export function AIChat() {
                     key={s}
                     type="button"
                     onClick={() => ask(s)}
-                    className="block w-full rounded-lg border border-border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-primary/10"
+                    className="block w-full rounded-lg border border-ai-panel-foreground/15 bg-ai-panel-foreground/[0.05] px-3 py-2 text-left text-sm transition-colors hover:bg-primary/10"
                   >
                     {s}
                   </button>
@@ -535,7 +584,7 @@ export function AIChat() {
               e.preventDefault()
               ask(input)
             }}
-            className="flex gap-2 border-t border-border p-3"
+            className="flex gap-2 border-t border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.04] p-3"
           >
             <Button
               type="button"
@@ -633,7 +682,7 @@ function MessageBubble({
           ) : (
             // Query sukses tapi 0 baris: bedakan dari kegagalan. Tanpa
             // pesan ini, panel terlihat seolah-olah tidak menjawab apa pun.
-            <p className="rounded-md border border-border bg-card px-2 py-1.5 text-xs text-muted-foreground">
+            <p className="rounded-md border border-ai-panel-foreground/15 bg-ai-panel-foreground/[0.05] px-2 py-1.5 text-xs text-muted-foreground">
               Query berhasil dijalankan — tidak ada baris yang cocok dengan
               pertanyaan ini.
             </p>
@@ -652,7 +701,7 @@ function MessageBubble({
                 Lihat query
               </button>
               {sqlOpen && (
-                <pre className="mt-1 overflow-x-auto rounded-md border border-border bg-card p-2 text-[11px] leading-relaxed">
+                <pre className="mt-1 overflow-x-auto rounded-md border border-ai-panel-foreground/15 bg-ai-panel-foreground/[0.05] p-2 text-[11px] leading-relaxed">
                   {message.result.sql}
                 </pre>
               )}
@@ -684,9 +733,9 @@ function ResultTable({ rows }: { rows: Array<Record<string, unknown>> }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border border-border bg-card">
+    <div className="overflow-x-auto rounded-md border border-ai-panel-foreground/15 bg-ai-panel-foreground/[0.05]">
       <table className="w-full text-xs">
-        <thead className="bg-muted">
+        <thead className="bg-ai-panel-foreground/[0.08]">
           <tr>
             {columns.map((column) => (
               <th key={column} className="whitespace-nowrap px-2 py-1.5 text-left font-medium">
@@ -696,8 +745,7 @@ function ResultTable({ rows }: { rows: Array<Record<string, unknown>> }) {
           </tr>
         </thead>
         <tbody>
-          {rows.slice(0, 20).map((row, index) => (
-            <tr key={index} className="border-t border-border">
+          {rows.slice(0, 20).map((row, index) => (              <tr key={index} className="border-t border-ai-panel-foreground/10">
               {columns.map((column) => (
                 <td key={column} className="whitespace-nowrap px-2 py-1.5">
                   {formatCell(row[column])}
@@ -708,7 +756,7 @@ function ResultTable({ rows }: { rows: Array<Record<string, unknown>> }) {
         </tbody>
       </table>
       {rows.length > 20 && (
-        <p className="border-t border-border px-2 py-1.5 text-[11px] text-muted-foreground">
+        <p className="border-t border-ai-panel-foreground/10 px-2 py-1.5 text-[11px] text-muted-foreground">
           Menampilkan 20 dari {rows.length} baris.
         </p>
       )}

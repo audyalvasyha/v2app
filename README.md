@@ -127,10 +127,32 @@ jawaban supaya jawabannya selalu bisa diperiksa.
   untuk pengiriman — angka sudah bertipe numerik, jadi model tidak salah
   menjumlahkan. `jam_out` dan `jam_in` ternyata bertipe **TEXT** di
   database, jadi parsing dipindah ke view (bukan casting di dalam query
-  model) supaya tidak pernah salah tipe lagi.
+  model) supaya tidak pernah salah tipe lagi. `ai_outbound_parsed` juga
+  menyediakan kolom `durasi_menit` (durasi per perjalanan dalam menit),
+  supaya pertanyaan seperti “ada outbound yang lebih 24 jam?” cukup dijawab
+  dengan `durasi_menit > 1440`.
+- **Query yang gagal diperbaiki sendiri**: kalau SQL pertama salah (mis.
+  nama kolom yang tidak ada), pesan error asli dari PostgreSQL dikirim
+  kembali ke model sebagai bekal, dan ia menulis ulang query-nya — satu
+  kali percobaan. Model yang diberi tahu “gagal” tanpa alasan hanya akan
+  mengulang kesalahan yang sama.
+- **Pertanyaan di luar data** (sapaan, “siapa kamu”, pertanyaan identitas)
+  dijawab tanpa query sama sekali, memakai persona dan ingatan yang
+  tersimpan. Midaa tidak mengarang nama peran untuk dirinya sendiri, dan
+  soal orang lain dia hanya menjawab dari ingatan atau data — kalau tidak
+  ada, bilang tidak tahu.
 - **Gaya jawaban santai & ramah**: jawaban ditulis seperti rekan kerja yang
   nemenin cek data (bukan gaya laporan), maksimal 4 kalimat, satu
   paragraf, tanpa markdown. Data & angka tetap terkunci hasil query.
+- **Warna panel sendiri**: permukaan chat memakai token `--ai-panel`
+  (bukan `--muted`/`--card`, yang nyaris sama dengan latar sehingga panel
+  terlihat seperti lubang). Nilai untuk mode gelap dan terang dipilih dari
+  pengukuran kontras — 1.46:1 dan 1.35:1 terhadap latar — supaya panel
+  selalu terbaca sebagai lapisan di atas, sementara teksnya tetap 12:1.
+- **Tombol mengambang tidak menutupi paginasi**: tombol Tanya Midaa
+  menyingkir sendiri saat halaman di-scroll ke bawah dan muncul lagi
+  kalau user scroll naik atau berhenti, dan konten diberi `pb-28` supaya
+  kontrol paginasi selalu bisa di-scroll keluar dari bawah tombol.
 - **Memori jangka panjang**: Midaa mengingat preferensi dan kebiasaan kerja
   kamu (mis. “selalu pakai rentang 3 bulan”). Butir memori diambil dari
   jawaban yang baru diberikan, tanpa panggilan model tambahan, dan hanya
@@ -152,6 +174,8 @@ jawaban supaya jawabannya selalu bisa diperiksa.
 
 1. Jalankan `supabase/sql/ai_query.sql` di SQL Editor (sekali, aman diulang).
    **Setelah `auth_lockdown.sql`** — supaya grant untuk `authenticated` ada.
+   Jalankan ulang script ini setiap kali view-nya berubah; script ini
+   drop-view/create, jadi aman diulang.
 1b. Opsional tapi disarankan: jalankan juga `supabase/sql/ai_memory.sql`
    untuk mengaktifkan memori jangka panjang. Tanpa script ini Tanya Data
    tetap jalan normal, hanya tidak mengingat apa-apa (panel **Ingatan**
@@ -163,6 +187,9 @@ jawaban supaya jawabannya selalu bisa diperiksa.
    ```sql
    select public.exec_ai_query('select bulan, total_nilai from ai_skr_bulanan order by bulan desc limit 3');
    select public.exec_ai_query('delete from skr_detail');  -- harus DITOLAK
+   -- kolom durasi_menit harus ada; 0 baris berarti memang tidak ada
+   -- outbound yang lebih 24 jam
+   select public.exec_ai_query('select no_polisi, durasi_menit from ai_outbound_parsed where durasi_menit > 1440 order by durasi_menit desc limit 20');
    ```
 
 ---
