@@ -7,6 +7,16 @@
 --  yang memang boleh ia lihat.
 --
 --  Jalankan sekali di Supabase SQL Editor. Aman diulang.
+--
+--  PRASYARAT (urutan wajib):
+--    salesman.sql  →  skr_ringkasan.sql  →  ai_query.sql
+--
+--  View ai_* di bawah dibangun di atas public.skr_ringkasan dan
+--  public.salesman. Kalau salah satu belum ada atau versinya belum
+--  terbaru, script ini gagal di CREATE VIEW — dan karena view ai_*
+--  yang lama sudah di-drop di bagian atas, Tanya Midaa kehilangan
+--  semua view-nya. Jadi pastikan dua script itu sudah dijalankan
+--  lebih dulu.
 -- ═══════════════════════════════════════════════════════════════
 
 -- ── Guard: tolak query yang bukan SELECT murni ─────────────────
@@ -142,6 +152,7 @@ drop view if exists public.ai_skr_mom,
                 public.ai_skr_alasan,
                 public.ai_biaya_bulanan,
                 public.ai_skr_bulanan,
+                public.ai_sales_bulanan,
                 public.ai_outbound_harian,
                 public.ai_outbound_bulanan,
                 public.ai_outbound_parsed cascade;
@@ -218,6 +229,41 @@ from public.maintenance_histories
 where tanggal is not null
 group by 1
 order by 1 desc;
+
+-- Kinerja sales per bulan, dengan nama (bukan kode salesman).
+--
+-- Dijadikan view karena dua alasan:
+--   1. Nama salesman hanya ada di tabel salesman — tanpa join,
+--      Tanya Midaa hanya bisa menjawab dengan kode S090091477.
+--   2. Pertanyaan "salesman mana yang paling bagus bulan ini?"
+--      selalu butuh agregasi per bulan, jadi ini bentuk yang
+--      paling sering dipakai model.
+--
+-- salesman_nama SELALU terisi: view ini memakai JOIN biasa, bukan
+-- LEFT JOIN. Alasannya, SKR punya 276 baris dengan salesman "-1"
+-- atau NULL yang tidak bisa diatribusikan ke siapa pun — kalau
+-- ikut dihitung, mereka muncul sebagai satu kelompok raksasa di
+-- paling atas dan menjawab "salesman mana yang paling bagus?"
+-- dengan "yang tidak diketahui".
+--
+-- Konsekuensinya: total di view ini lebih kecil daripada total
+-- SKR keseluruhan. Untuk angka total, tetap pakai ai_skr_bulanan.
+create view public.ai_sales_bulanan as
+select
+  to_char(date_trunc('month', r.pod_d), 'YYYY-MM')  as bulan,
+  s.nama                                          as nama_salesman,
+  s.supervisor                                    as supervisor,
+  s.kode_area                                     as kode_area,
+  count(*)                                        as jml_dokumen,
+  sum(r.qty)                                      as total_qty,
+  sum(r.nilai)                                    as total_nilai,
+  count(distinct r.customer_id)                    as jml_toko
+from public.skr_ringkasan r
+join public.salesman s
+  on s.nik = substring(r.salesman from '^S0([0-9]{8})$')
+where r.pod_d is not null
+group by 1, 2, 3, 4;
+
 
 -- ═══════════════════════════════════════════════════════════════
 --  Outbound: jam_out / jam_in bertipe TEXT
@@ -307,9 +353,21 @@ order by 1 desc;
 
 grant select on public.ai_skr_bulanan, public.ai_skr_alasan,
                  public.ai_skr_mom,    public.ai_biaya_bulanan,
+                 public.ai_sales_bulanan,
                  public.ai_outbound_parsed, public.ai_outbound_harian,
                  public.ai_outbound_bulanan
   to authenticated;
+
+-- Tabel master salesman juga dibaca langsung oleh Tanya Midaa
+-- (mis. "nomor HP ROY SANDI HUTAPEA berapa?"), jadi role
+-- authenticated perlu grant select ke tabelnya.
+--
+-- PENTING: skrip ini TIDAK memberi grant ke `anon`. Nomor HP
+-- salesman tidak boleh bisa ditarik siapa pun yang memegang kunci
+-- anon (yang tertanam di bundle browser). Salesman.sql juga sudah
+-- revoke grant itu.
+grant select on public.salesman to authenticated;
+revoke select on public.salesman from anon;
 
 
 -- ═══════════════════════════════════════════════════════════════
@@ -342,13 +400,19 @@ grant select on public.ai_skr_bulanan, public.ai_skr_alasan,
 --  2) SELECT biasa harus jalan dan mengembalikan array JSON:
 --
 --   select public.exec_ai_query('select bulan, total_nilai from ai_skr_bulanan order by bulan desc limit 3');
---
---  3) anon harus TIDAK bisa memanggilnya (jalankan di SQL Editor
---     memang akan lolos karena kamu postgres — untuk cek yang
---     sebenarnya, buka PostgREST dengan kunci anon):
+----   3) anon harus TIDAK bisa memanggilnya (jalankan di SQL Editor
+--      memang akan lolos karena kamu postgres — untuk cek yang
+--      sebenarnya, buka PostgREST dengan kunci anon):
 --
 --   curl "$SUPABASE_URL/rest/v1/rpc/exec_ai_query" \
 --     -H "apikey: <anon-key>" -H "Content-Type: application/json" \
 --     -d '{"p_query":"select 1"}'
+--   → error 42501 permission denied
+--
+--   3b) Tabel salesman (berisi nomor HP) juga harus tertutup dari
+--      anon, meski lewat select langsung:
+--
+--   curl "$SUPABASE_URL/rest/v1/salesman?select=telepon" \
+--     -H "apikey: <anon-key>"
 --   → error 42501 permission denied
 -- ═══════════════════════════════════════════════════════════════

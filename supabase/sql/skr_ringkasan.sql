@@ -46,6 +46,33 @@ drop policy if exists "hapus_skr_detail" on public.skr_detail;
 -- View di-drop lebih dulu: CREATE OR REPLACE VIEW tidak boleh mengubah
 -- urutan/nama kolom yang sudah ada (error 42P16). View hanya query, jadi
 -- data tetap aman di tabel skr_detail.
+--
+-- CATATAN URUTAN: script ini me-join ke public.salesman, jadi
+-- salesman.sql harus dijalankan lebih dulu. View di-drop dulu di
+-- bawah, jadi mengulang script ini setelahnya aman.
+--
+-- Drop dependent DULU, tanpa CASCADE. View ai_* (dari ai_query.sql)
+-- dibangun di atas view ini, jadi selama masih ada, `drop view
+-- skr_ringkasan` gagal dengan:
+--
+--   ERROR: 2BP01: cannot drop view skr_ringkasan because other
+--          objects depend on it
+--
+-- CASCADE sengaja TIDAK dipakai di sini. CASCADE akan ikut menghapus
+-- apa pun yang bergantung, termasuk view yang mungkin tidak kita
+-- kenal — dan kalau ai_query.sql tidak dijalankan ulang setelahnya,
+-- Tanya Midaa kehilangan semua view-nya tanpa ada yang memberi tahu.
+-- Drop di bawah ini eksplisit: kalau suatu saat ada dependensi baru
+-- yang lupa dicatat, script ini GAGAL dengan pesan jelas — jauh lebih
+-- baik daripada menghapus view orang diam-diam.
+--
+-- Jalankan ai_query.sql SETELAH script ini untuk membangun ulang
+-- view ai_* di atas skr_ringkasan yang baru.
+drop view if exists public.ai_skr_mom;
+drop view if exists public.ai_skr_alasan;
+drop view if exists public.ai_sales_bulanan;
+drop view if exists public.ai_skr_bulanan;
+
 drop view if exists public.skr_ringkasan;
 
 create view public.skr_ringkasan as
@@ -82,6 +109,18 @@ select
   id,
   license_no,
   salesman,
+  -- Nama & afiliasi salesman, hasil join ke tabel master `salesman`.
+  --
+  -- Kenapa LEFT JOIN dan bukan JOIN: skr_detail berisi banyak baris
+  -- dengan salesman NULL atau "-1" (placeholder), dan tidak semua
+  -- NIK yang muncul di sana punya entri di tabel salesman. JOIN
+  -- biasa akan membuat baris-baris itu hilang dari seluruh
+  -- dashboard — jumlah sisa kiriman jadi lebih kecil dari aslinya.
+  -- Kolomnya nullable, jadi "-1" tetap tampil sebagai "-1" ketika
+  -- nama salesmannya tidak ditemukan.
+  s.nama         as salesman_nama,
+  s.supervisor   as supervisor,
+  s.kode_area    as kode_area,
   pod_reason,
   skr_base_unit,
   customer_id,
@@ -114,7 +153,13 @@ select
       then to_date(substring(d8,5,4)||'-'||substring(d8,1,2)||'-'||substring(d8,3,2), 'YYYY-MM-DD')
     else null
   end as pod_d
-from base;
+from base
+-- Regex '^S0([0-9]{8})$' memotong "S090091477" menjadi "90091477".
+-- Nol di depan ikut hilang, jadi ini BUKAN sekadar menghapus huruf S.
+-- Nilai yang tidak cocok pola ("-1", NULL) menghasilkan NULL dan baris
+-- itu tetap muncul lewat LEFT JOIN — dengan nama kosong.
+left join public.salesman s
+  on s.nik = substring(base.salesman from '^S0([0-9]{8})$');
 
 
 -- ── CATATAN INDEX ──────────────────────────────────────────────
@@ -164,11 +209,19 @@ grant select on public.customers_ringkas to anon, authenticated;
 
 -- ═══════════════════════════════════════════════════════════════
 --  Verifikasi — jalankan setelah script di atas:
+----  select license_no, pod_date, pod_d, qty, nilai
+--    from public.skr_ringkasan
+--    order by pod_d desc nulls last
+--    limit 5;
 --
---  select license_no, pod_date, pod_d, qty, nilai
---  from public.skr_ringkasan
---  order by pod_d desc nulls last
---  limit 5;
+--  Nama salesman harus ikut terisi (bukan NIK lagi):
+--    select salesman, salesman_nama, supervisor, kode_area
+--      from public.skr_ringkasan
+--     where salesman_nama is not null
+--     limit 5;
+--
+--  Kalau kolomnya NULL semua, berarti NIK di salesman.sql tidak
+--  cocok dengan format di skr_detail — periksa keduanya.
 --
 --  Kalau pod_d masih NULL padahal ada data, periksa isi mentahnya:
 --
