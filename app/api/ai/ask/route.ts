@@ -32,6 +32,35 @@ export const dynamic = "force-dynamic"
 // untuk menyelundupkan instruksi panjang.
 const MAX_QUESTION_LENGTH = 500
 
+// ── Rate limit per user ─────────────────────────────────────────
+// Kuota Gemini gratis sangat kecil (~15 request/menit), dan SETIAP
+// pertanyaan di sini memakan dua panggilan model (SQL lalu narasi).
+// Tanpa batas ini, satu tab yang dikirim spam — atau satu script yang
+// memegang sesi login — bisa menghabiskan seluruh kuota dalam hitungan
+// detik dan mematikan fitur ini untuk semua orang sekaligus.
+//
+// Peta in-memory: berlaku per instance serverless (berkurang tiap cold
+// start). Cukup untuk meredam spam dari satu proses; rate limit di edge
+// tetap lebih kuat bila suatu saat diperlukan.
+const RATE_LIMIT_PER_MINUTE = 8
+const RATE_WINDOW_MS = 60_000
+const recentHits = new Map<string, number[]>()
+
+function withinRateLimit(userId: string): boolean {
+  const now = Date.now()
+  const list = (recentHits.get(userId) ?? []).filter((t) => now - t < RATE_WINDOW_MS)
+  if (list.length >= RATE_LIMIT_PER_MINUTE) {
+    recentHits.set(userId, list)
+    return false
+  }
+  list.push(now)
+  recentHits.set(userId, list)
+  // Jaga peta tetap kecil — kalau tidak, setiap user yang pernah
+  // bertanya meninggalkan entri selamanya (kebocoran memori per-instance).
+  if (recentHits.size > 2000) recentHits.clear()
+  return true
+}
+
 export async function POST(request: Request) {
   let question: unknown
   try {
@@ -88,6 +117,21 @@ export async function POST(request: Request) {
     )
   }
 
+  // Baru setelah identitas pasti: kuota dihitung per user, bukan per IP,
+  // supaya refresh halaman atau IP kantor yang sama tidak saling
+  // mematikan kuota. 429 (bukan 400) supaya jelas ini bukan kesalahan
+  // dari isi pertanyaannya.
+  if (!withinRateLimit(userData.user.id)) {
+    return NextResponse.json(
+      {
+        error:
+          "Terlalu banyak pertanyaan dalam waktu singkat. " +
+          `Tunggu satu menit (maksimal ${RATE_LIMIT_PER_MINUTE} pertanyaan per menit).`,
+      },
+      { status: 429 },
+    )
+  }
+
   // ── Tanya AI, jalankan query, susun jawaban ────────────────────
   try {
     const result = await answerQuestion(question.trim(), async (sql) => {
@@ -96,6 +140,12 @@ export async function POST(request: Request) {
         // Pesan dari exec_ai_query sengaja dibuat ramah user (mis.
         // "Hanya query SELECT yang diizinkan"), jadi apa adanya
         // sudah informatif.
+        //
+        // SQL-nya ikut dicatat di log server (bukan dikirim ke browser)
+        // supaya kegagalan seperti "function to_char(text, unknown) does
+        // not exist" bisa langsung dilihat query mana yang menyebabkannya —
+        // tanpa itu, kita cuma menebak dari pesan error Postgres.
+        console.error("[ai/ask] SQL gagal:", { sql, error: error.message })
         throw new AiError(error.message, "sql")
       }
       return (data as Array<Record<string, unknown>>) ?? []

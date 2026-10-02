@@ -1,4 +1,5 @@
 import { useEffect } from "react"
+import type { View } from "@/components/templates/dashboard-layout"
 
 export type Shortcut = {
   key: string
@@ -15,11 +16,13 @@ export const KEYBOARD_SHORTCUTS: Shortcut[] = [
   { key: "e", alt: true, description: "Buka Tab Equipment" },
   { key: "h", alt: true, description: "Buka Tab Histories" },
   { key: "m", alt: true, description: "Buka Tab Monitoring" },
+  { key: "s", alt: true, description: "Buka Tab SKR (Sisa Kiriman)" },
+  { key: "p", alt: true, description: "Buka Tab Pengiriman" },
   { key: "t", alt: true, description: "Ganti Tema (Dark/Light)" },
 ]
 
 export function useKeyboardShortcuts(
-  onViewChange?: (view: 'dashboard' | 'equipment' | 'maintenance' | 'monitoring') => void,
+  onViewChange?: (view: View) => void,
   onToggleTheme?: () => void
 ) {
   useEffect(() => {
@@ -51,6 +54,14 @@ export function useKeyboardShortcuts(
       // Alt + M : Monitoring
       if (e.altKey && e.key.toLowerCase() === "m" && onViewChange) {
         e.preventDefault(); onViewChange("monitoring");
+      }
+      // Alt + S : SKR
+      if (e.altKey && e.key.toLowerCase() === "s" && onViewChange) {
+        e.preventDefault(); onViewChange("skr");
+      }
+      // Alt + P : Pengiriman
+      if (e.altKey && e.key.toLowerCase() === "p" && onViewChange) {
+        e.preventDefault(); onViewChange("pengiriman");
       }
       // Alt + T : Tema
       if (e.altKey && e.key.toLowerCase() === "t" && onToggleTheme) {

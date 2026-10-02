@@ -32,9 +32,14 @@ terdaftar yang bisa mengakses:
 - **Penguncian data (disarankan)**: jalankan `supabase/sql/auth_lockdown.sql`
   di SQL Editor (sekali, aman diulang) supaya API Supabase menolak pembacaan
   tanpa login — tanpa ini, kunci anon yang tertanam di browser masih bisa
-  dipakai menarik data langsung lewat API. Setelah script dijalankan, cron
-  reminder wajib memakai `SUPABASE_SERVICE_ROLE_KEY` (lihat Konfigurasi
-  Environment).
+  dipakai menarik data langsung lewat API. Tabel yang dikunci: `equipment`,
+  `maintenance_histories`, `service_logs`, `armada_outbound`, `skr_detail`,
+  dan `customers` — tabel terakhir ini PII (nomor telepon & NIK salesman)
+  dikunci **per-kolom**: `authenticated` hanya boleh membaca `customer_id` +
+  `customer_name`, jadi tidak ada jalur baca (dashboard, chatbot Tanya Data,
+  atau query manual) yang bisa menarik kolom PII-nya. Setelah script
+  dijalankan, cron reminder wajib memakai `SUPABASE_SERVICE_ROLE_KEY` (lihat
+  Konfigurasi Environment).
 
 ### Dashboard
 Ringkasan satu layar untuk inventaris unit, ketersediaan, biaya, dan jadwal servis.
@@ -119,6 +124,10 @@ jawaban supaya jawabannya selalu bisa diperiksa.
 - **View ringkasan**: `ai_skr_bulanan`, `ai_skr_mom` (bandingkan bulan ini
   vs bulan lalu), `ai_skr_alasan`, `ai_biaya_bulanan` — angka sudah
   bertipe numerik, jadi model tidak salah menjumlahkan.
+- **Riwayat percakapan** tersimpan di `localStorage` sehingga reload atau
+  pindah halaman tidak menghapus konteks — ada tombol **Bersihkan** di
+  kepala panel untuk menghapusnya. Kuota dibatasi 8 pertanyaan per menit
+  per user (429 bila lewat) supaya kuota Gemini tidak habis oleh spam.
 - **Keamanan**: query hanya bisa `SELECT`, dibatasi 200 baris dan timeout
   8 detik. Dijalankan dengan **JWT milik user yang sedang login**, bukan
   service role, sehingga RLS dari `auth_lockdown.sql` tetap berlaku —
@@ -225,6 +234,19 @@ GOOGLE_API_KEY=<gemini-api-key>
 GEMINI_MODEL=gemini-flash-latest
 ```
 
+Variabel cron reminder email (Vercel Cron, `api/cron/service-reminder`):
+
+```bash
+# WAJIB — endpoint menolak semua request tanpa header ini (fail-closed).
+# Isi dengan string acak panjang; Vercel Cron mengirimkannya otomatis
+# sebagai `Authorization: Bearer <CRON_SECRET>`.
+CRON_SECRET=<string-acak-panjang>
+
+RESEND_API_KEY=<resend-api-key>      # wajib agar email terkirim
+REMINDER_EMAIL_TO=<penerima>          # opsional
+REMINDER_EMAIL_CC=<cc-koma-koma>      # opsional
+```
+
 Dua variabel pertama wajib; service-role baru dibutuhkan setelah akses data
 dikunci khusus user terdaftar (sebelum itu cron masih berjalan dengan klien
 anon). Klien Supabase dibuat secara **lazy** dan defensif: jika env belum
@@ -261,7 +283,10 @@ untuk environment Production dan Preview.
   `distribution_channel`, `qty`, `nilai`, dst.
 
 View `customers_ringkas` mengekspos hanya `customer_id` + `customer_name`
-(tanpa nomor telepon / NIK sales) untuk kebutuhan join nama toko.
+(tanpa nomor telepon / NIK sales) untuk kebutuhan join nama toko. Akses
+langsung ke `customers` untuk role `authenticated` sendiri juga dibatasi
+per-kolom oleh `auth_lockdown.sql`, jadi kedua kolom PII tersebut tidak
+bisa dibaca dari mana pun kecuali lewat service role.
 
 ### Import harian (upsert)
 
@@ -330,6 +355,8 @@ Pola **Atomic Design** dipakai konsisten: `ui` → `molecules` → `organisms` �
 | `Alt` + `M` | Buka tab Monitoring Servis |
 | `Alt` + `E` | Buka tab Equipment |
 | `Alt` + `H` | Buka tab Histories |
+| `Alt` + `S` | Buka tab SKR (Sisa Kiriman) |
+| `Alt` + `P` | Buka tab Pengiriman |
 | `Alt` + `T` | Ganti tema terang/gelap |
 
 ---

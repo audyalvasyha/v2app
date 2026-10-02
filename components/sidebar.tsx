@@ -4,8 +4,10 @@ import React, { useEffect, useState } from "react"
 import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, LogOut, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/utils/supabase"
-
-type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman'
+// Sumber tunggal tipe View — sebelumnya union ini diduplikasi di tiga
+// berkas (layout, sidebar, hook) dan bisa berbeda tanpa disadari.
+// `import type` sehingga tidak menambah siklus impor runtime.
+import type { View } from "@/components/templates/dashboard-layout"
 
 interface SidebarProps {
   activeView: View;

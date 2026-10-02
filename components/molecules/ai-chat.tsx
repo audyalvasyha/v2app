@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import { ChevronDown, Loader2, Send, Sparkles, X } from "lucide-react"
+import { ChevronDown, Eraser, Loader2, Send, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AI_SUGGESTIONS } from "@/lib/ai/schema-client"
@@ -35,9 +35,43 @@ interface ChatMessage {
   error?: boolean
 }
 
+/**
+ * Riwayat percakapan disimpan di localStorage.
+ *
+ * Panel ini muncul di banyak halaman dan sering dibuka-tutup sambil
+ * bekerja; tanpa penyimpanan, setiap reload menghapus konteks yang
+ * barusan dibangun — padahal jawaban AI biasanya justru akan dipakai
+ * ulang ("yang tadi itu angkanya berapa?").
+ *
+ * Batas 60 pesan: JSON obrolan ikut ke bundle storage, dan pesan lama
+ * memang sudah kehilangan nilai (angkanya sudah basi / sudah terlihat).
+ * Gagal menulis (mode privat, kuota penuh) diabaikan diam-diam —
+ * riwayat hilang itu sayang, tapi bukan alasan untuk menggagalkan chat.
+ */
+const STORAGE_KEY = "midaa.ai-chat.v1"
+const MAX_STORED_MESSAGES = 60
+
+function loadStoredMessages(): ChatMessage[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as ChatMessage[]) : []
+  } catch {
+    return []
+  }
+}
+
 export function AIChat() {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  // Riwayat dibaca SETELAH mount, bukan dari lazy initializer useState.
+  // Kalau komponen ikut di-render saat SSR, initializer tidak melihat
+  // localStorage lalu state awalnya kosong — dan efek penyimpanan akan
+  // menimpa riwayat yang tersimpan dengan array kosong. Bendera `loaded`
+  // menahan tulisan sampai pembacaan benar-benar selesai.
+  const [historyLoaded, setHistoryLoaded] = useState(false)
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [expandedSql, setExpandedSql] = useState<Record<string, boolean>>({})
@@ -54,6 +88,36 @@ export function AIChat() {
     if (open) inputRef.current?.focus()
   }, [open])
 
+  // Simpan setiap kali percakapan berubah. `slice` di sini bukan sekadar
+  // penghemat ruang: ia juga membatasi ukuran tulisan berikutnya, jadi
+  // riwayat tidak pernah tumbuh tanpa batas.
+  useEffect(() => {
+    if (!historyLoaded) return
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(messages.slice(-MAX_STORED_MESSAGES)),
+      )
+    } catch {
+      // Storage penuh / diblokir: riwayat tidak tersimpan, bukan error.
+    }
+  }, [messages, historyLoaded])
+
+  useEffect(() => {
+    setMessages(loadStoredMessages())
+    setHistoryLoaded(true)
+  }, [])
+
+  const clearHistory = useCallback(() => {
+    setMessages([])
+    setExpandedSql({})
+    try {
+      window.localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // Aman diabaikan — state di memori sudah dikosongkan.
+    }
+  }, [])
+
   const ask = useCallback(async (question: string) => {
     const trimmed = question.trim()
     if (!trimmed || loading) return
@@ -61,12 +125,19 @@ export function AIChat() {
     setInput("")
     setLoading(true)
 
+    // Id placeholder dibuat SEBELUM kirim dan dipakai untuk mencocokkan
+    // jawaban. Versi lama mencocokkan berdasarkan `content === ""` —
+    // dengan riwayat yang dipulihkan dari localStorage, satu pesan
+    // kosong lama bisa tertimpa jawaban pertanyaan yang sama sekali
+    // berbeda.
+    const assistantId = `a-${Date.now()}`
+
     // Pesan user langsung tampil supaya terasa responsif, walau
     // jawabannya masih beberapa detik lagi.
     setMessages((prev) => [
       ...prev,
       { id: `u-${Date.now()}`, role: "user", content: trimmed },
-      { id: `a-${Date.now()}`, role: "assistant", content: "" },
+      { id: assistantId, role: "assistant", content: "" },
     ])
 
     try {
@@ -95,15 +166,19 @@ export function AIChat() {
 
       setMessages((prev) =>
         prev.map((m) =>
-          m.content === "" && m.role === "assistant"
+          m.id === assistantId
             ? { ...m, content: payload.answer, result: payload as ChatResult }
             : m,
         ),
       )
     } catch (error) {
+      // Pertanyaan dikembalikan ke kolom input: kalau jawabannya error,
+      // user biasanya mau mengulang atau merapikan kalimatnya — tanpa ini
+      // dia harus mengetik ulang dari nol (input sudah dikosongkan di awal).
+      setInput(trimmed)
       setMessages((prev) =>
         prev.map((m) =>
-          m.content === "" && m.role === "assistant"
+          m.id === assistantId
             ? {
                 ...m,
                 content:
@@ -147,6 +222,18 @@ export function AIChat() {
               <p className="text-sm font-semibold leading-tight">Tanya Midaa</p>
               <p className="text-xs text-muted-foreground">Jawaban dihitung dari database</p>
             </div>
+            {messages.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={clearHistory}
+                title="Hapus seluruh riwayat percakapan"
+                className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Eraser className="h-3.5 w-3.5" /> Bersihkan
+              </Button>
+            )}
           </div>
 
           {/* Riwayat */}
@@ -234,7 +321,12 @@ function MessageBubble({
     )
   }
 
-  if (loading) {
+  // Spinner hanya untuk pesan jawaban yang MASIH kosong (placeholder
+  // pertanyaan yang sedang dikirim). Kondisi lama memeriksa `loading`
+  // saja, sehingga seluruh jawaban yang sudah ada ikut berubah jadi
+  // "Menghitung…" setiap kali ada pertanyaan baru — bug yang kini makin
+  // sering terlihat karena riwayat dipulihkan dari localStorage.
+  if (loading && !message.content && !message.error) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -247,9 +339,18 @@ function MessageBubble({
     <div className="space-y-2">
       <p className={message.error ? "text-sm text-destructive" : "text-sm"}>{message.content}</p>
 
-      {message.result && message.result.rows.length > 0 && (
+      {message.result && (
         <>
-          <ResultTable rows={message.result.rows} />
+          {message.result.rows.length > 0 ? (
+            <ResultTable rows={message.result.rows} />
+          ) : (
+            // Query sukses tapi 0 baris: bedakan dari kegagalan. Tanpa
+            // pesan ini, panel terlihat seolah-olah tidak menjawab apa pun.
+            <p className="rounded-md border border-border bg-card px-2 py-1.5 text-xs text-muted-foreground">
+              Query berhasil dijalankan — tidak ada baris yang cocok dengan
+              pertanyaan ini.
+            </p>
+          )}
 
           {message.result.sql && (
             <div>

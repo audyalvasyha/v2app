@@ -18,9 +18,10 @@ import {
  * - RESEND_API_KEY     : API key Resend (wajib agar email terkirim)
  * - REMINDER_EMAIL_TO  : alamat penerima (opsional, default audialfasha@gmail.com)
  * - REMINDER_EMAIL_CC  : alamat CC, dipisah koma (opsional, mis. "a@x.com, b@x.com")
- * - CRON_SECRET        : bila diisi, request cron wajib membawa
+ * - CRON_SECRET        : WAJIB. Endpoint menolak semua request tanpa
  *                        header `Authorization: Bearer <CRON_SECRET>`
- *                        (Vercel Cron mengirimkannya otomatis).
+ *                        (fail-closed). Vercel Cron mengirimkannya otomatis
+ *                        setelah env var ini diisi.
  * - SUPABASE_SERVICE_ROLE_KEY : bila diisi, kueri data memakai klien
  *                        service-role (bypass RLS). Wajib setelah
  *                        supabase/sql/auth_lockdown.sql dijalankan, karena
@@ -37,14 +38,40 @@ const SERVICE_LOG_COLS =
 const RECIPIENT_FALLBACK = "audialfasha@gmail.com"
 const FROM = "Midaa Reminder <onboarding@resend.dev>"
 
+/**
+ * Escape karakter HTML agar nilai dari database (mis. nomor plat) tidak
+ * bisa menyuntikkan markup ke dalam email. Data lapangan bebas format,
+ * dan satu plat berisi `<` atau `&` sudah cukup untuk merusak atau
+ * menyuntikkan konten ke email yang dikirim atas nama kita.
+ */
+function esc(value: unknown): string {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+}
+
 export async function GET(request: Request) {
-    // Cukup aman untuk cron: hanya Vercel (dan pemilik secret) yang tahu secret.
+    // Fail-closed: tanpa CRON_SECRET, endpoint ini terbuka untuk siapa pun
+    // yang tahu URL-nya — dan endpoint ini mengirim email sungguhan, jadi
+    // bisa dipakai untuk membanjiri penerima dan menghabiskan kuota Resend.
+    // Vercel Cron mengirim header Authorization otomatis bila CRON_SECRET
+    // di-set di Project → Settings → Environment Variables.
     const secret = process.env.CRON_SECRET
-    if (secret) {
-        const auth = request.headers.get("authorization")
-        if (auth !== `Bearer ${secret}`) {
-            return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 })
-        }
+    if (!secret) {
+        return NextResponse.json(
+            {
+                error:
+                    "CRON_SECRET belum di-set, jadi endpoint ini dikunci. " +
+                    "Isi CRON_SECRET di Vercel → Settings → Environment Variables.",
+            },
+            { status: 503 },
+        )
+    }
+    if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+        return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 })
     }
 
     try {
@@ -114,9 +141,9 @@ export async function GET(request: Request) {
                     .filter((s) => s !== "—")
                     .join(" · ")
                 return `<tr>
-  <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600">${r.eq.license_plate ?? "-"}</td>
-  <td style="padding:8px 12px;border-bottom:1px solid #eee"><span style="background:${bg};color:${color};padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600">${r.status.label}</span></td>
-  <td style="padding:8px 12px;border-bottom:1px solid #eee">${detail}</td>
+  <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600">${esc(r.eq.license_plate) || "-"}</td>
+  <td style="padding:8px 12px;border-bottom:1px solid #eee"><span style="background:${bg};color:${color};padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600">${esc(r.status.label)}</span></td>
+  <td style="padding:8px 12px;border-bottom:1px solid #eee">${esc(detail)}</td>
   <td style="padding:8px 12px;border-bottom:1px solid #eee;color:#666">${Number(r.eq.last_odometer ?? 0).toLocaleString("id-ID")} km</td>
 </tr>`
             })
