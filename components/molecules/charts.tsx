@@ -9,3 +9,4 @@
 export { default as CostChart } from "@/components/organisms/cost-chart"
 export { default as UnitCostRankingChart } from "@/components/organisms/unit-cost-ranking-chart"
 export { SkrMonthChart } from "@/components/molecules/skr-month-chart"
+export { BanMonthChart } from "@/components/molecules/ban-month-chart"

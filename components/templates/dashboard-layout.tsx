@@ -4,7 +4,7 @@ import { Header } from "@/components/header"
 import { Sidebar } from "@/components/sidebar"
 import type { ThemePreference } from "@/hooks/use-theme"
 
-export type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman'
+export type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman' | 'ban'
 
 const SIDEBAR_COLLAPSED_KEY = "fleet-sidebar-collapsed"
 

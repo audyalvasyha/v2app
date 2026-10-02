@@ -1,7 +1,7 @@
 # Transport Management System — Midaa
 
 Dasbor operasional untuk mengelola armada kendaraan: inventaris unit, riwayat perbaikan,
-pengingat servis, sisa kiriman (SKR), dan pengiriman outbound — agar tim lapangan dan
+analisa ban, pengingat servis, sisa kiriman (SKR), dan pengiriman outbound — agar tim lapangan dan
 tim administrasi membaca angka yang sama.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js)
@@ -71,6 +71,29 @@ Ringkasan satu layar untuk inventaris unit, ketersediaan, biaya, dan jadwal serv
 - Rentang waktu siap pakai (30 hari, 3 bulan, 6 bulan, semua waktu) dan pengurutan.
 - Dikelompokkan per bulan dengan subtotal, bar biaya relatif, dan penanda *outlier*.
 - Ringkasan total periode.
+
+### Analisa Ban
+Menu khusus pengeluaran ban per unit. Ban tidak punya tabel sendiri di
+database — pencatatannya ikut pada riwayat perbaikan, di kolom uraian
+(`maintenance_histories.nama_barang_atau_jasa`), jadi semua yang tampil
+di sini diturunkan dari teks catatan tersebut:
+
+- **Kartu ringkas**: biaya ban, jumlah entri, perkiraan jumlah ban
+  terpasang (+ rata-rata biaya per ban), dan unit terdampak.
+- **Tren bulanan**: grafik biaya ban per bulan; bulan dengan biaya
+  tertinggi disorot penuh, sisanya diredupkan.
+- **5 unit dengan biaya ban tertinggi**: jumlah entri, jumlah ban, dan
+  tanggal ganti terakhir.
+- **Chip filter berhitung**: jenis pekerjaan (ganti / perbaikan-roker /
+  aksesori / lainnya) dan posisi roda (depan / belakang / serap /
+  campuran).
+- **Tabel rincian**: tanggal, unit, uraian, badge jenis & posisi, jumlah
+  ban, dan biaya dengan bar relatif — plus export CSV dan paginasi.
+- **Cara membacanya jujur**: catatan yang tidak menuliskan detailnya
+  (mis. hanya "GANTI BAN") masuk hitungan "lainnya" dan tidak dikasih
+  posisi. Jumlah ban dibaca dari angka yang menempel pada satuan
+  ("2PCS", "3 BH"), dan angka di atas 10 diabaikan supaya ukuran ban
+  pada catatan ("PASANG BAN 175-65-14") tidak terhitung sebagai 175 ban.
 
 ### SKR — Sisa Kiriman
 Dasbor sisa kiriman dari tabel `skr_detail` (parsing tanggal & nilai dipindah ke database
@@ -224,7 +247,7 @@ jawaban supaya jawabannya selalu bisa diperiksa.
 | Data | Supabase (PostgreSQL) via `@supabase/supabase-js` |
 | State | React Context + hooks kustom |
 | Ikon | Lucide React |
-| Uji | Vitest (parser CSV) |
+| Uji | Vitest (parser CSV & pembacaan uraian ban) |
 | Hosting | Vercel |
 
 ---
@@ -406,6 +429,8 @@ lib/
   skr-analytics.ts      # Agregasi SKR: totals, ranking, tren harian, per toko
   skr-csv.ts            # Parser CSV + pemetaan header + template
   skr-csv.test.ts       # Unit test parser (Vitest)
+  ban-analytics.ts      # Baca catatan ban dari uraian teks + agregasinya
+  ban-analytics.test.ts # Unit test pembacaan uraian ban (Vitest)
   ai/
     schema.ts          # Deskripsi DB untuk prompt AI (server-only)
     schema-client.ts   # Saran pertanyaan (aman untuk browser)
@@ -437,6 +462,7 @@ Pola **Atomic Design** dipakai konsisten: `ui` → `molecules` → `organisms` �
 | `Alt` + `H` | Buka tab Histories |
 | `Alt` + `S` | Buka tab SKR (Sisa Kiriman) |
 | `Alt` + `P` | Buka tab Pengiriman |
+| `Alt` + `B` | Buka tab Analisa Ban |
 | `Alt` + `T` | Ganti tema terang/gelap |
 
 ---

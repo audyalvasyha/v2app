@@ -52,6 +52,10 @@ const OutboundTable = dynamic(
   () => import("@/components/organisms/outbound-table").then((m) => m.OutboundTable),
   { ssr: false, loading: ViewFallback },
 )
+const BanAnalysis = dynamic(
+  () => import("@/components/organisms/ban-analysis").then((m) => m.BanAnalysis),
+  { ssr: false, loading: ViewFallback },
+)
 import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
 import { daysInMonth } from "@/lib/skr-analytics"
 import { startOfZonedDayMonthsAgo, zonedParts } from "@/lib/format"
@@ -568,6 +572,7 @@ function DashboardContent() {
     about: { title: 'Tentang Aplikasi', desc: 'Kisah di balik pengembangan Fleet Management System v2.' },
     skr: { title: 'SKR', desc: 'Ringkasan sisa kiriman per armada dan sales, beserta bobot nilai serta alasan POD.' },
     pengiriman: { title: 'Pengiriman', desc: 'Pantau armada outbound: nomor polisi, jam keluar, jam kembali, dan durasi tempuh.' },
+    ban: { title: 'Analisa Ban', desc: 'Rincian pengeluaran ban per unit: tren bulanan, unit termahal, dan catatan setiap penggantian.' },
   }
 
   // Title tab browser mengikuti menu aktif — rapi di riwayat tab & bookmark.
@@ -613,8 +618,9 @@ function DashboardContent() {
               {headerInfo[activeView].desc}
             </p>
 
-            {/* Sembunyikan SearchBar di mode Dashboard & menu Ekspedisi yang belum ada datanya */}
-            {activeView !== 'dashboard' && activeView !== 'skr' && activeView !== 'pengiriman' && (
+            {/* Sembunyikan SearchBar di mode Dashboard & menu Ekspedisi yang belum ada datanya.
+                Analisa Ban punya kotak pencarian sendiri di dalam halamannya. */}
+            {activeView !== 'dashboard' && activeView !== 'skr' && activeView !== 'pengiriman' && activeView !== 'ban' && (
               <SearchBar
                 filters={filters}
                 onFiltersChange={handleSearchFilterChange}
@@ -700,6 +706,17 @@ function DashboardContent() {
             dateTo={outboundRange.to}
             onDateRangeChange={handleOutboundRangeChange}
             isFetching={isOutboundFetching}
+          />
+        )}
+
+        {activeView === 'ban' && (
+          // Data ban tidak punya tabel sendiri: menu ini membaca riwayat
+          // perbaikan yang uraiannya menyebut ban, jadi cukup data yang sudah
+          // dimuat dashboard — tanpa query tambahan.
+          <BanAnalysis
+            histories={histories}
+            isLoading={isLoading}
+            error={error}
           />
         )}
 
