@@ -1,21 +1,29 @@
 import { AI_SCHEMA_DOC } from "./schema"
+import {
+  AI_PERSONA,
+  buildHistoryBlock,
+  buildMemoryBlock,
+  type ConversationTurn,
+} from "./persona"
 
 /**
  * Integrasi Gemini untuk chatbot analitik.
  *
  * Dua tahap, dan itu bukan gaya-gayaan:
- *
- *   Tahap 1 — pertanyaan user → SQL. Gemini hanya melihat SKEMA,
+ * * Tahap 1 — pertanyaan user -> SQL. Gemini hanya melihat SKEMA,
  *            tidak melihat data. Jadi model tidak bisa mengarang
  *            angka; dia cuma memilih query.
  *
- *   Tahap 2 — hasil query → jawaban naratif. Gemini baru melihat
+ *   Tahap 2 — hasil query -> jawaban naratif. Gemini baru melihat
  *            angka ASLI hasil eksekusi. Jadi kalimatnya dijamin
  *            berbasis data, bukan tebakan.
  *
  * Kalau satu tahap dilewati, kesalahan yang paling mungkin
  * adalah "angka yang terlihat sangat meyakinkan tapi sepenuhnya
  * fiktif" — dan itu fatal untuk dasbor yang dipakai orang beda.
+ *
+ * Tahap 2 sekaligus menulis JSON berisi jawaban + butir memori baru,
+ * jadi ekstraksi memori tidak memakai panggilan model tambahan.
  *
  * Sengaja memakai `fetch` bawaan Node, bukan SDK Google, supaya
  * tidak menambah dependency di aplikasi yang sekarang sudah irit.
@@ -47,8 +55,7 @@ const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
  * Nama di sini harus ada di daftar Models API; nama yang salah akan
  * dibalas 404 dan percobaan itu mubazir. `gemini-flash-latest` dan
  * `gemini-flash-lite-latest` adalah alias resmi yang ikut naik versi
- * sendiri, jadi keduanya tidak perlu diubah saat Google merilis model
- * baru. Semua nama di bawah sudah dicek terhadap Models API.
+ * sendiri, jadi keduanya tidak perlu diubah saat Google rilis model baru.
  */
 const FALLBACK_MODELS = [
   "gemini-flash-latest",
@@ -76,6 +83,14 @@ export interface AiQueryResult {
   rows: Array<Record<string, unknown>>
   /** Jawaban naratif dalam Bahasa Indonesia. */
   answer: string
+  /**
+   * Butir memori yang layak diingat dari percakapan barusan.
+   *
+   * Dikembalikan, bukan langsung disimpan, supaya route handler yang
+   * memutuskan cara menyimpannya — sehingga ada jalur untuk memfilter,
+   * menggabungkan, atau mengabaikan tanpa mengubah lapisan model.
+   */
+  remembered: string[]
 }
 
 export class AiError extends Error {
@@ -116,13 +131,29 @@ interface GeminiResponse {
 
 /** Batas token keluaran per tahap — lihat penjelasan di callGeminiOnce. */
 const MAX_TOKENS_SQL = 1024
-const MAX_TOKENS_NARASI = 512
+// Dinaikkan dari 512 karena tahap 2 sekarang menulis JSON berisi jawaban
+// PLUS daftar memori baru — dua field itu tidak muat di 512 token begitu
+// kalimatnya mulai membawa penjelasan.
+const MAX_TOKENS_NARASI = 700
+
+/**
+ * Temperature per tahap.
+ *
+ * Tahap SQL tetap 0: hasil query harus bisa direproduksi, dan prompt
+ * yang sedikit beda tidak boleh mengubah kolom yang dipilih.
+ *
+ * Tahap narasi memakai 0.7 supaya jawaban terasa hidup dan santai.
+ * Angka di dalam jawaban sudah terkunci oleh data, jadi keragaman di
+ * sini hanya memengaruhi kalimat — bukan isi faktualnya.
+ */
+const TEMPERATURE_SQL = 0
+const TEMPERATURE_NARASI = 0.7
 
 /**
  * Baris maksimal yang dikirim ke tahap narasi.
  *
  * Query boleh mengembalikan 200 baris (batas `exec_ai_query`), tapi
- * mengirim semuanya ke model itu boros besar: 200 baris × belasan kolom
+ * mengirim semuanya ke model itu boros besar: 200 baris x belasan kolom
  * bisa memakan puluhan ribu token, padahal untuk menulis ringkasan
  * empat kalimat cukup beberapa baris pertama. Tabel lengkapnya tetap
  * ditampilkan di UI — yang dibatasi hanya yang dibaca model.
@@ -130,26 +161,20 @@ const MAX_TOKENS_NARASI = 512
 const MAX_ROWS_FOR_NARRATION = 40
 
 /**
- * Panggil Gemini dan kembalikan teks balasan.
- *
- * Sengaja `generationConfig.temperature = 0`: untuk=text-to-SQL
- * determinisme lebih berharga daripada keragaman bahasa, karena
- * query yang sama harus menghasilkan SQL yang sama.
- */
-/**
  * Panggil satu model sekali.
  *
- * `maxOutputTokens` sengaja diminta per-panggilan, bukan angka besar
- * yang sama untuk semua: tahap SQL hanya menghasilkan satu kalimat SQL,
- * tahap narasi menghasilkan maksimal empat kalimat. Memasang 2048 di
- * keduanya membiarkan model menulis jauh lebih banyak daripada yang
- * dibutuhkan — dan di paket gratis Google, token keluaran ikut dihitung
- * terhadap kuota.
+ * `maxOutputTokens` dan `temperature` sengaja diminta per-panggilan,
+ * bukan angka global yang sama untuk semua. Tahap SQL butuh satu
+ * kalimat SQL yang deterministik; tahap narasi butuh paragraf pendek
+ * yang terasa manusiawi. Memasang batas besar di keduanya membiarkan
+ * model menulis jauh lebih banyak daripada yang dibutuhkan — dan di
+ * paket gratis Google, token keluaran ikut dihitung terhadap kuota.
  */
 async function callGeminiOnce(
   prompt: string,
   model: string,
   maxOutputTokens: number,
+  temperature: number,
 ): Promise<string> {
   const key = getApiKey()
 
@@ -160,7 +185,7 @@ async function callGeminiOnce(
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0, maxOutputTokens },
+        generationConfig: { temperature, maxOutputTokens },
       }),
     })
   } catch {
@@ -228,7 +253,11 @@ async function callGeminiOnce(
  * sehat. Dengan begitu fitur tidak mati total hanya karena satu endpoint
  * sedang padat.
  */
-async function callGemini(prompt: string, maxOutputTokens: number): Promise<string> {
+async function callGemini(
+  prompt: string,
+  maxOutputTokens: number,
+  temperature: number,
+): Promise<string> {
   const candidates = Array.from(
     new Set([MODEL, ...FALLBACK_MODELS].filter(Boolean)),
   )
@@ -237,7 +266,7 @@ async function callGemini(prompt: string, maxOutputTokens: number): Promise<stri
 
   for (const model of candidates) {
     try {
-      return await callGeminiOnce(prompt, model, maxOutputTokens)
+      return await callGeminiOnce(prompt, model, maxOutputTokens, temperature)
     } catch (error) {
       // Hanya kondisi sementara yang layak dicoba ke model lain.
       // Key ditolak akan gagal di semua percobaan, jadi langsung dilempar
@@ -272,7 +301,20 @@ export interface RunQueryFn {
 }
 
 /**
- * Dua tahap: pertanyaan → SQL → (data asli) → jawaban.
+ * Konteks tambahan yang boleh ikut dipertimbangkan saat menjawab.
+ *
+ * Dua sumber, sengaja dipisah karena sifatnya berbeda: `history`
+ * membawa percakapan yang sedang berjalan (singkat, cepat basi),
+ * sedangkan `memories` membawa catatan jangka panjang user (bertahan
+ * lintas sesi dan lintas perangkat).
+ */
+export interface QuestionContext {
+  history?: ConversationTurn[]
+  memories?: string[]
+}
+
+/**
+ * Dua tahap: pertanyaan -> SQL -> (data asli) -> jawaban.
  *
  * `runQuery` dipakai untuk mengeksekusi SQL yang dibuat model.
  * Implementasi Dependency Injection-nya ada di route handler, yang
@@ -282,16 +324,30 @@ export interface RunQueryFn {
 export async function answerQuestion(
   question: string,
   runQuery: RunQueryFn,
+  context: QuestionContext = {},
 ): Promise<AiQueryResult> {
-  // ── Tahap 1: SQL ──────────────────────────────────────────────
+  // ── Tahap 1: SQL ─────────────────────────────────────────────
+  //
+  // Riwayat percakapan ikut di sini, bukan di tahap 2: pertanyaan
+  // lanjutan seperti "yang bulan lalu berapa?" hanya bisa jadi SQL
+  // yang benar kalau model tahu apa yang dimaksud "yang".
+  //
+  // Memori jangka panjang SENGAJA tidak ikut di tahap ini. Isinya
+  // kalimat_prefensi user, bukan filter query, dan menambahkannya
+  // hanya quiser menambah token tanpa memperbaiki SQL.
+  const historyBlock = buildHistoryBlock(context.history ?? [])
   const sqlResponse = await callGemini(
-    `${AI_SCHEMA_DOC}
-
-Permintaan user: ${question}
-
-Balas HANYA dengan JSON seperti ini, tanpa penjelasan lain:
-{"sql": "<query select>", "ringkasan": "<1 kalimat tentang apa yang dicek>"}`,
+    [
+      AI_SCHEMA_DOC,
+      historyBlock,
+      "",
+      `Permintaan user: ${question}`,
+      "",
+      "Balas HANYA dengan JSON seperti ini, tanpa penjelasan lain:",
+      '{"sql": "<query select>", "ringkasan": "<1 kalimat tentang apa yang dicek>"}',
+    ].join("\n"),
     MAX_TOKENS_SQL,
+    TEMPERATURE_SQL,
   )
 
   const parsed = extractJson<{ sql?: unknown; ringkasan?: unknown }>(sqlResponse)
@@ -307,6 +363,7 @@ Balas HANYA dengan JSON seperti ini, tanpa penjelasan lain:
         typeof parsed?.ringkasan === "string" && parsed.ringkasan.trim()
           ? parsed.ringkasan.trim()
           : "Data untuk pertanyaan itu belum tersedia di dasbor ini.",
+      remembered: [],
     }
   }
 
@@ -327,8 +384,9 @@ Balas HANYA dengan JSON seperti ini, tanpa penjelasan lain:
       sql,
       rows,
       answer:
-        "Query sudah dijalankan tapi tidak ada baris yang cocok. " +
-        "Coba longgarkan rentang tanggal, atau periksa apakah filter yang dipakai terlalu spesifik.",
+        "Sudah aku cek, tapi tidak ada baris yang cocok. " +
+        "Kalau biasanya ada, mungkin rentang tanggalnya kepilih terlalu sempit — coba longgarkan sedikit.",
+      remembered: [],
     }
   }
 
@@ -342,26 +400,53 @@ Balas HANYA dengan JSON seperti ini, tanpa penjelasan lain:
   // Baris juga dipotong ke MAX_ROWS_FOR_NARRATION — lihat alasannya di
   // definisi konstanta itu.
   const rowsForModel = rows.slice(0, MAX_ROWS_FOR_NARRATION)
-  const answer = await callGemini(
-    `Kamu menulis jawaban singkat untuk operator armada trucking "Midaa", dalam BAHASA INDONESIA.
 
-User bertanya: ${question}
-
-Data hasil query database (JSON):
-${JSON.stringify(rowsForModel)}
-
-Tulis jawaban:
-- Maksimal 4 kalimat pendek. Langsung ke pokoknya, tanpa basa-basi.
-- Pakai HANYA angka yang ada di JSON di atas. Kalau tidak ada, katakan
-  tidak ada — jangan menebak.
-- Sebut penyebabnya kalau polanya terlihat (mis. naik karena jumlah
-  dokumen naik, atau karena nilai per dokumen naik).
-- Nominal rupiah ditulis dengan titik ribuan (contoh: 1.500.000).
-- Jangan mengulang SQL. Jangan pakai markdown.
-
-Balas hanya teks jawaban.`,
+  // Prompt dirakit dengan array + join, bukan template literal: teksnya
+  // panjang dan penuh kutip, jadi bentuknya lebih mudah diawasi dan tidak
+  // ada backtick yang bisa menutup literal lebih awal.
+  const raw = await callGemini(
+    [
+      AI_PERSONA,
+      "",
+      `User bertanya: ${question}`,
+      buildMemoryBlock(context.memories ?? []),
+      "",
+      "Data hasil query database (JSON):",
+      JSON.stringify(rowsForModel),
+      "",
+      "Balas HANYA dengan JSON, tanpa penjelasan lain:",
+      '{"jawaban": "<teks jawaban>", "ingat": ["<butir yang layak diingat>"]}',
+      "",
+      "Aturan untuk field \"ingat\":",
+      "- Isi hanya kalau user memberi hal yang tetap berlaku untuk percakapan",
+      "  berikutnya: preferensi (mis. \"selalu pakai rentang 3 bulan\"), istilah",
+      "  yang dia pakai untuk sesuatu, fokus bisnis, atau kebiasaan kerja.",
+      "- JANGAN simpan angka hasil query, nilai, atau tanggal — semuanya cepat basi.",
+      "- JANGAN simpan apa pun yang cuma berlaku untuk pertanyaan ini.",
+      "- Maksimal 2 butir, masing-masing satu kalimat pendek tanpa tanda kutip.",
+      "- Kalau tidak ada yang layak diingat, kirim array kosong.",
+    ].join("\n"),
     MAX_TOKENS_NARASI,
+    TEMPERATURE_NARASI,
   )
 
-  return { sql, rows, answer }
+  // Model kadang membalas teks biasa dan mengabaikan format JSON.
+  // Daripada membuang seluruh panggilan, teks mentah itu dipakai
+  // sebagai jawaban — isinya tetap kalimat yang benar, hanya bagian
+  // memorinya yang kosong.
+  const narration = extractJson<{ jawaban?: unknown; ingat?: unknown }>(raw)
+  const answer =
+    typeof narration?.jawaban === "string" && narration.jawaban.trim()
+      ? narration.jawaban.trim()
+      : raw
+
+  const remembered = Array.isArray(narration?.ingat)
+    ? narration.ingat
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter((item) => item.length >= 3)
+        .slice(0, 2)
+    : []
+
+  return { sql, rows, answer, remembered }
 }

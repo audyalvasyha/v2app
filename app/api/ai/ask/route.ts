@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 import { answerQuestion, AiError } from "@/lib/ai/gemini"
+import { requireUserClient } from "@/lib/ai/user-client"
+import { loadMemories, saveMemories, toPromptMemories } from "@/lib/ai/memory"
 
 /**
  * Endpoint chatbot analitik.
@@ -21,7 +22,7 @@ import { answerQuestion, AiError } from "@/lib/ai/gemini"
  * `authenticated_baca_*` tetap berlaku persis seperti di halaman lain.
  *
  * Praktisnya untuk Midaa: user login tetap hanya membaca baris yang
- * memang dia boleh baca, dan tidak ada jalur escalation，即使
+ * memang dia boleh baca, dan tidak ada jalur escalation, bahkan
  * token bocor.
  */
 
@@ -31,6 +32,18 @@ export const dynamic = "force-dynamic"
 // Batas question dipotong di sini supaya prompt tidak bisa dipakai
 // untuk menyelundupkan instruksi panjang.
 const MAX_QUESTION_LENGTH = 500
+
+/**
+ * Berapa pesan lampiran yang boleh dibawa sebagai konteks.
+ *
+ * Riwayat dikirim dari browser (yang menyimpannya di localStorage), jadi
+ * nilainya datang dari klien dan TIDAK boleh dipercaya mentah-mentah.
+ * Batas jumlah dan panjang per pesan wajib ditegakkan di sini — kalau
+ * tidak, satu request bisa menyelundupkan puluhan ribu karakter ke
+ * prompt dan menghabiskan kuota tanpa terlihat.
+ */
+const MAX_HISTORY_MESSAGES = 10
+const MAX_HISTORY_MESSAGE_LENGTH = 400
 
 // ── Rate limit per user ─────────────────────────────────────────
 // Kuota Gemini gratis sangat kecil (~15 request/menit), dan SETIAP
@@ -61,11 +74,35 @@ function withinRateLimit(userId: string): boolean {
   return true
 }
 
+/**
+ * Bersihkan riwayat percakapan dari klien.
+ *
+ * Riwayat dikirim browser sebagai JSON bebas bentuk, jadi isinya bisa
+ * apa saja: bukan array, role ngawur, atau teks raksasa. Yang lolos ke
+ * prompt hanya array berisi objek dengan role user/assistant dan teks
+ * yang sudah dipotong — sisanya dibuang diam-diam, bukan error, karena
+ * riwayat yang rusak tidak seharusnya membuat pertanyaan gagal.
+ */
+function parseHistory(raw: unknown): Array<{ role: "user" | "assistant"; content: string }> {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .filter((item) => item.role === "user" || item.role === "assistant")
+    .map((item) => ({
+      role: item.role as "user" | "assistant",
+      content: typeof item.content === "string" ? item.content.slice(0, MAX_HISTORY_MESSAGE_LENGTH) : "",
+    }))
+    .filter((item) => item.content.trim().length > 0)
+    .slice(-MAX_HISTORY_MESSAGES)
+}
+
 export async function POST(request: Request) {
   let question: unknown
+  let rawHistory: unknown = []
   try {
     const body = await request.json()
     question = body?.question
+    rawHistory = body?.history
   } catch {
     return NextResponse.json({ error: "Body harus berupa JSON." }, { status: 400 })
   }
@@ -81,47 +118,18 @@ export async function POST(request: Request) {
   }
 
   // ── Auth ────────────────────────────────────────────────────────
-  const authHeader = request.headers.get("authorization") ?? ""
-  const accessToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null
-
-  if (!accessToken) {
-    return NextResponse.json(
-      { error: "Sesi tidak ditemukan. Silakan masuk ulang." },
-      { status: 401 },
-    )
-  }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json(
-      { error: "Konfigurasi Supabase server belum lengkap." },
-      { status: 500 },
-    )
-  }
-
-  // Klien dengan identitas user: anon key untuk handshake, tapi
-  // setiap request membawa JWT user sehingga PostgREST mengevaluasi
-  // RLS sebagai role `authenticated`.
-  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
-
-  // Verifikasi token benar-benar valid sebelum menghabiskan token AI.
-  const { data: userData, error: authError } = await userClient.auth.getUser(accessToken)
-  if (authError || !userData.user) {
-    return NextResponse.json(
-      { error: "Sesi tidak valid. Silakan masuk ulang." },
-      { status: 401 },
-    )
-  }
+  // Auth + klien beridentitas user dilakukan di satu tempat
+  // (`requireUserClient`) supaya route ini dan route /api/ai/memory
+  // memakai aturan yang sama persis.
+  const auth = await requireUserClient(request)
+  if (!auth.ok) return auth.response
+  const { client: userClient, userId } = auth.value
 
   // Baru setelah identitas pasti: kuota dihitung per user, bukan per IP,
   // supaya refresh halaman atau IP kantor yang sama tidak saling
   // mematikan kuota. 429 (bukan 400) supaya jelas ini bukan kesalahan
   // dari isi pertanyaannya.
-  if (!withinRateLimit(userData.user.id)) {
+  if (!withinRateLimit(userId)) {
     return NextResponse.json(
       {
         error:
@@ -133,8 +141,16 @@ export async function POST(request: Request) {
   }
 
   // ── Tanya AI, jalankan query, susun jawaban ────────────────────
+  //
+  // Dua lapis konteks ikut di sini: riwayat percakapan (jarak pendek)
+  // dan memori jangka panjang milik user ini (lintas sesi). Keduanya
+  // dibaca dengan klien user yang sama, jadi RLS tetap berlaku.
+  const memories = await loadMemories(userClient)
+
   try {
-    const result = await answerQuestion(question.trim(), async (sql) => {
+    const result = await answerQuestion(
+      question.trim(),
+      async (sql) => {
       const { data, error } = await userClient.rpc("exec_ai_query", { p_query: sql })
       if (error) {
         // Pesan dari exec_ai_query sengaja dibuat ramah user (mis.
@@ -149,9 +165,25 @@ export async function POST(request: Request) {
         throw new AiError(error.message, "sql")
       }
       return (data as Array<Record<string, unknown>>) ?? []
-    })
+      },
+      {
+        history: parseHistory(rawHistory),
+        memories: toPromptMemories(memories.items),
+      },
+    )
 
-    return NextResponse.json(result)
+    // Menyimpan memori baru adalah bonus, bukan syarat.
+    // Kalau tabelnya belum ada (script SQL belum dijalankan) atau insert
+    // gagal, jawaban di bawah tetap dikirim — kemampuan mengingat tidak
+    // boleh menjatuhkan fitur yang sudah berhasil dihitung.
+    const saved = await saveMemories(userClient, result.remembered)
+
+    return NextResponse.json({
+      sql: result.sql,
+      rows: result.rows,
+      answer: result.answer,
+      remembered: saved.map((item) => item.content),
+    })
   } catch (error) {
     if (error instanceof AiError) {
       // 503 untuk rate limit: ini kondisi sementara, bukan permintaan

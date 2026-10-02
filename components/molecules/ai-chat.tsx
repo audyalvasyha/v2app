@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
-import { ChevronDown, Eraser, Loader2, Send, Sparkles, X } from "lucide-react"
+import { Brain, ChevronDown, Eraser, Loader2, Plus, Send, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AI_SUGGESTIONS } from "@/lib/ai/schema-client"
@@ -25,6 +25,14 @@ interface ChatResult {
   sql: string
   rows: Array<Record<string, unknown>>
   answer: string
+  /** Memori baru yang berhasil disimpan server (boleh kosong). */
+  remembered?: string[]
+}
+
+interface MemoryItem {
+  id: string
+  content: string
+  created_at: string
 }
 
 interface ChatMessage {
@@ -75,6 +83,11 @@ export function AIChat() {
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [expandedSql, setExpandedSql] = useState<Record<string, boolean>>({})
+  const [memories, setMemories] = useState<MemoryItem[]>([])
+  const [memoryOpen, setMemoryOpen] = useState(false)
+  const [memoryInput, setMemoryInput] = useState("")
+  const [memoryBusy, setMemoryBusy] = useState(false)
+  const [memoryAvailable, setMemoryAvailable] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -106,6 +119,106 @@ export function AIChat() {
   useEffect(() => {
     setMessages(loadStoredMessages())
     setHistoryLoaded(true)
+  }, [])
+
+  /**
+   * Panggil endpoint memori dengan token sesi yang sama seperti chat.
+   *
+   * Semua kegagalan di sini ditelan: memori adalah bonus, bukan syarat.
+   * Kalau tabelnya belum ada, `available` bernilai false dan panel menampilkan
+   * petunjuk setup — bukan membuat panel menampilkan error merah.
+   */
+  const refreshMemories = useCallback(async () => {
+    try {
+      const { data } = await supabase.auth.getSession()
+      const accessToken = data.session?.access_token
+      if (!accessToken) return
+
+      const response = await fetch("/api/ai/memory", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!response.ok) return
+
+      const payload = await response.json()
+      setMemories(Array.isArray(payload?.items) ? payload.items : [])
+      setMemoryAvailable(payload?.available !== false)
+    } catch {
+      // Jaringan atau sesi bermasalah: biarkan isi panel apa adanya.
+    }
+  }, [])
+
+  // Ambil daftar memori saat panel memori dibuka, bukan saat komponen
+  // mount — sebagian besar pengguna tidak pernah membuka tab itu, jadi
+  // request-nya tidak perlu dibebankan di awal.
+  useEffect(() => {
+    if (memoryOpen) refreshMemories()
+  }, [memoryOpen, refreshMemories])
+
+  const addMemory = useCallback(async () => {
+    const content = memoryInput.trim()
+    if (!content || memoryBusy) return
+
+    setMemoryBusy(true)
+    try {
+      const { data } = await supabase.auth.getSession()
+      const accessToken = data.session?.access_token
+      if (!accessToken) return
+
+      const response = await fetch("/api/ai/memory", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ content }),
+      })
+      // Berhasil: kolom input dikosongkan supaya catatan yang sama tidak
+      // terkirim dua kali lewat klik ganda.
+      if (response.ok) {
+        setMemoryInput("")
+        await refreshMemories()
+      }
+    } catch {
+      // Ditangani lewat daftar memori yang tidak berubah.
+    } finally {
+      setMemoryBusy(false)
+    }
+  }, [memoryInput, memoryBusy, refreshMemories])
+
+  const forgetMemory = useCallback(
+    async (id: string) => {
+      setMemories((prev) => prev.filter((item) => item.id !== id))
+      try {
+        const { data } = await supabase.auth.getSession()
+        const accessToken = data.session?.access_token
+        if (!accessToken) return
+
+        await fetch(`/api/ai/memory?id=${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+      } catch {
+        // Sudah hilang dari tampilan; kalau server menolak, daftar memori
+        // akan kembali penuh begitu panel dibuka lagi.
+      }
+    },
+    [],
+  )
+
+  const forgetAllMemories = useCallback(async () => {
+    setMemories([])
+    try {
+      const { data } = await supabase.auth.getSession()
+      const accessToken = data.session?.access_token
+      if (!accessToken) return
+
+      await fetch("/api/ai/memory?all=1", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+    } catch {
+      // Sama seperti di atas — tampilan sudah bersih.
+    }
   }, [])
 
   const clearHistory = useCallback(() => {
@@ -155,7 +268,17 @@ export function AIChat() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify({
+          question: trimmed,
+          // Riwayat dikirim sebagai konteks agar pertanyaan lanjutan
+          // ("yang bulan lalu berapa?") punya referensinya. Hanya 10
+          // pesan terakhir yang dikirim — server juga memotong ulang,
+          // karena isinya datang dari klien dan tidak boleh dipercaya.
+          history: messages.slice(-10).map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
       })
 
       const payload = await response.json().catch(() => null)
@@ -171,6 +294,13 @@ export function AIChat() {
             : m,
         ),
       )
+
+      // Midaa bisa saja menyimpan butir memori baru dari jawabannya.
+      // Daftar lokal disegarkan supaya badge jumlah ingatan langsung
+      // akurat tanpa harus menutup dan membuka panel.
+      if (Array.isArray(payload?.remembered) && payload.remembered.length > 0) {
+        refreshMemories()
+      }
     } catch (error) {
       // Pertanyaan dikembalikan ke kolom input: kalau jawabannya error,
       // user biasanya mau mengulang atau merapikan kalimatnya — tanpa ini
@@ -191,7 +321,7 @@ export function AIChat() {
     } finally {
       setLoading(false)
     }
-  }, [loading])
+  }, [loading, messages, refreshMemories])
 
   return (
     <>
@@ -222,6 +352,24 @@ export function AIChat() {
               <p className="text-sm font-semibold leading-tight">Tanya Midaa</p>
               <p className="text-xs text-muted-foreground">Jawaban dihitung dari database</p>
             </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setMemoryOpen((v) => !v)}
+              title="Lihat dan kelola yang Midaa ingat tentangmu"
+              className={`h-7 shrink-0 gap-1 px-2 text-xs hover:text-foreground ${
+                memoryOpen ? "text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <Brain className="h-3.5 w-3.5" />
+              Ingatan
+              {memories.length > 0 && (
+                <span className="rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
+                  {memories.length}
+                </span>
+              )}
+            </Button>
             {messages.length > 0 && (
               <Button
                 type="button"
@@ -235,6 +383,93 @@ export function AIChat() {
               </Button>
             )}
           </div>
+
+          {/* Memori — bisa disembunyikan supaya tidak memakan tinggi panel */}
+          {memoryOpen && (
+            <div className="max-h-56 shrink-0 space-y-2 overflow-y-auto border-b border-border bg-card px-3 py-3">
+              {!memoryAvailable ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Memori belum aktif. Jalankan{" "}
+                  <code className="rounded bg-muted px-1 py-0.5">supabase/sql/ai_memory.sql</code>{" "}
+                  di Supabase SQL Editor, lalu buka panel ini lagi. Sampai itu,
+                  Tanya Data tetap jalan normal — cuma tidak mengingat apa-apa.
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Yang Midaa ingat tentangmu
+                    </p>
+                    {memories.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={forgetAllMemories}
+                        className="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        Lupakan semua
+                      </button>
+                    )}
+                  </div>
+
+                  {memories.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Belum ada. Midaa akan menyimpannya sendiri kalau kamu
+                      menyuruh dia selalu melakukan sesuatu dengan cara tertentu —
+                      atau tulis sendiri di bawah.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {memories.map((item) => (
+                        <li
+                          key={item.id}
+                          className="flex items-start gap-2 rounded-md border border-border bg-muted/60 px-2 py-1.5 text-xs"
+                        >
+                          <span className="flex-1 leading-relaxed">{item.content}</span>
+                          <button
+                            type="button"
+                            onClick={() => forgetMemory(item.id)}
+                            aria-label="Hapus ingatan ini"
+                            className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      addMemory()
+                    }}
+                    className="flex gap-1.5"
+                  >
+                    <Input
+                      value={memoryInput}
+                      onChange={(e) => setMemoryInput(e.target.value)}
+                      placeholder="Contoh: selalu pakai rentang 3 bulan"
+                      maxLength={300}
+                      aria-label="Catatan untuk diingat Midaa"
+                    />
+                    <Button
+                      type="submit"
+                      size="icon"
+                      variant="secondary"
+                      disabled={memoryBusy || !memoryInput.trim()}
+                      aria-label="Simpan ingatan"
+                    >
+                      {memoryBusy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </form>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Riwayat */}
           <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-4">

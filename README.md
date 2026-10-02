@@ -124,10 +124,21 @@ jawaban supaya jawabannya selalu bisa diperiksa.
 - **View ringkasan**: `ai_skr_bulanan`, `ai_skr_mom` (bandingkan bulan ini
   vs bulan lalu), `ai_skr_alasan`, `ai_biaya_bulanan` — angka sudah
   bertipe numerik, jadi model tidak salah menjumlahkan.
+- **Gaya jawaban santai & ramah**: jawaban ditulis seperti rekan kerja yang
+  nemenin cek data (bukan gaya laporan), maksimal 4 kalimat, satu
+  paragraf, tanpa markdown. Data & angka tetap terkunci hasil query.
+- **Memori jangka panjang**: Midaa mengingat preferensi dan kebiasaan kerja
+  kamu (mis. “selalu pakai rentang 3 bulan”). Butir memori diambil dari
+  jawaban yang baru diberikan, tanpa panggilan model tambahan, dan hanya
+  yang berlaku jangka panjang — angka hasil query tidak pernah disimpan
+  karena cepat basi. Tombol **Ingatan** di kepala panel menampilkan,
+  menambah, menghapus, atau melupakan semua catatan tersebut.
 - **Riwayat percakapan** tersimpan di `localStorage` sehingga reload atau
-  pindah halaman tidak menghapus konteks — ada tombol **Bersihkan** di
-  kepala panel untuk menghapusnya. Kuota dibatasi 8 pertanyaan per menit
-  per user (429 bila lewat) supaya kuota Gemini tidak habis oleh spam.
+  pindah halaman tidak menghapus konteks — 10 pesan terakhir ikut dikirim
+  sebagai konteks ke server supaya pertanyaan lanjutan (“yang bulan lalu
+  berapa?”) punya referensinya. Ada tombol **Bersihkan** di kepala panel.
+  Kuota dibatasi 8 pertanyaan per menit per user (429 bila lewat) supaya
+  kuota Gemini tidak habis oleh spam.
 - **Keamanan**: query hanya bisa `SELECT`, dibatasi 200 baris dan timeout
   8 detik. Dijalankan dengan **JWT milik user yang sedang login**, bukan
   service role, sehingga RLS dari `auth_lockdown.sql` tetap berlaku —
@@ -137,6 +148,10 @@ jawaban supaya jawabannya selalu bisa diperiksa.
 
 1. Jalankan `supabase/sql/ai_query.sql` di SQL Editor (sekali, aman diulang).
    **Setelah `auth_lockdown.sql`** — supaya grant untuk `authenticated` ada.
+1b. Opsional tapi disarankan: jalankan juga `supabase/sql/ai_memory.sql`
+   untuk mengaktifkan memori jangka panjang. Tanpa script ini Tanya Data
+   tetap jalan normal, hanya tidak mengingat apa-apa (panel **Ingatan**
+   akan menampilkan petunjuk setup).
 2. Isi `GOOGLE_API_KEY` di Vercel (Project → Settings → Environment
    Variables), lalu redeploy. **Jangan** pakai prefix `NEXT_PUBLIC_`
    atau key ikut ke bundle browser.
@@ -332,6 +347,9 @@ lib/
   ai/
     schema.ts          # Deskripsi DB untuk prompt AI (server-only)
     schema-client.ts   # Saran pertanyaan (aman untuk browser)
+    persona.ts         # Gaya bicara + blok konteks memori/riwayat
+    memory.ts          # CRUD memori jangka panjang per user (RLS)
+    user-client.ts     # Klien Supabase beridentitas user (tanpa service role)
     gemini.ts          # Pemanggilan Gemini: SQL → data → jawaban
 middleware.ts           # Rewrite subdomain skr.* ke /skr/input
 scripts/
