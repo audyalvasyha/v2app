@@ -84,16 +84,33 @@ di sini diturunkan dari teks catatan tersebut:
   tertinggi disorot penuh, sisanya diredupkan.
 - **5 unit dengan biaya ban tertinggi**: jumlah entri, jumlah ban, dan
   tanggal ganti terakhir.
+- **Peta ban yang bisa diklik**: gambar rangka moda dari atas
+  (`public/tyre-chassis-top.svg`) dengan lima hotspot roda — depan
+  kiri/kanan, belakang kiri/kanan (dobel), dan ban serap.
+  **Interaktifnya hanya hidup setelah satu nomor polisi dipilih** (lewat
+  pemilih nopol, daftar 5 unit dengan biaya ban tertinggi, atau nopol pada
+  tabel rincian). Hotspot yang diklik lalu menampilkan data ban milik nopol
+  itu saja: jumlah entri, jumlah ban, biaya, rentang tanggal, dan daftar
+  uraiannya. Legenda di bawah gambar memakai tombol yang sama dengan
+  hotspot, supaya peta tetap bisa dipakai di layar sempit.
 - **Chip filter berhitung**: jenis pekerjaan (ganti / perbaikan-roker /
   aksesori / lainnya) dan posisi roda (depan / belakang / serap /
   campuran).
 - **Tabel rincian**: tanggal, unit, uraian, badge jenis & posisi, jumlah
-  ban, dan biaya dengan bar relatif — plus export CSV dan paginasi.
+  ban, dan biaya dengan bar relatif — plus export CSV dan paginasi. Nopol
+  pada tabel bisa diklik untuk memuat peta ban unit tersebut.
 - **Cara membacanya jujur**: catatan yang tidak menuliskan detailnya
   (mis. hanya "GANTI BAN") masuk hitungan "lainnya" dan tidak dikasih
   posisi. Jumlah ban dibaca dari angka yang menempel pada satuan
   ("2PCS", "3 BH"), dan angka di atas 10 diabaikan supaya ukuran ban
   pada catatan ("PASANG BAN 175-65-14") tidak terhitung sebagai 175 ban.
+- **Hotspot tidak pernah mengarang posisi**: catatan yang tidak menyebut
+  posisi roda tidak dikaitkan ke hotspot mana pun, dan jumlahnya
+  ditampilkan sebagai pengingat di bawah peta. Catatan yang menyebut axle
+  tapi tidak menyebut sisi ("GANTI BAN DEPAN") dihitung untuk kedua roda
+  axle itu dengan penanda eksplisit, supaya angka yang terlihat di roda
+  sebelah transparan bisa dibaca sebagai mana yang sebenarnya dihitung dua
+  kali.
 
 ### SKR — Sisa Kiriman
 Dasbor sisa kiriman dari tabel `skr_detail` (parsing tanggal & nilai dipindah ke database

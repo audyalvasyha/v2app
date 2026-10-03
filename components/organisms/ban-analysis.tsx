@@ -1,6 +1,6 @@
 "use client"
 
-import React, { memo, useEffect, useMemo, useState } from "react"
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -35,17 +35,23 @@ import {
 } from "lucide-react"
 import { StatTile } from "@/components/molecules/stat-tile"
 import { SearchField } from "@/components/molecules/search-field"
+import { BanTyreMap, BanTyreMapLegend, BanUnmappedNote } from "@/components/molecules/ban-tyre-map"
 import {
     BAN_CATEGORY_LABELS,
     BAN_POSITION_LABELS,
+    BAN_WHEEL_SLOT_LABELS,
+    BAN_WHEEL_SLOT_ORDER,
+    banBySlot,
     banByUnit,
     banMonthly,
     banTotals,
+    banWithoutSlot,
     toBanRows,
     type BanCategory,
     type BanMonthlyPoint,
     type BanPosition,
     type BanRow,
+    type BanWheelSlot,
 } from "@/lib/ban-analytics"
 import {
     compactRupiah,
@@ -82,6 +88,9 @@ const RANGE_OPTIONS: { id: RangeKey; label: string; days?: number }[] = [
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 const COLUMN_COUNT = 7
+
+/** Nilai khusus untuk "belum ada nopol" pada komponen Select. */
+const NONE_PLATE = "__tanpa_nopol__"
 
 const CATEGORY_FILTERS: { id: BanCategory | "all"; label: string }[] = [
     { id: "all", label: "Semua jenis" },
@@ -131,6 +140,11 @@ function BanAnalysisImpl({ histories, isLoading, error }: BanAnalysisProps) {
     const [sortKey, setSortKey] = useState<SortKey>("dateDesc")
     const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0])
     const [page, setPage] = useState(1)
+    // ── PETA BAN ──────────────────────────────────────────────────────────
+    // Peta ban hanya hidup setelah satu nopol dipilih: hotspot roda menampilkan
+    // catatan ban milik nopol itu, bukan gabungan semua unit.
+    const [plate, setPlate] = useState<string | null>(null)
+    const [activeSlot, setActiveSlot] = useState<BanWheelSlot | null>(null)
 
     // 1. Klasifikasi sekali saja per daftar riwayat. Semua angka di halaman ini
     //    diturunkan dari hasil saringan yang sama, jadi kartu, grafik, dan
@@ -183,6 +197,42 @@ function BanAnalysisImpl({ histories, isLoading, error }: BanAnalysisProps) {
     const stats = useMemo(() => banTotals(rows), [rows])
     const monthly = useMemo<BanMonthlyPoint[]>(() => banMonthly(rows), [rows])
     const topUnits = useMemo(() => banByUnit(rows, 5), [rows])
+
+    // ── PETA BAN ─────────────────────────────────────────────────────────
+    // Daftar nopol yang punya catatan ban — isi pemilih nopol di peta.
+    const plateOptions = useMemo(() => banByUnit(allRows, Number.MAX_SAFE_INTEGER), [allRows])
+
+    // Riwayat ban milik nopol terpilih. Sengaja dibaca dari `allRows`, bukan
+    // dari `rows` yang sudah difilter: peta harus tetap bisa menjawab "kapan
+    // ban terakhir di roda ini diganti" walau tabel sedang disaring.
+    const plateRows = useMemo(
+        () => (plate ? allRows.filter((r) => (r.plat || r.unit) === plate) : []),
+        [allRows, plate],
+    )
+    const plateBySlot = useMemo(() => (plate ? banBySlot(plateRows) : null), [plate, plateRows])
+    const plateUnmapped = useMemo(() => banWithoutSlot(plateRows), [plateRows])
+    const activePoint = plate && activeSlot && plateBySlot ? plateBySlot[activeSlot] : null
+
+    // Nopol yang hilang dari data (mis. setelah refresh) tidak boleh
+    // menyisakan peta kosong yang menyesatkan — kembalikan ke keadaan awal.
+    useEffect(() => {
+        if (plate && !plateOptions.some((u) => u.key === plate)) setPlate(null)
+    }, [plate, plateOptions])
+
+    // Begitu nopol dipilih, langsung buka roda yang paling banyak catatannya
+    // supaya panel kanan tidak terbuka kosong.
+    useEffect(() => {
+        if (!plateBySlot) {
+            setActiveSlot(null)
+            return
+        }
+        const best = BAN_WHEEL_SLOT_ORDER.reduce((a, b) =>
+            plateBySlot[b].cost > plateBySlot[a].cost ? b : a,
+        )
+        setActiveSlot(best)
+    }, [plate, plateBySlot])
+
+    const selectPlate = useCallback((key: string) => setPlate(key), [])
 
     const maxCost = useMemo(() => rows.reduce((m, r) => Math.max(m, r.cost), 0), [rows])
     const maxUnitCost = useMemo(
@@ -356,7 +406,10 @@ function BanAnalysisImpl({ histories, isLoading, error }: BanAnalysisProps) {
                 </div>
 
                 <div className="rounded-xl border bg-card p-4 shadow-sm">
-                    <h3 className="mb-3 text-sm font-semibold">5 unit dengan biaya ban tertinggi</h3>
+                    <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+                        <h3 className="text-sm font-semibold">5 unit dengan biaya ban tertinggi</h3>
+                        <p className="text-[11px] text-muted-foreground">Klik nopol → lihat peta ban</p>
+                    </div>
                     {topUnits.length === 0 ? (
                         <p className="py-8 text-center text-xs text-muted-foreground">
                             Tidak ada unit pada filter ini.
@@ -365,32 +418,221 @@ function BanAnalysisImpl({ histories, isLoading, error }: BanAnalysisProps) {
                         <ul className="space-y-3">
                             {topUnits.map((u, i) => (
                                 <li key={u.key}>
-                                    <div className="flex items-baseline justify-between gap-2">
-                                        <div className="min-w-0">
-                                            <span className="mr-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
-                                                {i + 1}
+                                    <button
+                                        type="button"
+                                        onClick={() => selectPlate(u.key)}
+                                        aria-pressed={plate === u.key}
+                                        className={`block w-full rounded-lg px-2 py-1.5 -mx-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                                            plate === u.key ? "bg-primary/10" : ""
+                                        }`}
+                                    >
+                                        <div className="flex items-baseline justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <span className="mr-1.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+                                                    {i + 1}
+                                                </span>
+                                                <span className="font-medium">{u.plat || u.unit || "Tanpa plat"}</span>
+                                            </div>
+                                            <span className="shrink-0 font-mono text-xs tabular-nums">
+                                                {compactRupiah(u.cost)}
                                             </span>
-                                            <span className="font-medium">{u.plat || u.unit || "Tanpa plat"}</span>
                                         </div>
-                                        <span className="shrink-0 font-mono text-xs tabular-nums">
-                                            {compactRupiah(u.cost)}
-                                        </span>
-                                    </div>
-                                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                        <div
-                                            className="h-full rounded-full bg-primary/70"
-                                            style={{
-                                                width: `${maxUnitCost > 0 ? Math.max(3, (u.cost / maxUnitCost) * 100) : 0}%`,
-                                            }}
-                                        />
-                                    </div>
-                                    <p className="mt-1 text-[11px] text-muted-foreground">
-                                        {formatNumber(u.entries)} entri · {formatNumber(u.qty)} ban
-                                        {u.last ? ` · terakhir ${formatDateMedium(u.last)}` : ""}
-                                    </p>
+                                        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                            <div
+                                                className="h-full rounded-full bg-primary/70"
+                                                style={{
+                                                    width: `${maxUnitCost > 0 ? Math.max(3, (u.cost / maxUnitCost) * 100) : 0}%`,
+                                                }}
+                                            />
+                                        </div>
+                                        <p className="mt-1 text-[11px] text-muted-foreground">
+                                            {formatNumber(u.entries)} entri · {formatNumber(u.qty)} ban
+                                            {u.last ? ` · terakhir ${formatDateMedium(u.last)}` : ""}
+                                        </p>
+                                    </button>
                                 </li>
                             ))}
                         </ul>
+                    )}
+                </div>
+            </div>
+
+            {/* PETA BAN — hotspot roda yang bisa diklik. Aktif hanya setelah
+                satu nopol dipilih, lalu tiap roda menampilkan catatan ban
+                milik nopol itu. */}
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+                <div className="space-y-3 rounded-xl border bg-card p-4 shadow-sm">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <h3 className="text-sm font-semibold">Peta ban</h3>
+                        <p className="text-xs text-muted-foreground">
+                            {plate ? (
+                                <>
+                                    nopol <span className="font-medium text-foreground">{plate}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPlate(null)}
+                                        className="ml-2 inline-flex items-center gap-1 rounded-md border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                    >
+                                        <X className="h-3 w-3" /> ganti nopol
+                                    </button>
+                                </>
+                            ) : (
+                                "belum ada nopol dipilih"
+                            )}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Select
+                            value={plate ?? NONE_PLATE}
+                            onValueChange={(v) => setPlate(v === NONE_PLATE ? null : v)}
+                        >
+                            <SelectTrigger className="h-8 w-full bg-card sm:w-[320px]" aria-label="Pilih nomor polisi">
+                                <SelectValue placeholder="Pilih nomor polisi..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={NONE_PLATE}>Pilih nomor polisi...</SelectItem>
+                                {plateOptions.map((u) => (
+                                    <SelectItem key={u.key} value={u.key}>
+                                        {u.plat || u.unit || "Tanpa plat"} — {formatNumber(u.entries)} entri,{" "}
+                                        {compactRupiah(u.cost)}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-[11px] leading-snug text-muted-foreground">
+                            Peta menampilkan seluruh catatan ban nopol terpilih — tidak ikut
+                            penyaringan tabel di bawah.
+                        </p>
+                    </div>
+
+                    <BanTyreMap
+                        bySlot={plateBySlot}
+                        activeSlot={activeSlot}
+                        onSelectSlot={setActiveSlot}
+                        plate={plate}
+                    />
+
+                    <BanTyreMapLegend
+                        bySlot={plateBySlot}
+                        activeSlot={activeSlot}
+                        onSelectSlot={setActiveSlot}
+                        plate={plate}
+                    />
+
+                    <BanUnmappedNote count={plateUnmapped.length} />
+                </div>
+
+                <div className="rounded-xl border bg-card p-4 shadow-sm">
+                    <h3 className="text-sm font-semibold">Detail roda</h3>
+                    {!plate ? (
+                        <div className="flex h-full flex-col items-center justify-center gap-2 py-10 text-center">
+                            <Disc3 className="h-7 w-7 text-muted-foreground/50" />
+                            <p className="text-xs font-medium">Belum ada nopol dipilih</p>
+                            <p className="max-w-[24ch] text-[11px] leading-relaxed text-muted-foreground">
+                                Pilih nomor polisi di atas atau klik salah satu nopol pada daftar unit
+                                teratas, lalu klik roda pada gambar untuk melihat catatan ban-nya.
+                            </p>
+                        </div>
+                    ) : !activeSlot || !activePoint ? (
+                        <p className="py-10 text-center text-xs text-muted-foreground">
+                            Klik salah satu roda pada gambar ban.
+                        </p>
+                    ) : (
+                        <div className="mt-3 space-y-3">
+                            <div>
+                                <p className="text-sm font-semibold leading-tight">
+                                    {BAN_WHEEL_SLOT_LABELS[activeSlot]}
+                                </p>
+                                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                    nopol {plate} ·{" "}
+                                    {activePoint.entries > 0
+                                        ? periodLabel(activePoint.first, activePoint.last)
+                                        : "belum ada catatan"}
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                                <StatTile
+                                    label="Entri"
+                                    value={formatNumber(activePoint.entries)}
+                                    icon={<Layers className="h-3.5 w-3.5" />}
+                                    className="px-3 py-2"
+                                />
+                                <StatTile
+                                    label="Ban"
+                                    value={formatNumber(activePoint.qty)}
+                                    icon={<Package className="h-3.5 w-3.5" />}
+                                    className="px-3 py-2"
+                                />
+                                <StatTile
+                                    label="Biaya"
+                                    value={compactRupiah(activePoint.cost)}
+                                    hint={formatRupiah(activePoint.cost)}
+                                    title={formatRupiah(activePoint.cost)}
+                                    icon={<CircleDollarSign className="h-3.5 w-3.5" />}
+                                    emphasis
+                                    className="px-3 py-2"
+                                />
+                            </div>
+
+                            {activePoint.unspecifiedEntries > 0 && (
+                                <p className="flex items-start gap-2 rounded-lg border border-dashed bg-muted/30 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                                    <span>
+                                        {formatNumber(activePoint.unspecifiedEntries)} di antara entri di atas
+                                        tidak menyebut sisi kiri/kanan, jadi dihitung untuk kedua roda axle
+                                        ini. Membuka roda di sebelahnya bisa menunjukkan entri yang sama.
+                                    </span>
+                                </p>
+                            )}
+
+                            {activePoint.rows.length === 0 ? (
+                                <p className="rounded-lg border border-dashed px-3 py-4 text-center text-[11px] leading-relaxed text-muted-foreground">
+                                    Roda ini belum punya catatan ban untuk nopol tersebut.
+                                </p>
+                            ) : (
+                                <ul className="space-y-1.5">
+                                    {[...activePoint.rows]
+                                        .sort((a, b) => (b.iso ?? "").localeCompare(a.iso ?? ""))
+                                        .slice(0, 6)
+                                        .map((r, i) => (
+                                            <li
+                                                key={`${r.iso ?? "x"}-${i}`}
+                                                className="rounded-lg border bg-muted/30 px-2.5 py-2"
+                                            >
+                                                <div className="flex items-baseline justify-between gap-2">
+                                                    <span className="text-[11px] tabular-nums text-muted-foreground">
+                                                        {formatDateMedium(r.iso)}
+                                                    </span>
+                                                    <span className="shrink-0 font-mono text-[11px] tabular-nums">
+                                                        {formatRupiah(r.cost)}
+                                                    </span>
+                                                </div>
+                                                <p className="mt-0.5 truncate text-xs" title={r.item}>
+                                                    {r.item}
+                                                </p>
+                                                <div className="mt-1 flex flex-wrap gap-1">
+                                                    <Badge variant="outline" className={CATEGORY_CLASS[r.category]}>
+                                                        {BAN_CATEGORY_LABELS[r.category]}
+                                                    </Badge>
+                                                    {r.qty > 0 && (
+                                                        <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                                                            {formatNumber(r.qty)} ban
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </li>
+                                        ))}
+                                    {activePoint.rows.length > 6 && (
+                                        <li className="px-1 text-[11px] text-muted-foreground">
+                                            +{formatNumber(activePoint.rows.length - 6)} catatan lain — lihat
+                                            tabel rincian di bawah.
+                                        </li>
+                                    )}
+                                </ul>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
@@ -592,7 +834,20 @@ function BanAnalysisImpl({ histories, isLoading, error }: BanAnalysisProps) {
                                             </div>
                                         </TableCell>
                                         <TableCell className="py-2.5">
-                                            <div className="font-medium leading-none">{r.plat || "—"}</div>
+                                            {r.plat ? (
+                                                // Nopol di tabel bisa diklik untuk memuat
+                                                // peta ban unit tersebut di atas.
+                                                <button
+                                                    type="button"
+                                                    onClick={() => selectPlate(r.plat || r.unit)}
+                                                    title="Tampilkan peta ban nopol ini"
+                                                    className="rounded text-left font-medium leading-none underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                >
+                                                    {r.plat}
+                                                </button>
+                                            ) : (
+                                                <span className="font-medium leading-none">—</span>
+                                            )}
                                             {r.unit && (
                                                 <div className="mt-1 text-xs text-muted-foreground">{r.unit}</div>
                                             )}

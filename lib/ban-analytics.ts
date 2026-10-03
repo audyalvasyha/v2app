@@ -121,6 +121,150 @@ function isPlausibleQty(n: number): boolean {
     return Number.isFinite(n) && n > 0 && n <= 10
 }
 
+/* ============================================================================
+ * PEMETAAN KE RODA FISIK (dipakai peta ban interaktif)
+ * ---------------------------------------------------------------------------
+ * `banPosition` di atas menjawab "depan atau belakang", tapi peta ban harus
+ * tahu persis roda mana: kiri atau kanan. Semua pembacaan ini tetap dari
+ * teks uraian yang sama, jadi tidak ada angka yang dikarang.
+ * ========================================================================== */
+
+/** Sisi roda yang disebut pada teks. */
+export type BanWheelSide = "kiri" | "kanan"
+
+/** Roda/ban fisik pada satu unit — satu titik klik di peta ban. */
+export type BanWheelSlot = "depan-kiri" | "depan-kanan" | "belakang-kiri" | "belakang-kanan" | "serap"
+
+/** Urutan tetap slot — dipakai gambar ban dan peta hotspot. */
+export const BAN_WHEEL_SLOT_ORDER: BanWheelSlot[] = [
+    "depan-kiri",
+    "depan-kanan",
+    "belakang-kiri",
+    "belakang-kanan",
+    "serap",
+]
+
+export const BAN_WHEEL_SLOT_LABELS: Record<BanWheelSlot, string> = {
+    "depan-kiri": "Depan kiri",
+    "depan-kanan": "Depan kanan",
+    "belakang-kiri": "Belakang kiri (dobel)",
+    "belakang-kanan": "Belakang kanan (dobel)",
+    serap: "Ban serap",
+}
+
+/**
+ * Sisi roda yang disebut: "kiri"/"left"/"lhs", "kanan"/"right"/"rhs", atau
+ * sekaligus dua-duanya ("L/R" — lazim dipakai di bengkel). Mengembalikan
+ * array kosong bila tidak disebut sama sekali, dan itu berarti penting:
+ * catatan tanpa sisi tidak boleh dipaksa ke satu roda.
+ */
+export function banWheelSides(text: string | null | undefined): BanWheelSide[] {
+    const t = normalize(text ?? "")
+    const both = /\bl\s*\/\s*r\b/.test(t) || /\blr\b/.test(t)
+    const sides = new Set<BanWheelSide>()
+    if (both || /\b(kiri|left|lhs|lf)\b/.test(t)) sides.add("kiri")
+    if (both || /\b(kanan|right|rhs|rf)\b/.test(t)) sides.add("kanan")
+    // Urutan kiri lalu kanan supaya urutannya stabil untuk seluruh aplikasi.
+    return (["kiri", "kanan"] as BanWheelSide[]).filter((s) => sides.has(s))
+}
+
+/**
+ * Slot roda yang tersentuh satu catatan. Mengembalikan array kosong bila teks
+ * tidak menyebut posisi/sisi sama sekali (mis. "GANTI BAN") — catatan seperti
+ * itu tidak boleh menempel ke roda tertentu hanya supaya peta terlihat penuh.
+ *
+ * Catatan tanpa sisi ("GANTI BAN DEPAN") tetap masuk ke kedua roda depan,
+ * dan jumlah/qty-nya ikut terhitung di keduanya. Itu memang menggandakan
+ * angka, jadi `BanSlotPoint.unspecifiedEntries` menandainya supaya UI bisa
+ * mengatakannya terus terang, bukan diamkan saja.
+ */
+export function banWheelSlots(text: string | null | undefined): BanWheelSlot[] {
+    const t = normalize(text ?? "")
+    const isSerap = /\b(serap|cadangan|spare)\b/.test(t)
+    const isDepan = /\b(depan|dpn|front)\b/.test(t)
+    const isBelakang = /\b(belakang|blk|blkg|bklg|rear)\b/.test(t)
+    const sides = banWheelSides(t)
+    // Tanpa keterangan sisi, satu catatan dianggap untuk kedua roda axle itu.
+    const axleSides: BanWheelSide[] = sides.length > 0 ? sides : ["kiri", "kanan"]
+    const slots: BanWheelSlot[] = []
+    if (isDepan) for (const s of axleSides) slots.push(`depan-${s}` as BanWheelSlot)
+    if (isBelakang) for (const s of axleSides) slots.push(`belakang-${s}` as BanWheelSlot)
+    // Ban serap bisa disebut berdampingan dengan posisi lain
+    // ("GANTI BAN BELAKANG KIRI 2PCS BAN SERAP 1PCS"), jadi selalu ikut.
+    if (isSerap) slots.push("serap")
+    return slots
+}
+
+export interface BanSlotPoint {
+    slot: BanWheelSlot
+    /** Jumlah entri yang menyebut roda ini */
+    entries: number
+    /** Total biaya entri-entri tersebut */
+    cost: number
+    /** Jumlah ban yang disebut pada entri-entri tersebut */
+    qty: number
+    first: string | null
+    last: string | null
+    /**
+     * Entri yang tidak menyebut sisi ("GANTI BAN DEPAN") sehingga dihitung
+     * untuk kedua roda axle. UI wajib menyebut ini supaya angka yang
+     * terduplikasi terlihat apa adanya.
+     */
+    unspecifiedEntries: number
+    /** Pecahan biaya per jenis pekerjaan */
+    byCategory: Record<BanCategory, number>
+    /** Catatan sumbernya, urut terbaru lebih dulu saat dirender */
+    rows: BanRow[]
+}
+
+function emptySlotPoint(slot: BanWheelSlot): BanSlotPoint {
+    return {
+        slot,
+        entries: 0,
+        cost: 0,
+        qty: 0,
+        first: null,
+        last: null,
+        unspecifiedEntries: 0,
+        byCategory: { ganti: 0, perbaikan: 0, aksesori: 0, lainnya: 0 },
+        rows: [],
+    }
+}
+
+/**
+ * Pecah catatan ban ke roda fisiknya. Satu catatan bisa masuk ke beberapa
+ * roda sekaligus (mis. "BELAKANG L/R"), jadi `rows` pada tiap slot boleh
+ * saling berbagi baris yang sama.
+ */
+export function banBySlot(rows: BanRow[]): Record<BanWheelSlot, BanSlotPoint> {
+    const out = {} as Record<BanWheelSlot, BanSlotPoint>
+    for (const slot of BAN_WHEEL_SLOT_ORDER) out[slot] = emptySlotPoint(slot)
+    for (const r of rows ?? []) {
+        const slots = banWheelSlots(r.item)
+        if (slots.length === 0) continue
+        const sides = banWheelSides(r.item)
+        for (const slot of slots) {
+            const p = out[slot]
+            p.entries += 1
+            p.cost += r.cost
+            p.qty += r.qty
+            p.rows.push(r)
+            p.byCategory[r.category] += r.cost
+            if (sides.length === 0) p.unspecifiedEntries += 1
+            if (r.iso) {
+                if (p.first == null || r.iso < p.first) p.first = r.iso
+                if (p.last == null || r.iso > p.last) p.last = r.iso
+            }
+        }
+    }
+    return out
+}
+
+/** Catatan ban yang tidak bisa dikaitkan ke roda tertentu. */
+export function banWithoutSlot(rows: BanRow[]): BanRow[] {
+    return (rows ?? []).filter((r) => banWheelSlots(r.item).length === 0)
+}
+
 /** Inner/outer — hanya bermakna untuk ban dalam yang berpasangan. */
 export function banSide(text: string | null | undefined): "dalam" | "luar" | null {
     const t = normalize(text ?? "")

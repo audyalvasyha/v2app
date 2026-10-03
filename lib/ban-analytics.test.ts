@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
+    banBySlot,
     banByUnit,
     banCategory,
     banMonthly,
@@ -7,6 +8,9 @@ import {
     banQty,
     banSide,
     banTotals,
+    banWheelSides,
+    banWheelSlots,
+    banWithoutSlot,
     toBanRow,
     toBanRows,
 } from "@/lib/ban-analytics"
@@ -191,6 +195,141 @@ describe("banMonthly - tren bulanan", () => {
     it("mengabaikan baris tanpa tanggal", () => {
         const rows = toBanRows([{ nama_barang_atau_jasa: "GANTI BAN", jumlah_harga: 10000 }])
         expect(banMonthly(rows)).toEqual([])
+    })
+})
+
+describe("banWheelSides - sisi roda dari teks", () => {
+    it("mengenali kiri dan kanan, termasuk singkatan", () => {
+        expect(banWheelSides("GANTI BAN BELAKANG KIRI")).toEqual(["kiri"])
+        expect(banWheelSides("GANTI BAN DEPN KANAN")).toEqual(["kanan"])
+        expect(banWheelSides("BAN BELAKANG LEFT")).toEqual(["kiri"])
+        expect(banWheelSides("BAN DEPAN RIGHT")).toEqual(["kanan"])
+    })
+
+    it("mengenali L/R sebagai dua-duanya", () => {
+        expect(banWheelSides("2PCS GANTI BAN BELAKANG L/R")).toEqual(["kiri", "kanan"])
+    })
+
+    it("kosong bila sisi tidak disebut", () => {
+        expect(banWheelSides("2 PCS GANTI BAN")).toEqual([])
+        expect(banWheelSides("GANTI BAN DEPAN")).toEqual([])
+    })
+})
+
+describe("banWheelSlots - roda yang tersentuh satu catatan", () => {
+    it("memetakan posisi dan sisi ke satu roda", () => {
+        expect(banWheelSlots("GANTI BAN DEPAN KIRI")).toEqual(["depan-kiri"])
+        expect(banWheelSlots("GANTI BAN BELAKANG KANAN")).toEqual(["belakang-kanan"])
+        expect(banWheelSlots("ROKER BAN DEPAN KANAN")).toEqual(["depan-kanan"])
+    })
+
+    it("L/R menyentuh kedua roda axle tersebut", () => {
+        expect(banWheelSlots("2PCS GANTI BAN BELAKANG L/R")).toEqual(["belakang-kiri", "belakang-kanan"])
+    })
+
+    it("tanpa keterangan sisi tetap dihitung untuk kedua roda axle", () => {
+        expect(banWheelSlots("GANTI BAN DEPAN")).toEqual(["depan-kiri", "depan-kanan"])
+        expect(banWheelSlots("2 PCS GANTI BAN BELAKANG")).toEqual(["belakang-kiri", "belakang-kanan"])
+    })
+
+    it("mencakup keempat roda saat menyebut depan sekaligus belakang", () => {
+        expect(banWheelSlots("GANTI BAN DEPAN BELAKANG KIRI")).toEqual([
+            "depan-kiri",
+            "belakang-kiri",
+        ])
+    })
+
+    it("ban serap berdiri sendiri, dan boleh berdampingan dengan posisi lain", () => {
+        expect(banWheelSlots("PERBAIKAN GANTUNGAN BAN SERAP")).toEqual(["serap"])
+        expect(banWheelSlots("GANTI BAN BELAKANG KIRI 2PCS BAN SERAP 1PCS")).toEqual([
+            "belakang-kiri",
+            "serap",
+        ])
+    })
+
+    it("tidak menempel ke roda mana pun bila posisi tidak disebut", () => {
+        expect(banWheelSlots("2 PCS GANTI BAN")).toEqual([])
+        expect(banWheelSlots("TUKAR BAN")).toEqual([])
+        expect(banWheelSlots(null)).toEqual([])
+    })
+})
+
+describe("banBySlot - rincian ban per roda", () => {
+    const rows = toBanRows([
+        {
+            nama_barang_atau_jasa: "2 PCS GANTI BAN DEPAN KIRI",
+            jumlah_harga: 1500000,
+            tanggal: "2026-02-09",
+            license_plate: "B1",
+        },
+        {
+            nama_barang_atau_jasa: "1 PCS GANTI BAN BELAKANG KANAN",
+            jumlah_harga: 900000,
+            tanggal: "2026-03-01",
+            license_plate: "B1",
+        },
+        {
+            nama_barang_atau_jasa: "PERBAIKAN GANTUNGAN BAN SERAP",
+            jumlah_harga: 50000,
+            tanggal: "2026-01-20",
+            license_plate: "B1",
+        },
+        {
+            nama_barang_atau_jasa: "GANTI BAN",
+            jumlah_harga: 250000,
+            tanggal: "2026-02-01",
+            license_plate: "B1",
+        },
+    ])
+
+    it("memisahkan biaya per roda sesuai catatan", () => {
+        const bySlot = banBySlot(rows)
+        expect(bySlot["depan-kiri"].entries).toBe(1)
+        expect(bySlot["depan-kiri"].cost).toBe(1500000)
+        expect(bySlot["depan-kiri"].qty).toBe(2)
+        expect(bySlot["depan-kanan"].entries).toBe(0)
+        expect(bySlot["belakang-kanan"].cost).toBe(900000)
+        expect(bySlot.serap.cost).toBe(50000)
+    })
+
+    it("mencatat tanggal pertama dan terakhir per roda", () => {
+        const bySlot = banBySlot(rows)
+        expect(bySlot["depan-kiri"].first).toBe("2026-02-09")
+        expect(bySlot["depan-kiri"].last).toBe("2026-02-09")
+        expect(bySlot.serap.last).toBe("2026-01-20")
+    })
+
+    it("tidak menagih catatan tanpa posisi ke roda mana pun", () => {
+        const bySlot = banBySlot(rows)
+        const totalEntries = Object.values(bySlot).reduce((m, p) => m + p.entries, 0)
+        // 3 catatan punya posisi; "GANTI BAN" tidak punya, jadi tidak dihitung.
+        expect(totalEntries).toBe(3)
+        expect(banWithoutSlot(rows).map((r) => r.item)).toEqual(["GANTI BAN"])
+    })
+
+    it("menandai entri yang tidak menyebut sisi agar angka ganda terlihat jujur", () => {
+        const bySlot = banBySlot([
+            ...toBanRows([
+                {
+                    nama_barang_atau_jasa: "GANTI BAN DEPAN",
+                    jumlah_harga: 300000,
+                    tanggal: "2026-02-01",
+                    license_plate: "B1",
+                },
+            ]),
+        ])
+        expect(bySlot["depan-kiri"].unspecifiedEntries).toBe(1)
+        expect(bySlot["depan-kanan"].unspecifiedEntries).toBe(1)
+        expect(bySlot["belakang-kiri"].unspecifiedEntries).toBe(0)
+    })
+
+    it("aman pada data kosong", () => {
+        const bySlot = banBySlot([])
+        for (const point of Object.values(bySlot)) {
+            expect(point.entries).toBe(0)
+            expect(point.cost).toBe(0)
+            expect(point.first).toBeNull()
+        }
     })
 })
 

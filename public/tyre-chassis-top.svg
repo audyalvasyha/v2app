@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" role="img" aria-labelledby="tyreTitle tyreDesc">
+  <title id="tyreTitle">Peta ban — tampilan atas rangka moda</title>
+  <desc id="tyreDesc">Tampilan atas rangka moda dengan empat ban jalan (depan kiri-kanan dan belakang kiri-kanan) serta satu ban serap yang terpasang di tengah rangka dengan braket perak.</desc>
+
+  <!--
+    ASET GAMBAR BAN — Analisa Ban
+    ============================================================
+    Gambar ini adalah "peta" yang diklik di menu Analisa Ban. Titik roda pada
+    berkas ini adalah sumber kebenaran posisi hotspot, dalam satuan viewBox
+    1600 x 900. Orientasi: ban menghadap ke KIRI (kabin di kiri); karena
+    dilihat dari atas, sisi KANAN kendaraan ada di baris ATAS gambar.
+
+    slot ban        titik pusat (x, y)   persen dari viewBox 1600 x 900
+    depan-kanan     462, 304             28.9%, 33.8%
+    depan-kiri      462, 602             28.9%, 66.9%
+    belakang-kanan  1118, 317            69.9%, 35.2%
+    belakang-kiri   1118, 608            69.9%, 67.6%
+    serap           906, 432             56.6%, 48.0%
+
+    Hotspot di components/molecules/ban-tyre-map.tsx memakai angka persen yang
+    sama. Ukuran ban jalan 140 x 96 (aspek 1.46) dan ban serap berdiameter 156;
+    keduanya dipakai sebagai luas area klik. Bila gambar ini diganti dengan
+    foto/render lain, cukup ubah tabel persen di satu berkas komponen itu.
+  -->
+
+  <defs>
+    <!-- Ban jalan, dilihat dari atas: band tread hitam + bibir sidewall.
+         Digambar dengan pusat di (0,0) supaya penempatan via use x/y presisi. -->
+    <g id="tyre">
+      <ellipse cx="0" cy="7" rx="76" ry="46" fill="#000" opacity="0.10" />
+      <rect x="-70" y="-48" width="140" height="96" rx="46" fill="#1b1e22" />
+      <rect x="-59" y="-38" width="118" height="76" rx="37" fill="#2a2e34" />
+      <g fill="#131619">
+        <rect x="-51" y="-34" width="6" height="68" rx="3" />
+        <rect x="-33" y="-34" width="6" height="68" rx="3" />
+        <rect x="-15" y="-34" width="6" height="68" rx="3" />
+        <rect x="3" y="-34" width="6" height="68" rx="3" />
+        <rect x="21" y="-34" width="6" height="68" rx="3" />
+        <rect x="39" y="-34" width="6" height="68" rx="3" />
+      </g>
+      <ellipse cx="-53" cy="0" rx="16" ry="39" fill="#33383f" />
+      <ellipse cx="53" cy="0" rx="16" ry="39" fill="#33383f" />
+      <ellipse cx="-53" cy="0" rx="7" ry="16" fill="#8d939e" />
+      <ellipse cx="53" cy="0" rx="7" ry="16" fill="#8d939e" />
+    </g>
+
+    <!-- Ban serap: dilihat dari atas memperlihatkan velg penuh. -->
+    <g id="spare">
+      <circle cx="0" cy="7" r="80" fill="#000" opacity="0.12" />
+      <circle r="78" fill="#1b1e22" />
+      <circle r="69" fill="#2a2e34" />
+      <circle r="58" fill="#c9ced6" stroke="#9aa1ab" stroke-width="3" />
+      <circle r="51" fill="#d7dbe1" />
+      <g fill="#8d939e">
+        <circle cx="0" cy="-33" r="7" />
+        <circle cx="29" cy="-16" r="7" />
+        <circle cx="29" cy="17" r="7" />
+        <circle cx="0" cy="33" r="7" />
+        <circle cx="-29" cy="17" r="7" />
+        <circle cx="-29" cy="-16" r="7" />
+      </g>
+      <circle r="15" fill="#b7bdc7" stroke="#8d939e" stroke-width="3" />
+    </g>
+
+    <!-- Pegas daun -->
+    <g id="leaf">
+      <rect x="-120" y="0" width="240" height="7" rx="3.5" fill="#767d88" />
+      <rect x="-96" y="11" width="192" height="7" rx="3.5" fill="#767d88" />
+      <rect x="-70" y="22" width="140" height="7" rx="3.5" fill="#767d88" />
+      <rect x="-132" y="-6" width="20" height="40" rx="6" fill="#666d78" />
+      <rect x="112" y="-6" width="20" height="40" rx="6" fill="#666d78" />
+    </g>
+
+    <g id="rivet" fill="#5a616c">
+      <circle r="2.6" />
+    </g>
+  </defs>
+
+  <g id="scene">
+
+    <!-- ═══ KLAKSON / HIDUNG KABIN (kiri) ═══════════════════════════════ -->
+    <g id="cab">
+      <path
+        d="M212 366 h98 a20 20 0 0 1 20 20 v130 a20 20 0 0 1 -20 20 h-98 a18 18 0 0 1 -18 -18 v-134 a18 18 0 0 1 18 -18 z"
+        fill="#8d939e" stroke="#5a616c" stroke-width="3" />
+      <rect x="236" y="392" width="54" height="118" rx="10" fill="#5f6670" />
+      <rect x="244" y="400" width="38" height="102" rx="7" fill="#767d88" />
+      <rect x="306" y="390" width="42" height="32" rx="8" fill="#767d88" />
+      <rect x="306" y="480" width="42" height="32" rx="8" fill="#767d88" />
+      <rect x="240" y="446" width="88" height="22" rx="8" fill="#767d88" />
+      <rect x="314" y="436" width="28" height="42" rx="9" fill="#a9afb9" stroke="#5a616c" stroke-width="2" />
+      <rect x="204" y="372" width="24" height="11" rx="5" fill="#d98324" />
+      <rect x="204" y="519" width="24" height="11" rx="5" fill="#d98324" />
+    </g>
+
+    <!-- ═══ DUA RAIL LONGITUDINAL ═══════════════════════════════════════ -->
+    <rect x="316" y="368" width="1146" height="22" rx="5" fill="#a9afb9" stroke="#5a616c" stroke-width="2" />
+    <rect x="316" y="460" width="1146" height="22" rx="5" fill="#a9afb9" stroke="#5a616c" stroke-width="2" />
+
+    <g>
+      <use href="#rivet" x="400" y="379" /><use href="#rivet" x="470" y="379" />
+      <use href="#rivet" x="560" y="379" /><use href="#rivet" x="650" y="379" />
+      <use href="#rivet" x="740" y="379" /><use href="#rivet" x="830" y="379" />
+      <use href="#rivet" x="920" y="379" /><use href="#rivet" x="1010" y="379" />
+      <use href="#rivet" x="1100" y="379" /><use href="#rivet" x="1190" y="379" />
+      <use href="#rivet" x="1280" y="379" /><use href="#rivet" x="1370" y="379" />
+      <use href="#rivet" x="400" y="471" /><use href="#rivet" x="470" y="471" />
+      <use href="#rivet" x="560" y="471" /><use href="#rivet" x="650" y="471" />
+      <use href="#rivet" x="740" y="471" /><use href="#rivet" x="830" y="471" />
+      <use href="#rivet" x="920" y="471" /><use href="#rivet" x="1010" y="471" />
+      <use href="#rivet" x="1100" y="471" /><use href="#rivet" x="1190" y="471" />
+      <use href="#rivet" x="1280" y="471" /><use href="#rivet" x="1370" y="471" />
+    </g>
+
+    <!-- ═══ CROSS MEMBER SEKSI DEPAN ════════════════════════════════════ -->
+    <g fill="#8b929d" stroke="#5a616c" stroke-width="2">
+      <rect x="556" y="390" width="16" height="70" rx="4" />
+      <rect x="620" y="390" width="16" height="70" rx="4" />
+      <rect x="684" y="390" width="16" height="70" rx="4" />
+      <!-- seksi belakang -->
+      <rect x="1206" y="390" width="16" height="70" rx="4" />
+      <rect x="1296" y="390" width="16" height="70" rx="4" />
+      <rect x="1386" y="390" width="16" height="70" rx="4" />
+    </g>
+
+    <!-- ═══ KANDANG BAN SERAP (seksi tengah yang lebih tinggi) ══════════ -->
+    <g fill="#9aa1ab" stroke="#5a616c" stroke-width="2">
+      <rect x="735" y="310" width="18" height="280" rx="5" />
+      <rect x="1011" y="310" width="18" height="280" rx="5" />
+      <rect x="735" y="310" width="294" height="30" rx="6" />
+      <rect x="735" y="560" width="294" height="30" rx="6" />
+    </g>
+    <!-- Strap pemasangan ban serap -->
+    <g fill="#c3c9d2" stroke="#9aa1ab" stroke-width="2">
+      <rect x="798" y="340" width="18" height="220" rx="6" />
+      <rect x="988" y="340" width="18" height="220" rx="6" />
+    </g>
+
+    <!-- ═══ AXLE DEPAN ══════════════════════════════════════════════════ -->
+    <rect x="451" y="304" width="22" height="298" rx="10" fill="#6f7681" />
+    <rect x="455" y="390" width="14" height="92" rx="7" fill="#8b929d" />
+    <use href="#leaf" x="466" y="322" />
+    <use href="#leaf" x="466" y="546" />
+    <rect x="478" y="414" width="70" height="26" rx="9" fill="#767d88" />
+
+    <!-- ═══ AXLE BELAKANG + DIFFERENTIAL ════════════════════════════════ -->
+    <rect x="1107" y="317" width="22" height="291" rx="10" fill="#6f7681" />
+    <use href="#leaf" x="1118" y="330" />
+    <use href="#leaf" x="1118" y="528" />
+    <ellipse cx="1118" cy="425" rx="42" ry="48" fill="#7b828d" stroke="#4b515c" stroke-width="3" />
+    <ellipse cx="1118" cy="425" rx="19" ry="23" fill="#5a616c" />
+    <rect x="1052" y="414" width="34" height="22" rx="7" fill="#8b929d" />
+    <!-- poros propeler menuju depan -->
+    <rect x="964" y="415" width="92" height="20" rx="10" fill="#8b929d" stroke="#5a616c" stroke-width="2" />
+    <rect x="956" y="411" width="16" height="28" rx="6" fill="#767d88" />
+
+    <!-- ═══ UJUNG RANGKA (kanan) ════════════════════════════════════════ -->
+    <rect x="1448" y="356" width="14" height="138" rx="5" fill="#767d88" />
+    <rect x="1440" y="366" width="30" height="12" rx="5" fill="#d98324" />
+    <rect x="1440" y="472" width="30" height="12" rx="5" fill="#d98324" />
+    <rect x="1408" y="500" width="54" height="16" rx="7" fill="#666d78" />
+
+    <!-- ═══ BAN JALAN ═══════════════════════════════════════════════════ -->
+    <use href="#tyre" x="462" y="304" data-slot="depan-kanan" />
+    <use href="#tyre" x="462" y="602" data-slot="depan-kiri" />
+    <use href="#tyre" x="1118" y="317" data-slot="belakang-kanan" />
+    <use href="#tyre" x="1118" y="608" data-slot="belakang-kiri" />
+
+    <!-- ═══ BAN SERAP — terpasang di tengah rangka, menghadap ke atas ═══ -->
+    <g data-slot="serap">
+      <use href="#spare" x="906" y="432" />
+      <rect x="768" y="414" width="276" height="36" rx="12" fill="#d7dbe1" stroke="#9aa1ab" stroke-width="2.5" />
+      <g fill="#8d939e">
+        <circle cx="786" cy="432" r="6" />
+        <circle cx="1026" cy="432" r="6" />
+        <circle cx="816" cy="432" r="4" />
+        <circle cx="996" cy="432" r="4" />
+      </g>
+    </g>
+
+  </g>
+</svg>
