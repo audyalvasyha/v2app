@@ -1,16 +1,17 @@
 "use client";
 
 import React from "react";
-import { ComingSoon } from "./coming-soon";
+import { HinoTyreMap } from "./hino-tyre-map";
 
 /**
  * Board Analisa Ban.
  *
-  Saat ini menu ini masih dalam pengembangan. Isinya (peta ban, tabel rincian,
-  filter, dll) dipindahkan ke `components/organisms/coming-soon.tsx` agar
-  `BanAnalysis` bisa dipanggil persis seperti dulu dari `app/page.tsx` tanpa
-  mengubah penamaan atau tanda tangannya. Ketika peta ban selesai, ganti
-  `<ComingSoon />` ini dengan view peta yang baru.
+ * Isinya kini peta posisi ban (`components/organisms/hino-tyre-map.tsx`):
+ * gambar rangka Hino dengan titik tiap ban, garis kurva ke kotak detail
+ * (posisi, tekanan angin, ketebalan mm, merk ban). Peta menerima props
+ * `tyres` — kolom tekanan/ketebalan/merk belum ada di Supabase, jadi
+ * untuk sekarang peta memakai data contohnya sendiri. Tanda tangan komponen
+ * tetap sama agar panggilan `next/dynamic` di `app/page.tsx` tidak berubah.
  */
 export interface BanAnalysisProps {
   /** Seluruh riwayat perbaikan (sudah termasuk kolom uraian & jumlah_harga). */
@@ -20,5 +21,5 @@ export interface BanAnalysisProps {
 }
 
 export function BanAnalysis({ histories, isLoading, error }: BanAnalysisProps) {
-  return <ComingSoon />;
+  return <HinoTyreMap />;
 }
