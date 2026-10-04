@@ -108,7 +108,7 @@ const HOTSPOTS: Record<BanWheelSlot, { x: number; y: number }> = {
   "depan-kiri": { x: 72, y: 56 },
   "belakang-kanan": { x: 30, y: 76 },
   "belakang-kiri": { x: 26, y: 60 },
-  serap: { x: 50, y: 68 },
+  serap: { x: 38, y: 68 },
 };
 
 /** Geometri diagram desktop: semua dalam % agar tetap menempel saat discale. */
