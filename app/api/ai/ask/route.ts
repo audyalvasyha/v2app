@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server"
-import { answerQuestion, AiError } from "@/lib/ai/gemini"
-import { requireUserClient } from "@/lib/ai/user-client"
-import { loadMemories, saveMemories, toPromptMemories } from "@/lib/ai/memory"
+import { NextResponse } from "next/server";
+import { answerQuestion, AiError } from "@/lib/ai/gemini";
+import { requireUserClient } from "@/lib/ai/user-client";
+import { loadMemories, saveMemories, toPromptMemories } from "@/lib/ai/memory";
 
 /**
  * Endpoint chatbot analitik.
@@ -26,12 +26,12 @@ import { loadMemories, saveMemories, toPromptMemories } from "@/lib/ai/memory"
  * token bocor.
  */
 
-export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Batas question dipotong di sini supaya prompt tidak bisa dipakai
 // untuk menyelundupkan instruksi panjang.
-const MAX_QUESTION_LENGTH = 500
+const MAX_QUESTION_LENGTH = 500;
 
 /**
  * Berapa pesan lampiran yang boleh dibawa sebagai konteks.
@@ -42,8 +42,8 @@ const MAX_QUESTION_LENGTH = 500
  * tidak, satu request bisa menyelundupkan puluhan ribu karakter ke
  * prompt dan menghabiskan kuota tanpa terlihat.
  */
-const MAX_HISTORY_MESSAGES = 10
-const MAX_HISTORY_MESSAGE_LENGTH = 400
+const MAX_HISTORY_MESSAGES = 10;
+const MAX_HISTORY_MESSAGE_LENGTH = 400;
 
 // ── Rate limit per user ─────────────────────────────────────────
 // Kuota Gemini gratis sangat kecil (~15 request/menit), dan SETIAP
@@ -55,23 +55,25 @@ const MAX_HISTORY_MESSAGE_LENGTH = 400
 // Peta in-memory: berlaku per instance serverless (berkurang tiap cold
 // start). Cukup untuk meredam spam dari satu proses; rate limit di edge
 // tetap lebih kuat bila suatu saat diperlukan.
-const RATE_LIMIT_PER_MINUTE = 8
-const RATE_WINDOW_MS = 60_000
-const recentHits = new Map<string, number[]>()
+const RATE_LIMIT_PER_MINUTE = 8;
+const RATE_WINDOW_MS = 60_000;
+const recentHits = new Map<string, number[]>();
 
 function withinRateLimit(userId: string): boolean {
-  const now = Date.now()
-  const list = (recentHits.get(userId) ?? []).filter((t) => now - t < RATE_WINDOW_MS)
+  const now = Date.now();
+  const list = (recentHits.get(userId) ?? []).filter(
+    (t) => now - t < RATE_WINDOW_MS,
+  );
   if (list.length >= RATE_LIMIT_PER_MINUTE) {
-    recentHits.set(userId, list)
-    return false
+    recentHits.set(userId, list);
+    return false;
   }
-  list.push(now)
-  recentHits.set(userId, list)
+  list.push(now);
+  recentHits.set(userId, list);
   // Jaga peta tetap kecil — kalau tidak, setiap user yang pernah
   // bertanya meninggalkan entri selamanya (kebocoran memori per-instance).
-  if (recentHits.size > 2000) recentHits.clear()
-  return true
+  if (recentHits.size > 2000) recentHits.clear();
+  return true;
 }
 
 /**
@@ -96,65 +98,79 @@ function withinRateLimit(userId: string): boolean {
  * mis. "Hanya query SELECT yang diizinkan") diteruskan apa adanya.
  */
 function friendlySqlError(message: string): string {
-  const lower = message.toLowerCase()
+  const lower = message.toLowerCase();
   if (lower.includes("does not exist")) {
     return (
       "Query-nya belum nyambung dengan struktur data, jadi gagal dijalankan. " +
       "Detailnya sudah aku catat di server — coba tanya dengan kalimat yang sedikit berbeda ya."
-    )
+    );
   }
   if (lower.includes("invalid input syntax")) {
-    return "Ada bagian data yang formatnya tidak terbaca, jadi gagal dihitung. Coba longgarkan filter tanggalnya."
+    return "Ada bagian data yang formatnya tidak terbaca, jadi gagal dihitung. Coba longgarkan filter tanggalnya.";
   }
   if (lower.includes("syntax error")) {
-    return "Query-nya gagal dijalankan. Detailnya sudah aku catat di server."
+    return "Query-nya gagal dijalankan. Detailnya sudah aku catat di server.";
   }
-  return message
+  return message;
 }
 
-function parseHistory(raw: unknown): Array<{ role: "user" | "assistant"; content: string }> {
-  if (!Array.isArray(raw)) return []
+function parseHistory(
+  raw: unknown,
+): Array<{ role: "user" | "assistant"; content: string }> {
+  if (!Array.isArray(raw)) return [];
   return raw
-    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === "object" && item !== null,
+    )
     .filter((item) => item.role === "user" || item.role === "assistant")
     .map((item) => ({
       role: item.role as "user" | "assistant",
-      content: typeof item.content === "string" ? item.content.slice(0, MAX_HISTORY_MESSAGE_LENGTH) : "",
+      content:
+        typeof item.content === "string"
+          ? item.content.slice(0, MAX_HISTORY_MESSAGE_LENGTH)
+          : "",
     }))
     .filter((item) => item.content.trim().length > 0)
-    .slice(-MAX_HISTORY_MESSAGES)
+    .slice(-MAX_HISTORY_MESSAGES);
 }
 
 export async function POST(request: Request) {
-  let question: unknown
-  let rawHistory: unknown = []
-  let rememberThis: unknown = false
+  let question: unknown;
+  let rawHistory: unknown = [];
+  let rememberThis: unknown = false;
   try {
-    const body = await request.json()
-    question = body?.question
-    rawHistory = body?.history
-    rememberThis = body?.remember === true
+    const body = await request.json();
+    question = body?.question;
+    rawHistory = body?.history;
+    rememberThis = body?.remember === true;
   } catch {
-    return NextResponse.json({ error: "Body harus berupa JSON." }, { status: 400 })
+    return NextResponse.json(
+      { error: "Body harus berupa JSON." },
+      { status: 400 },
+    );
   }
 
   if (typeof question !== "string" || !question.trim()) {
-    return NextResponse.json({ error: "Pertanyaan tidak boleh kosong." }, { status: 400 })
+    return NextResponse.json(
+      { error: "Pertanyaan tidak boleh kosong." },
+      { status: 400 },
+    );
   }
   if (question.length > MAX_QUESTION_LENGTH) {
     return NextResponse.json(
       { error: `Pertanyaan maksimal ${MAX_QUESTION_LENGTH} karakter.` },
       { status: 400 },
-    )
+    );
   }
 
   // ── Auth ────────────────────────────────────────────────────────
   // Auth + klien beridentitas user dilakukan di satu tempat
   // (`requireUserClient`) supaya route ini dan route /api/ai/memory
   // memakai aturan yang sama persis.
-  const auth = await requireUserClient(request)
-  if (!auth.ok) return auth.response
-  const { client: userClient, userId } = auth.value
+  const auth = await requireUserClient(request);
+  if (!auth.ok) return auth.response;
+  const { client: userClient, userId } = auth.value;
 
   // Baru setelah identitas pasti: kuota dihitung per user, bukan per IP,
   // supaya refresh halaman atau IP kantor yang sama tidak saling
@@ -168,7 +184,7 @@ export async function POST(request: Request) {
           `Tunggu satu menit (maksimal ${RATE_LIMIT_PER_MINUTE} pertanyaan per menit).`,
       },
       { status: 429 },
-    )
+    );
   }
 
   // ── Tanya AI, jalankan query, susun jawaban ────────────────────
@@ -176,37 +192,43 @@ export async function POST(request: Request) {
   // Dua lapis konteks ikut di sini: riwayat percakapan (jarak pendek)
   // dan memori jangka panjang milik user ini (lintas sesi). Keduanya
   // dibaca dengan klien user yang sama, jadi RLS tetap berlaku.
-  const memories = await loadMemories(userClient)
+  const memories = await loadMemories(userClient);
 
   try {
     const result = await answerQuestion(
       question.trim(),
       async (sql) => {
-      const { data, error } = await userClient.rpc("exec_ai_query", { p_query: sql })
-      if (error) {
-        // Pesan dari exec_ai_query sengaja dibuat ramah user (mis.
-        // "Hanya query SELECT yang diizinkan"), jadi apa adanya
-        // sudah informatif.
-        //
-        // SQL-nya ikut dicatat di log server (bukan dikirim ke browser)
-        // supaya kegagalan seperti "function to_char(text, unknown) does
-        // not exist" bisa langsung dilihat query mana yang menyebabkannya —
-        // tanpa itu, kita cuma menebak dari pesan error Postgres.
-        console.error("[ai/ask] SQL gagal:", { sql, error: error.message })
-        // Dua lapis informasi: `message` yang dilihat user sudah
-        // diterjemahkan jadi kalimat ramah, sementara `detail`
-        // menyimpan pesan Postgres apa adanya. Detail inilah yang
-        // dibaca model saat mencoba memperbaiki query-nya sendiri —
-        // tanpa itu, dia hanya diberi tahu "gagal" tanpa alasan.
-        throw new AiError(friendlySqlError(error.message), "sql", error.message)
-      }
-      return (data as Array<Record<string, unknown>>) ?? []
+        const { data, error } = await userClient.rpc("exec_ai_query", {
+          p_query: sql,
+        });
+        if (error) {
+          // Pesan dari exec_ai_query sengaja dibuat ramah user (mis.
+          // "Hanya query SELECT yang diizinkan"), jadi apa adanya
+          // sudah informatif.
+          //
+          // SQL-nya ikut dicatat di log server (bukan dikirim ke browser)
+          // supaya kegagalan seperti "function to_char(text, unknown) does
+          // not exist" bisa langsung dilihat query mana yang menyebabkannya —
+          // tanpa itu, kita cuma menebak dari pesan error Postgres.
+          console.error("[ai/ask] SQL gagal:", { sql, error: error.message });
+          // Dua lapis informasi: `message` yang dilihat user sudah
+          // diterjemahkan jadi kalimat ramah, sementara `detail`
+          // menyimpan pesan Postgres apa adanya. Detail inilah yang
+          // dibaca model saat mencoba memperbaiki query-nya sendiri —
+          // tanpa itu, dia hanya diberi tahu "gagal" tanpa alasan.
+          throw new AiError(
+            friendlySqlError(error.message),
+            "sql",
+            error.message,
+          );
+        }
+        return (data as Array<Record<string, unknown>>) ?? [];
       },
       {
         history: parseHistory(rawHistory),
         memories: toPromptMemories(memories.items),
       },
-    )
+    );
 
     // Menyimpan memori baru adalah bonus, bukan syarat.
     // Kalau tabelnya belum ada (script SQL belum dijalankan) atau insert
@@ -219,15 +241,36 @@ export async function POST(request: Request) {
     // yang menekan tombol sudah menyatakan niatnya dengan sendirinya. saveMemories
     // tetap yang memutuskan, karena dia yang buang duplikat dan memangkas
     // daftar lama.
-    const forced = rememberThis ? [question.trim().slice(0, 300)] : []
-    const saved = await saveMemories(userClient, userId, [...result.remembered, ...forced])
+    const forced = rememberThis ? [question.trim().slice(0, 300)] : [];
+    const saved = await saveMemories(userClient, userId, [
+      ...result.remembered,
+      ...forced,
+    ]);
+
+    // --- TAMBAHKAN LOGIC PEMBERSIHAN DI SINI ---
+    let finalAnswer = result.answer;
+    try {
+      // Menghilangkan backtick ```json dan ``` jika AI menambahkannya
+      const cleanedText = result.answer
+        .replace(/```json/gi, "")
+        .replace(/```/g, "")
+        .trim();
+      const parsed = JSON.parse(cleanedText);
+      // Jika hasil parse punya property "jawaban", gunakan itu
+      if (parsed && parsed.jawaban) {
+        finalAnswer = parsed.jawaban;
+      }
+    } catch (e) {
+      // Abaikan error jika ternyata AI tidak mengirim JSON (biarkan finalAnswer apa adanya)
+    }
+    // -------------------------------------------
 
     return NextResponse.json({
       sql: result.sql,
       rows: result.rows,
-      answer: result.answer,
+      answer: finalAnswer, // <-- Ubah result.answer menjadi finalAnswer
       remembered: saved.map((item) => item.content),
-    })
+    });
   } catch (error) {
     if (error instanceof AiError) {
       // 503 untuk rate limit: ini kondisi sementara, bukan permintaan
@@ -238,15 +281,15 @@ export async function POST(request: Request) {
           ? 500
           : error.kind === "rate"
             ? 503
-            : 400
-      return NextResponse.json({ error: error.message }, { status })
+            : 400;
+      return NextResponse.json({ error: error.message }, { status });
     }
     // Jangan kirim detail tak terduga ke browser — bisa memuat
     // informasi internal yang tidak perlu dilihat pengguna.
-    console.error("[ai/ask] tidak terduga:", error)
+    console.error("[ai/ask] tidak terduga:", error);
     return NextResponse.json(
       { error: "Terjadi kesalahan saat memproses pertanyaan." },
       { status: 500 },
-    )
+    );
   }
 }

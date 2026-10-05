@@ -104,11 +104,11 @@ const RIGHT_SLOTS: BanWheelSlot[] = ["depan-kanan", "depan-kiri"];
  * belum tepat di atas ban pada foto.
  */
 const HOTSPOTS: Record<BanWheelSlot, { x: number; y: number }> = {
-  "depan-kanan": { x: 76, y: 72 },
-  "depan-kiri": { x: 72, y: 56 },
-  "belakang-kanan": { x: 30, y: 76 },
+  "depan-kanan": { x: 78, y: 85 },
+  "depan-kiri": { x: 77, y: 61 },
+  "belakang-kanan": { x: 27, y: 85 },
   "belakang-kiri": { x: 26, y: 60 },
-  serap: { x: 38, y: 68 },
+  serap: { x: 18, y: 72 },
 };
 
 /** Geometri diagram desktop: semua dalam % agar tetap menempel saat discale. */
@@ -134,10 +134,10 @@ function toCanvas(p: { x: number; y: number }) {
 /** Posisi (pusat vertikal) tiap kotak detail, dalam % tinggi kanvas. */
 const BOX_Y: Record<BanWheelSlot, number> = {
   "belakang-kiri": 19,
-  "belakang-kanan": 51,
-  serap: 83,
-  "depan-kanan": 35,
-  "depan-kiri": 67,
+  "belakang-kanan": 83,
+  serap: 51,
+  "depan-kanan": 67,
+  "depan-kiri": 35,
 };
 
 const BOX_W = 17;
