@@ -133,25 +133,35 @@ function isPlausibleQty(n: number): boolean {
 export type BanWheelSide = "kiri" | "kanan"
 
 /** Roda/ban fisik pada satu unit — satu titik klik di peta ban. */
-export type BanWheelSlot = "depan-kiri" | "depan-kanan" | "belakang-kiri" | "belakang-kanan" | "serap"
+export type BanWheelSlot = 
+  | "depan-kiri"
+  | "depan-kanan"
+  | "belakang-kiri-dalam"
+  | "belakang-kiri-luar"
+  | "belakang-kanan-dalam"
+  | "belakang-kanan-luar"
+  | "serap";
 
 /** Urutan tetap slot — dipakai gambar ban dan peta hotspot. */
 export const BAN_WHEEL_SLOT_ORDER: BanWheelSlot[] = [
     "depan-kiri",
     "depan-kanan",
-    "belakang-kiri",
-    "belakang-kanan",
+    "belakang-kiri-luar",
+    "belakang-kiri-dalam",
+    "belakang-kanan-dalam",
+    "belakang-kanan-luar",
     "serap",
-]
+];
 
 export const BAN_WHEEL_SLOT_LABELS: Record<BanWheelSlot, string> = {
     "depan-kiri": "Depan kiri",
     "depan-kanan": "Depan kanan",
-    "belakang-kiri": "Belakang kiri (dobel)",
-    "belakang-kanan": "Belakang kanan (dobel)",
+    "belakang-kiri-luar": "Belakang kiri luar",
+    "belakang-kiri-dalam": "Belakang kiri dalam",
+    "belakang-kanan-dalam": "Belakang kanan dalam",
+    "belakang-kanan-luar": "Belakang kanan luar",
     serap: "Ban serap",
-}
-
+};
 /**
  * Sisi roda yang disebut: "kiri"/"left"/"lhs", "kanan"/"right"/"rhs", atau
  * sekaligus dua-duanya ("L/R" — lazim dipakai di bengkel). Mengembalikan

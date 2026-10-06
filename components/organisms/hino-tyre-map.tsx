@@ -1,55 +1,38 @@
 "use client";
 
-import React, { memo, useState } from "react";
-import { Gauge, Ruler, Tag } from "lucide-react";
+import React, { memo, useState, useMemo } from "react";
+import { Gauge, Ruler, Tag, Truck } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { BanWheelSlot } from "@/lib/ban-analytics";
 
 /**
  * Peta posisi ban untuk menu Analisa Ban.
- *
- * Dasar petanya foto rangka Hino di `public/Hino Chasis.png` (foto atas 3/4,
- * mobil menghadap ke kanan). Tiap ban ditandai sebuah titik, lalu garis kurva
- * (bezier, SVG overlay) menariknya ke kotak detail yang menampilkan
- * singkatan posisi, tekanan angin, ketebalan mm, dan merk ban.
- *
- * PENTING — kalibrasi titik ban:
- * Posisi titik ada di konstanta `HOTSPOTS` dalam PERSEN dari gambar
- * (x dari kiri, y dari atas, 0–100). Kalau sebuah titik tidak tepat duduk di
- * atas ban pada foto, cukup geser angka `x`/`y` slot itu — tidak ada yang
- * perlu diubah di tempat lain; garis kurva dan kotak detail mengikuti
- * otomatis.
  */
 
 const HINO_IMAGE = {
-  /** Nama berkas memakai spasi, jadi di-encode jadi %20. */
   src: "/Hino%20Chasis.png",
   width: 669,
   height: 373,
 } as const;
 
 export interface HinoTyreInfo {
-  /** Slot roda yang sudah ada di model data (ban-analytics). */
   slot: BanWheelSlot
-  /** Singkatan posisi, mis. "RL" untuk Rear Left. */
   code: string
-  /** Nama lengkap posisi, mis. "Rear Left". */
   name: string
-  /** Tekanan angin siap tampil, mis. "5.8 bar" — null bila belum diukur. */
   pressureBar: string | null
-  /** Ketebalan tread dalam mm — null bila belum diukur. */
   thicknessMm: number | null
-  /** Merk ban — null bila tidak dicatat. */
   brand: string | null
 }
 
-/**
- * DATA CONTOH. Kolom tekanan/ketebalan/merk ban belum ada di Supabase, jadi
- * nilai berikut masih contoh agar peta bisa dilihat utuh. Bila datanya sudah
- * tersedia, kirim lewat props `tyres` (struktur `HinoTyreInfo`) dari
- * `ban-analysis.tsx` — komponen ini tidak perlu diubah.
- */
+// Data kendaraan contoh (diambil sebagian dari referensi)
+const VEHICLES = [
+  { id: "STDM000064", nopol: "B 9837 SXS", type: "4D" },
+  { id: "STDM000048", nopol: "B 9830 SXS", type: "4R" },
+  { id: "STDM000266", nopol: "B 9518 SXT", type: "6D" },
+  { id: "STDM000157", nopol: "B 9974 SXS", type: "6R" },
+];
+
 const CONTOH_DATA_BAN: Record<BanWheelSlot, HinoTyreInfo> = {
   "depan-kiri": {
     slot: "depan-kiri",
@@ -67,18 +50,34 @@ const CONTOH_DATA_BAN: Record<BanWheelSlot, HinoTyreInfo> = {
     thicknessMm: 6.8,
     brand: "GT Radial",
   },
-  "belakang-kiri": {
-    slot: "belakang-kiri",
-    code: "RL",
-    name: "Rear Left",
+  "belakang-kiri-dalam": {
+    slot: "belakang-kiri-dalam",
+    code: "RL-I",
+    name: "Rear Left In",
     pressureBar: "6.2 bar",
     thicknessMm: 7.2,
     brand: "Dunlop",
   },
-  "belakang-kanan": {
-    slot: "belakang-kanan",
-    code: "RR",
-    name: "Rear Right",
+  "belakang-kiri-luar": {
+    slot: "belakang-kiri-luar",
+    code: "RL-O",
+    name: "Rear Left Out",
+    pressureBar: "6.2 bar",
+    thicknessMm: 7.2,
+    brand: "Dunlop",
+  },
+  "belakang-kanan-luar": {
+    slot: "belakang-kanan-luar",
+    code: "RR-O",
+    name: "Rear Right Out",
+    pressureBar: "6.0 bar",
+    thicknessMm: 7.5,
+    brand: "Dunlop",
+  },
+  "belakang-kanan-dalam": {
+    slot: "belakang-kanan-dalam",
+    code: "RR-I",
+    name: "Rear Right In",
     pressureBar: "6.0 bar",
     thicknessMm: 7.5,
     brand: "Dunlop",
@@ -93,29 +92,43 @@ const CONTOH_DATA_BAN: Record<BanWheelSlot, HinoTyreInfo> = {
   },
 };
 
-/** Urutan tampil kotak detail kolom kiri (belakang) dan kanan (depan). */
-const LEFT_SLOTS: BanWheelSlot[] = ["belakang-kiri", "belakang-kanan", "serap"];
+/** Pembagian posisi kotak panel master */
+const LEFT_SLOTS: BanWheelSlot[] = [
+  "belakang-kiri-dalam",
+  "belakang-kiri-luar",
+  "belakang-kanan-dalam",
+  "belakang-kanan-luar"
+];
 const RIGHT_SLOTS: BanWheelSlot[] = ["depan-kanan", "depan-kiri"];
+const BOTTOM_SLOTS: BanWheelSlot[] = ["serap"];
 
-/**
- * Posisi titik tiap ban, dalam PERSEN dari gambar (x dari kiri, y dari atas).
- * Foto menghadap kanan: sisi dekat kamera (bagian bawah foto) = sisi kanan
- * kendaraan, sisi jauh (atas) = sisi kiri. Sesuaikan angkanya bila titik
- * belum tepat di atas ban pada foto.
- */
+/** Konfigurasi slot berdasarkan jumlah roda */
+const TYPE_6_WHEELS: BanWheelSlot[] = [
+  "depan-kiri", "depan-kanan",
+  "belakang-kiri-luar", "belakang-kiri-dalam",
+  "belakang-kanan-luar", "belakang-kanan-dalam",
+  "serap"
+];
+// Untuk 4 roda, kita sembunyikan ban "-dalam"
+const TYPE_4_WHEELS: BanWheelSlot[] = [
+  "depan-kiri", "depan-kanan",
+  "belakang-kiri-luar", "belakang-kanan-luar",
+  "serap"
+];
+
+/** Koordinat titik di atas foto mobil (0-100%) */
 const HOTSPOTS: Record<BanWheelSlot, { x: number; y: number }> = {
   "depan-kanan": { x: 78, y: 85 },
-  "depan-kiri": { x: 77, y: 61 },
-  "belakang-kanan": { x: 27, y: 85 },
-  "belakang-kiri": { x: 26, y: 60 },
+  "depan-kiri": { x: 78, y: 61 },
+  "belakang-kiri-dalam": { x: 26, y: 62 },
+  "belakang-kiri-luar": { x: 26, y: 62 },
+  "belakang-kanan-dalam": { x: 27, y: 85 },
+  "belakang-kanan-luar": { x: 27, y: 85 },
   serap: { x: 18, y: 72 },
 };
 
-/** Geometri diagram desktop: semua dalam % agar tetap menempel saat discale. */
 const LAYOUT = {
-  /** Rasio lebar : tinggi kanvas diagram. */
   aspect: 2,
-  /** Lebar gambar Hino dalam % lebar kanvas. */
   imgW: 52,
 } as const;
 
@@ -123,7 +136,6 @@ const IMG_LEFT = (100 - LAYOUT.imgW) / 2;
 const IMG_H = LAYOUT.imgW * (HINO_IMAGE.height / HINO_IMAGE.width) * LAYOUT.aspect;
 const IMG_TOP = (100 - IMG_H) / 2;
 
-/** Ubah posisi (dalam % gambar) ke % kanvas diagram. */
 function toCanvas(p: { x: number; y: number }) {
   return {
     x: IMG_LEFT + (p.x / 100) * LAYOUT.imgW,
@@ -131,36 +143,39 @@ function toCanvas(p: { x: number; y: number }) {
   };
 }
 
-/** Posisi (pusat vertikal) tiap kotak detail, dalam % tinggi kanvas. */
+/** Posisi vertikal panel di kanvas (0-100%) */
 const BOX_Y: Record<BanWheelSlot, number> = {
-  "belakang-kiri": 19,
-  "belakang-kanan": 83,
-  serap: 51,
-  "depan-kanan": 67,
+  "belakang-kiri-dalam": 16,
+  "belakang-kiri-luar": 41,
+  "belakang-kanan-dalam": 66,
+  "belakang-kanan-luar": 91,
+  serap: 91,
   "depan-kiri": 35,
+  "depan-kanan": 67,
 };
 
 const BOX_W = 17;
-const BOX_X_LEFT = 1.5; // kotak kolom kiri: right edge = BOX_X_LEFT + BOX_W
-const BOX_X_RIGHT = 100 - 1.5 - BOX_W; // kotak kolom kanan: left edge
+const BOX_X_LEFT = 1.5;
+const BOX_X_RIGHT = 100 - 1.5 - BOX_W;
 
 function fmtThickness(v: number | null): string {
   return v == null ? "—" : `${v.toFixed(1)} mm`;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Kotak detail                                                                */
-/* -------------------------------------------------------------------------- */
-
 interface DetailBoxProps {
   info: HinoTyreInfo
   active: boolean
+  is4Wheel?: boolean
   onToggle: () => void
   className?: string
   style?: React.CSSProperties
 }
 
-function TyreDetailBox({ info, active, onToggle, className, style }: DetailBoxProps) {
+function TyreDetailBox({ info, active, is4Wheel, onToggle, className, style }: DetailBoxProps) {
+  // Jika 4 roda, ganti label "Out" / "-O" menjadi label ban tunggal standar ("Rear Left" / "RL")
+  const displayName = is4Wheel ? info.name.replace(" Out", "") : info.name;
+  const displayCode = is4Wheel ? info.code.replace("-O", "") : info.code;
+
   return (
     <button
       type="button"
@@ -168,7 +183,7 @@ function TyreDetailBox({ info, active, onToggle, className, style }: DetailBoxPr
       aria-pressed={active}
       style={style}
       className={cn(
-        "block w-full rounded-xl border bg-card/95 p-2.5 text-left shadow-sm backdrop-blur transition-all duration-150",
+        "block w-full rounded-xl border bg-card/95 p-2.5 text-left shadow-sm backdrop-blur transition-all duration-150 relative z-40",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         active
           ? "border-primary/70 shadow-md ring-2 ring-primary/40"
@@ -183,10 +198,10 @@ function TyreDetailBox({ info, active, onToggle, className, style }: DetailBoxPr
             active ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
           )}
         >
-          {info.code}
+          {displayCode}
         </span>
         <span className="truncate text-[11px] font-semibold leading-none">
-          {info.name} <span className="font-normal text-muted-foreground">({info.code})</span>
+          {displayName} <span className="font-normal text-muted-foreground">({displayCode})</span>
         </span>
       </div>
 
@@ -218,30 +233,31 @@ function TyreDetailBox({ info, active, onToggle, className, style }: DetailBoxPr
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Titik ban pada gambar                                                       */
-/* -------------------------------------------------------------------------- */
-
 interface WheelDotProps {
   info: HinoTyreInfo
   x: number
   y: number
   active: boolean
+  is4Wheel?: boolean
   onToggle: () => void
+  zIndexClass: string
 }
 
-function WheelDot({ info, x, y, active, onToggle }: WheelDotProps) {
+function WheelDot({ info, x, y, active, is4Wheel, onToggle, zIndexClass }: WheelDotProps) {
+  const displayCode = is4Wheel ? info.code.replace("-O", "") : info.code;
+
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-pressed={active}
-      aria-label={`${info.name} (${info.code})`}
-      title={`${info.name} (${info.code})`}
+      aria-label={`${info.name} (${displayCode})`}
+      title={`${info.name} (${displayCode})`}
       style={{ left: `${x}%`, top: `${y}%` }}
       className={cn(
-        "group absolute z-10 -translate-x-1/2 -translate-y-1/2 outline-none",
+        "group absolute -translate-x-1/2 -translate-y-1/2 outline-none",
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-full",
+        zIndexClass
       )}
     >
       <span
@@ -259,18 +275,13 @@ function WheelDot({ info, x, y, active, onToggle }: WheelDotProps) {
         )}
         aria-hidden
       >
-        {info.code}
+        {displayCode}
       </span>
     </button>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Peta utama                                                                  */
-/* -------------------------------------------------------------------------- */
-
 export interface HinoTyreMapProps {
-  /** Data per roda; bila tidak dikirim, memakai `CONTOH_DATA_BAN`. */
   tyres?: Partial<Record<BanWheelSlot, HinoTyreInfo>>
   className?: string
 }
@@ -278,24 +289,57 @@ export interface HinoTyreMapProps {
 function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
   const [activeSlot, setActiveSlot] = useState<BanWheelSlot | null>(null);
 
+  // State untuk dropdown Nopol
+  const [selectedNopol, setSelectedNopol] = useState<string>(VEHICLES[2].nopol);
+
   const data: Record<BanWheelSlot, HinoTyreInfo> = { ...CONTOH_DATA_BAN, ...tyres };
 
   const toggle = (slot: BanWheelSlot) =>
     setActiveSlot((prev) => (prev === slot ? null : slot));
 
-  /** Kurva penghubung tiap slot: dari titik ban ke tepi kotak detailnya. */
-  const links = (Object.keys(data) as BanWheelSlot[]).map((slot) => {
+  // Menentukan tipe mobil berdasarkan pilihan dropdown
+  const selectedVehicle = useMemo(() => VEHICLES.find(v => v.nopol === selectedNopol) || VEHICLES[2], [selectedNopol]);
+  const is4Wheel = selectedVehicle.type.startsWith("4");
+  const activeSlotsConfig = is4Wheel ? TYPE_4_WHEELS : TYPE_6_WHEELS;
+
+  // Memfilter slot agar yang dirender hanya sesuai dengan tipe mobilnya
+  const activeLeftSlots = LEFT_SLOTS.filter(slot => activeSlotsConfig.includes(slot));
+  const activeRightSlots = RIGHT_SLOTS.filter(slot => activeSlotsConfig.includes(slot));
+  const activeBottomSlots = BOTTOM_SLOTS.filter(slot => activeSlotsConfig.includes(slot));
+
+  const getLayerOrder = (slot: string) => {
+    if (slot.includes("kanan")) return 3;
+    if (slot === "serap") return 2;
+    return 1;
+  };
+
+  const sortedActiveSlots = (Object.keys(data) as BanWheelSlot[])
+    .filter(slot => activeSlotsConfig.includes(slot))
+    .sort((a, b) => getLayerOrder(a) - getLayerOrder(b));
+
+  const links = sortedActiveSlots.map((slot) => {
     const from = toCanvas(HOTSPOTS[slot]);
-    const toLeft = LEFT_SLOTS.includes(slot);
+    const f = (n: number) => n.toFixed(2);
+
+    if (activeBottomSlots.includes(slot)) {
+      const to = { x: 50, y: BOX_Y[slot] };
+      const dy = to.y - from.y;
+      const cy1 = from.y + dy * 0.45;
+      const cy2 = to.y - dy * 0.45;
+      return {
+        slot,
+        d: `M ${f(from.x)} ${f(from.y)} C ${f(from.x)} ${f(cy1)}, ${f(to.x)} ${f(cy2)}, ${f(to.x)} ${f(to.y)}`,
+      };
+    }
+
+    const toLeft = activeLeftSlots.includes(slot);
     const to = {
       x: toLeft ? BOX_X_LEFT + BOX_W : BOX_X_RIGHT,
       y: BOX_Y[slot],
     };
-    // Cubic dengan tangen horizontal — kurva S halus, khas konektor diagram.
     const dx = to.x - from.x;
     const cx1 = from.x + dx * 0.45;
     const cx2 = to.x - dx * 0.45;
-    const f = (n: number) => n.toFixed(2);
     return {
       slot,
       d: `M ${f(from.x)} ${f(from.y)} C ${f(cx1)} ${f(from.y)}, ${f(cx2)} ${f(to.y)}, ${f(to.x)} ${f(to.y)}`,
@@ -303,15 +347,14 @@ function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
   });
 
   return (
-    <section className={cn("w-full", className)}>
+    <section className={cn("w-full space-y-4", className)}>
       <div className="rounded-2xl border bg-gradient-to-b from-muted/40 to-muted/10 p-3 sm:p-5">
-        {/* ---------- Diagram desktop (sm ke atas): gambar + kurva + kotak ---------- */}
         <div
           className="relative hidden w-full sm:block"
           style={{ aspectRatio: String(LAYOUT.aspect) }}
         >
           <svg
-            className="absolute inset-0 h-full w-full overflow-visible"
+            className="absolute inset-0 h-full w-full overflow-visible z-0"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             fill="none"
@@ -332,14 +375,13 @@ function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
             ))}
           </svg>
 
-          {/* Gambar dasar peta */}
           <img
             src={HINO_IMAGE.src}
             alt="Peta posisi ban rangka Hino dilihat dari atas"
             width={HINO_IMAGE.width}
             height={HINO_IMAGE.height}
             draggable={false}
-            className="absolute select-none rounded-xl border border-border/60 shadow-sm"
+            className="absolute select-none rounded-xl border border-border/60 shadow-sm z-0"
             style={{
               left: `${IMG_LEFT}%`,
               top: `${IMG_TOP}%`,
@@ -347,9 +389,11 @@ function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
             }}
           />
 
-          {/* Titik posisi ban */}
-          {(Object.keys(data) as BanWheelSlot[]).map((slot) => {
+          {sortedActiveSlots.map((slot) => {
             const p = toCanvas(HOTSPOTS[slot]);
+            const layerOrder = getLayerOrder(slot);
+            const zIndexClass = layerOrder === 3 ? "z-30" : layerOrder === 2 ? "z-20" : "z-10";
+
             return (
               <WheelDot
                 key={slot}
@@ -357,17 +401,19 @@ function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
                 x={p.x}
                 y={p.y}
                 active={activeSlot === slot}
+                is4Wheel={is4Wheel}
                 onToggle={() => toggle(slot)}
+                zIndexClass={zIndexClass}
               />
             );
           })}
 
-          {/* Kotak detail kolom kiri (belakang) & kanan (depan) */}
-          {LEFT_SLOTS.map((slot) => (
+          {activeLeftSlots.map((slot) => (
             <TyreDetailBox
               key={slot}
               info={data[slot]}
               active={activeSlot === slot}
+              is4Wheel={is4Wheel}
               onToggle={() => toggle(slot)}
               className="absolute -translate-y-1/2"
               style={{
@@ -377,11 +423,29 @@ function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
               }}
             />
           ))}
-          {RIGHT_SLOTS.map((slot) => (
+
+          {activeBottomSlots.map((slot) => (
             <TyreDetailBox
               key={slot}
               info={data[slot]}
               active={activeSlot === slot}
+              is4Wheel={is4Wheel}
+              onToggle={() => toggle(slot)}
+              className="absolute -translate-x-1/2 -translate-y-1/2 shadow-lg"
+              style={{
+                left: `50%`,
+                top: `${BOX_Y[slot]}%`,
+                width: `${BOX_W}%`,
+              }}
+            />
+          ))}
+
+          {activeRightSlots.map((slot) => (
+            <TyreDetailBox
+              key={slot}
+              info={data[slot]}
+              active={activeSlot === slot}
+              is4Wheel={is4Wheel}
               onToggle={() => toggle(slot)}
               className="absolute -translate-y-1/2"
               style={{
@@ -393,7 +457,7 @@ function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
           ))}
         </div>
 
-        {/* ---------- Versi layar sempit: gambar + titik, kotak di bawah ---------- */}
+        {/* Versi Mobile */}
         <div className="sm:hidden">
           <div className="relative w-full">
             <img
@@ -404,38 +468,36 @@ function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
               draggable={false}
               className="block w-full select-none rounded-xl border border-border/60 shadow-sm"
             />
-            {(Object.keys(data) as BanWheelSlot[]).map((slot) => (
-              <WheelDot
-                key={slot}
-                info={data[slot]}
-                x={HOTSPOTS[slot].x}
-                y={HOTSPOTS[slot].y}
-                active={activeSlot === slot}
-                onToggle={() => toggle(slot)}
-              />
-            ))}
+            {sortedActiveSlots.map((slot) => {
+              const layerOrder = getLayerOrder(slot);
+              const zIndexClass = layerOrder === 3 ? "z-30" : layerOrder === 2 ? "z-20" : "z-10";
+              return (
+                <WheelDot
+                  key={slot}
+                  info={data[slot]}
+                  x={HOTSPOTS[slot].x}
+                  y={HOTSPOTS[slot].y}
+                  active={activeSlot === slot}
+                  is4Wheel={is4Wheel}
+                  onToggle={() => toggle(slot)}
+                  zIndexClass={zIndexClass}
+                />
+              );
+            })}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            {(Object.keys(data) as BanWheelSlot[]).map((slot) => (
+            {sortedActiveSlots.map((slot) => (
               <TyreDetailBox
                 key={slot}
                 info={data[slot]}
                 active={activeSlot === slot}
+                is4Wheel={is4Wheel}
                 onToggle={() => toggle(slot)}
               />
             ))}
           </div>
         </div>
 
-        <p className="mt-3 flex items-start gap-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
-          <Tag className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-          <span>
-            Klik titik ban atau kotaknya untuk menyorot pasangannya. Nilai tekanan,
-            ketebalan, dan merk saat ini masih <em>data contoh</em> — akan
-            disambungkan ke data ban yang sesungguhnya begitu kolomnya tersedia di
-            database.
-          </span>
-        </p>
       </div>
     </section>
   );

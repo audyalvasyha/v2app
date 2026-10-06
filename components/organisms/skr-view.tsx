@@ -494,8 +494,8 @@ function SkrViewImpl({
                                 active
                                     ? "h-8 border-primary/20 bg-primary text-primary-foreground hover:bg-primary/90"
                                     : count === 0
-                                      ? "h-8 bg-card text-muted-foreground/60"
-                                      : "h-8 bg-card"
+                                        ? "h-8 bg-card text-muted-foreground/60"
+                                        : "h-8 bg-card"
                             }
                         >
                             {opt.label}
@@ -588,8 +588,8 @@ function SkrViewImpl({
                                 chartDelta == null
                                     ? "text-muted-foreground"
                                     : chartDelta >= 0
-                                      ? "text-emerald-600 dark:text-emerald-400"
-                                      : "text-primary",
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : "text-primary",
                             )}
                         >
                             {chartDelta == null
@@ -645,13 +645,13 @@ function SkrViewImpl({
                             </Button>
                         ))}
                     </div>
-                <p className="text-xs text-muted-foreground">
-                    Top & bottom 5 · metrik{" "}
-                    <span className="font-medium text-foreground">
-                        {metric === "qty" ? "qty" : "nilai"}
-                    </span>{" "}
-                    · detail toko di kartu di atas
-                </p>
+                    <p className="text-xs text-muted-foreground">
+                        Top & bottom 5 · metrik{" "}
+                        <span className="font-medium text-foreground">
+                            {metric === "qty" ? "qty" : "nilai"}
+                        </span>{" "}
+                        · detail toko di kartu di atas
+                    </p>
                 </div>
 
                 <div className="grid xl:grid-cols-2 xl:divide-x">
@@ -724,8 +724,8 @@ function SkrViewImpl({
                     {hasActiveFilter
                         ? `${filtered.length.toLocaleString("id-ID")} dari ${details.length.toLocaleString("id-ID")} baris sesuai filter`
                         : noRange
-                          ? `${details.length.toLocaleString("id-ID")} baris tanpa batas tanggal`
-                          : `${details.length.toLocaleString("id-ID")} baris pada rentang ${isoToTanggal(dateFrom)} – ${isoToTanggal(dateTo)}`}
+                            ? `${details.length.toLocaleString("id-ID")} baris tanpa batas tanggal`
+                            : `${details.length.toLocaleString("id-ID")} baris pada rentang ${isoToTanggal(dateFrom)} – ${isoToTanggal(dateTo)}`}
                 </p>
             </div>
         </div>
@@ -789,11 +789,11 @@ function CustomerDetailCard({
                     const open = expandedKey === c.key
                     const docRows = open
                         ? details
-                              .filter(
-                                  (row) =>
-                                      (row.customer_id == null ? "" : String(row.customer_id).trim()) === c.key,
-                              )
-                              .sort((a, b) => (b.pod_d ?? "").localeCompare(a.pod_d ?? ""))
+                            .filter(
+                                (row) =>
+                                    (row.customer_id == null ? "" : String(row.customer_id).trim()) === c.key,
+                            )
+                            .sort((a, b) => (b.pod_d ?? "").localeCompare(a.pod_d ?? ""))
                         : []
                     return (
                         <li key={c.key} className={cn(open && "bg-muted/30")}>
@@ -841,9 +841,9 @@ function CustomerDetailCard({
                                         </p>
                                     ) : (
                                         <ul className="divide-y">
-                                            {docRows.map((row, i) => (
+                                            {docRows.filter((row) => row.salesman !== "-1" && row.salesman !== -1).map((row, i) => (
                                                 <li
-                                                    key={`${row.pod_d ?? "x"}-${row.delivery_number ?? i}`}
+                                                    key={`${row.pod_d ?? "x"}-${row.delivery_number ?? "no-num"}-${i}`}
                                                     className="flex items-center gap-3 py-1.5 text-xs"
                                                 >
                                                     <span
