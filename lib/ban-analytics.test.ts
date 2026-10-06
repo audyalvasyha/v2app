@@ -219,30 +219,50 @@ describe("banWheelSides - sisi roda dari teks", () => {
 describe("banWheelSlots - roda yang tersentuh satu catatan", () => {
     it("memetakan posisi dan sisi ke satu roda", () => {
         expect(banWheelSlots("GANTI BAN DEPAN KIRI")).toEqual(["depan-kiri"])
-        expect(banWheelSlots("GANTI BAN BELAKANG KANAN")).toEqual(["belakang-kanan"])
+        expect(banWheelSlots("GANTI BAN BELAKANG KANAN")).toEqual([
+            "belakang-kanan-luar",
+            "belakang-kanan-dalam",
+        ])
         expect(banWheelSlots("ROKER BAN DEPAN KANAN")).toEqual(["depan-kanan"])
     })
 
-    it("L/R menyentuh kedua roda axle tersebut", () => {
-        expect(banWheelSlots("2PCS GANTI BAN BELAKANG L/R")).toEqual(["belakang-kiri", "belakang-kanan"])
+    it("ban dobel: dalam/luar eksplisit menempel ke satu roda saja", () => {
+        expect(banWheelSlots("GANTI BAN BELAKANG KIRI DALAM")).toEqual(["belakang-kiri-dalam"])
+        expect(banWheelSlots("GANTI BAN BELAKANG KANAN LUAR")).toEqual(["belakang-kanan-luar"])
+    })
+
+    it("L/R menyentuh kedua ban dobel axle tersebut", () => {
+        expect(banWheelSlots("2PCS GANTI BAN BELAKANG L/R")).toEqual([
+            "belakang-kiri-luar",
+            "belakang-kiri-dalam",
+            "belakang-kanan-luar",
+            "belakang-kanan-dalam",
+        ])
     })
 
     it("tanpa keterangan sisi tetap dihitung untuk kedua roda axle", () => {
         expect(banWheelSlots("GANTI BAN DEPAN")).toEqual(["depan-kiri", "depan-kanan"])
-        expect(banWheelSlots("2 PCS GANTI BAN BELAKANG")).toEqual(["belakang-kiri", "belakang-kanan"])
+        expect(banWheelSlots("2 PCS GANTI BAN BELAKANG")).toEqual([
+            "belakang-kiri-luar",
+            "belakang-kiri-dalam",
+            "belakang-kanan-luar",
+            "belakang-kanan-dalam",
+        ])
     })
 
     it("mencakup keempat roda saat menyebut depan sekaligus belakang", () => {
         expect(banWheelSlots("GANTI BAN DEPAN BELAKANG KIRI")).toEqual([
             "depan-kiri",
-            "belakang-kiri",
+            "belakang-kiri-luar",
+            "belakang-kiri-dalam",
         ])
     })
 
     it("ban serap berdiri sendiri, dan boleh berdampingan dengan posisi lain", () => {
         expect(banWheelSlots("PERBAIKAN GANTUNGAN BAN SERAP")).toEqual(["serap"])
         expect(banWheelSlots("GANTI BAN BELAKANG KIRI 2PCS BAN SERAP 1PCS")).toEqual([
-            "belakang-kiri",
+            "belakang-kiri-luar",
+            "belakang-kiri-dalam",
             "serap",
         ])
     })
@@ -288,7 +308,8 @@ describe("banBySlot - rincian ban per roda", () => {
         expect(bySlot["depan-kiri"].cost).toBe(1500000)
         expect(bySlot["depan-kiri"].qty).toBe(2)
         expect(bySlot["depan-kanan"].entries).toBe(0)
-        expect(bySlot["belakang-kanan"].cost).toBe(900000)
+        expect(bySlot["belakang-kanan-luar"].cost).toBe(900000)
+        expect(bySlot["belakang-kanan-dalam"].cost).toBe(900000)
         expect(bySlot.serap.cost).toBe(50000)
     })
 
@@ -302,8 +323,10 @@ describe("banBySlot - rincian ban per roda", () => {
     it("tidak menagih catatan tanpa posisi ke roda mana pun", () => {
         const bySlot = banBySlot(rows)
         const totalEntries = Object.values(bySlot).reduce((m, p) => m + p.entries, 0)
-        // 3 catatan punya posisi; "GANTI BAN" tidak punya, jadi tidak dihitung.
-        expect(totalEntries).toBe(3)
+        // 3 catatan berposisi; "GANTI BAN" tidak punya, jadi tidak dihitung.
+        // Catatan belakang-kanan adalah ban dobel — mengenai luar + dalam,
+        // jadi 3 catatan tersebut menulis 4 slot-entri.
+        expect(totalEntries).toBe(4)
         expect(banWithoutSlot(rows).map((r) => r.item)).toEqual(["GANTI BAN"])
     })
 
@@ -320,7 +343,8 @@ describe("banBySlot - rincian ban per roda", () => {
         ])
         expect(bySlot["depan-kiri"].unspecifiedEntries).toBe(1)
         expect(bySlot["depan-kanan"].unspecifiedEntries).toBe(1)
-        expect(bySlot["belakang-kiri"].unspecifiedEntries).toBe(0)
+        expect(bySlot["belakang-kiri-luar"].unspecifiedEntries).toBe(0)
+        expect(bySlot["belakang-kiri-dalam"].unspecifiedEntries).toBe(0)
     })
 
     it("aman pada data kosong", () => {

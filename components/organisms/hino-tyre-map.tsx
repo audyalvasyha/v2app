@@ -1,13 +1,23 @@
 "use client";
 
-import React, { memo, useState, useMemo } from "react";
-import { Gauge, Ruler, Tag, Truck } from "lucide-react";
+import React, { memo, useState, useMemo, useEffect, useRef } from "react";
+import { Gauge, Ruler, Tag, CircleDot } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { BanWheelSlot } from "@/lib/ban-analytics";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 /**
  * Peta posisi ban untuk menu Analisa Ban.
+ *
+ * - Dropdown nomor polisi diisi dari tabel `equipment` (pilihan kedua tipe
+ *   6R/6D/4R/4D disimpan sebagai entri sintetis bila belum dipilih).
+ * - Jumlah panel hotspot mengikuti `type_vehicle` di tabel itu:
+ *   6R/6D → 6 panel roda (ban belakang dobel: dalam + luar),
+ *   4R/4D → 4 panel roda (ban belakang tunggal).
+ * - Ban serap (SP) selalu tampil sebagai 1 panel di bawah gambar, di luar
+ *   hitungan panel roda — tekanan/ketebalannya masih data contoh.
+ * - Gambar rangka tetap `public/Hino Chasis.png`; angka ban pada panel adalah
+ *   data contoh sampai kolom tekanan/ketebalan/merk tersedia di database.
  */
 
 const HINO_IMAGE = {
@@ -16,115 +26,67 @@ const HINO_IMAGE = {
   height: 373,
 } as const;
 
+/** Empat konfigurasi roda yang dikenal tabel equipment. */
+export type VehicleType = "6R" | "6D" | "4R" | "4D";
+
+/** Enam roda fisik pada konfigurasi ban dobel. */
+const SIX_WHEEL_SLOTS = ["FL", "FR", "RL-O", "RL-I", "RR-I", "RR-O"] as const;
+/** Empat roda fisik pada konfigurasi ban tunggal (tanpa ban dalam). */
+const FOUR_WHEEL_SLOTS = ["FL", "FR", "RL", "RR"] as const;
+
 export interface HinoTyreInfo {
-  slot: BanWheelSlot
-  code: string
-  name: string
-  pressureBar: string | null
-  thicknessMm: number | null
-  brand: string | null
+  code: string;
+  name: string;
+  pressureBar: string | null;
+  thicknessMm: number | null;
+  brand: string | null;
 }
 
-// Data kendaraan contoh (diambil sebagian dari referensi)
-const VEHICLES = [
-  { id: "STDM000064", nopol: "B 9837 SXS", type: "4D" },
-  { id: "STDM000048", nopol: "B 9830 SXS", type: "4R" },
-  { id: "STDM000266", nopol: "B 9518 SXT", type: "6D" },
-  { id: "STDM000157", nopol: "B 9974 SXS", type: "6R" },
-];
-
-const CONTOH_DATA_BAN: Record<BanWheelSlot, HinoTyreInfo> = {
-  "depan-kiri": {
-    slot: "depan-kiri",
-    code: "FL",
-    name: "Front Left",
-    pressureBar: "5.6 bar",
-    thicknessMm: 6.4,
-    brand: "GT Radial",
-  },
-  "depan-kanan": {
-    slot: "depan-kanan",
-    code: "FR",
-    name: "Front Right",
-    pressureBar: "5.8 bar",
-    thicknessMm: 6.8,
-    brand: "GT Radial",
-  },
-  "belakang-kiri-dalam": {
-    slot: "belakang-kiri-dalam",
-    code: "RL-I",
-    name: "Rear Left In",
-    pressureBar: "6.2 bar",
-    thicknessMm: 7.2,
-    brand: "Dunlop",
-  },
-  "belakang-kiri-luar": {
-    slot: "belakang-kiri-luar",
-    code: "RL-O",
-    name: "Rear Left Out",
-    pressureBar: "6.2 bar",
-    thicknessMm: 7.2,
-    brand: "Dunlop",
-  },
-  "belakang-kanan-luar": {
-    slot: "belakang-kanan-luar",
-    code: "RR-O",
-    name: "Rear Right Out",
-    pressureBar: "6.0 bar",
-    thicknessMm: 7.5,
-    brand: "Dunlop",
-  },
-  "belakang-kanan-dalam": {
-    slot: "belakang-kanan-dalam",
-    code: "RR-I",
-    name: "Rear Right In",
-    pressureBar: "6.0 bar",
-    thicknessMm: 7.5,
-    brand: "Dunlop",
-  },
-  serap: {
-    slot: "serap",
-    code: "SP",
-    name: "Spare Tire",
-    pressureBar: "6.0 bar",
-    thicknessMm: 8.1,
-    brand: "GT Radial",
-  },
+/** Data ban contoh per roda — dipakai sampai kolom ban tersedia di database. */
+const CONTOH_DATA_BAN: Record<string, HinoTyreInfo> = {
+  FL: { code: "FL", name: "Front Left", pressureBar: "5.6 bar", thicknessMm: 6.4, brand: "GT Radial" },
+  FR: { code: "FR", name: "Front Right", pressureBar: "5.8 bar", thicknessMm: 6.8, brand: "GT Radial" },
+  "RL-I": { code: "RL-I", name: "Rear Left In", pressureBar: "6.2 bar", thicknessMm: 7.2, brand: "Dunlop" },
+  "RL-O": { code: "RL-O", name: "Rear Left Out", pressureBar: "6.2 bar", thicknessMm: 7.2, brand: "Dunlop" },
+  "RR-O": { code: "RR-O", name: "Rear Right Out", pressureBar: "6.0 bar", thicknessMm: 7.5, brand: "Dunlop" },
+  "RR-I": { code: "RR-I", name: "Rear Right In", pressureBar: "6.0 bar", thicknessMm: 7.5, brand: "Dunlop" },
+  RL: { code: "RL", name: "Rear Left", pressureBar: "6.2 bar", thicknessMm: 7.2, brand: "Dunlop" },
+  RR: { code: "RR", name: "Rear Right", pressureBar: "6.0 bar", thicknessMm: 7.5, brand: "Dunlop" },
+  SP: { code: "SP", name: "Ban Serap", pressureBar: "6.0 bar", thicknessMm: 8.1, brand: "GT Radial" },
 };
 
-/** Pembagian posisi kotak panel master */
-const LEFT_SLOTS: BanWheelSlot[] = [
-  "belakang-kiri-dalam",
-  "belakang-kiri-luar",
-  "belakang-kanan-dalam",
-  "belakang-kanan-luar"
-];
-const RIGHT_SLOTS: BanWheelSlot[] = ["depan-kanan", "depan-kiri"];
-const BOTTOM_SLOTS: BanWheelSlot[] = ["serap"];
+/**
+ * Roda tampil di kolom kiri/kanan gambar, atas ke bawah — urutan ini tetap.
+ * Konvensi panel: semua roda FRONT di kolom kanan, semua roda REAR di kolom
+ * kiri (mengikuti posisi axle di gambar: depan di kanan, belakang di kiri).
+ */
+const SIX_LAYOUT = {
+  left: ["RL-O", "RL-I", "RR-O", "RR-I"],
+  right: ["FL", "FR"],
+} as const;
+const FOUR_LAYOUT = {
+  left: ["RL", "RR"],
+  right: ["FL", "FR"],
+} as const;
 
-/** Konfigurasi slot berdasarkan jumlah roda */
-const TYPE_6_WHEELS: BanWheelSlot[] = [
-  "depan-kiri", "depan-kanan",
-  "belakang-kiri-luar", "belakang-kiri-dalam",
-  "belakang-kanan-luar", "belakang-kanan-dalam",
-  "serap"
-];
-// Untuk 4 roda, kita sembunyikan ban "-dalam"
-const TYPE_4_WHEELS: BanWheelSlot[] = [
-  "depan-kiri", "depan-kanan",
-  "belakang-kiri-luar", "belakang-kanan-luar",
-  "serap"
-];
-
-/** Koordinat titik di atas foto mobil (0-100%) */
-const HOTSPOTS: Record<BanWheelSlot, { x: number; y: number }> = {
-  "depan-kanan": { x: 78, y: 85 },
-  "depan-kiri": { x: 78, y: 61 },
-  "belakang-kiri-dalam": { x: 26, y: 62 },
-  "belakang-kiri-luar": { x: 26, y: 62 },
-  "belakang-kanan-dalam": { x: 27, y: 85 },
-  "belakang-kanan-luar": { x: 27, y: 85 },
-  serap: { x: 18, y: 72 },
+/**
+ * Posisi titik hotspot di atas gambar (persen dari area gambar).
+ * Orientasi gambar: rangka menghadap kanan — axle depan di kanan gambar
+ * (x ≈ 78), axle belakang di kiri (x ≈ 26), sisi kiri unit di bagian atas
+ * (y ≈ 61) dan sisi kanan di bawah (y ≈ 85). Ban dobel belakang dipisah
+ * tegak lurus sumbu truk: "luar" makin menjauhi garis tengah rangka.
+ */
+const HOTSPOTS: Record<string, { x: number; y: number }> = {
+  FL: { x: 78, y: 61 },
+  FR: { x: 78, y: 85 },
+  "RL-O": { x: 26, y: 57 },
+  "RL-I": { x: 26, y: 67 },
+  "RR-I": { x: 27, y: 80 },
+  "RR-O": { x: 27, y: 90 },
+  RL: { x: 26, y: 62 },
+  RR: { x: 27, y: 85 },
+  // Ban serap: tergantung di rangka tengah-bawah (antara dua axle).
+  SP: { x: 50, y: 70 },
 };
 
 const LAYOUT = {
@@ -143,18 +105,17 @@ function toCanvas(p: { x: number; y: number }) {
   };
 }
 
-/** Posisi vertikal panel di kanvas (0-100%) */
-const BOX_Y: Record<BanWheelSlot, number> = {
-  "belakang-kiri-dalam": 16,
-  "belakang-kiri-luar": 41,
-  "belakang-kanan-dalam": 66,
-  "belakang-kanan-luar": 91,
-  serap: 91,
-  "depan-kiri": 35,
-  "depan-kanan": 67,
-};
+/**
+ * Posisi vertikal panel detail per kolom (persen, atas ke bawah).
+ * Kolom kiri (rear) memuat 4 panel di mode 6 roda & 2 panel di mode 4 roda;
+ * kolom kanan (front) selalu 2 panel — didistribusikan sejajar gambar.
+ */
+const LEFT_Y_6 = [16, 39, 62, 85];
+const RIGHT_Y_6 = [30, 70];
+const LEFT_Y_4 = [25, 75];
+const RIGHT_Y_4 = [30, 70];
 
-const BOX_W = 17;
+const BOX_W = 21;
 const BOX_X_LEFT = 1.5;
 const BOX_X_RIGHT = 100 - 1.5 - BOX_W;
 
@@ -163,19 +124,14 @@ function fmtThickness(v: number | null): string {
 }
 
 interface DetailBoxProps {
-  info: HinoTyreInfo
-  active: boolean
-  is4Wheel?: boolean
-  onToggle: () => void
-  className?: string
-  style?: React.CSSProperties
+  info: HinoTyreInfo;
+  active: boolean;
+  onToggle: () => void;
+  className?: string;
+  style?: React.CSSProperties;
 }
 
-function TyreDetailBox({ info, active, is4Wheel, onToggle, className, style }: DetailBoxProps) {
-  // Jika 4 roda, ganti label "Out" / "-O" menjadi label ban tunggal standar ("Rear Left" / "RL")
-  const displayName = is4Wheel ? info.name.replace(" Out", "") : info.name;
-  const displayCode = is4Wheel ? info.code.replace("-O", "") : info.code;
-
+function TyreDetailBox({ info, active, onToggle, className, style }: DetailBoxProps) {
   return (
     <button
       type="button"
@@ -198,10 +154,10 @@ function TyreDetailBox({ info, active, is4Wheel, onToggle, className, style }: D
             active ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary",
           )}
         >
-          {displayCode}
+          {info.code}
         </span>
         <span className="truncate text-[11px] font-semibold leading-none">
-          {displayName} <span className="font-normal text-muted-foreground">({displayCode})</span>
+          {info.name} <span className="font-normal text-muted-foreground">({info.code})</span>
         </span>
       </div>
 
@@ -234,30 +190,27 @@ function TyreDetailBox({ info, active, is4Wheel, onToggle, className, style }: D
 }
 
 interface WheelDotProps {
-  info: HinoTyreInfo
-  x: number
-  y: number
-  active: boolean
-  is4Wheel?: boolean
-  onToggle: () => void
-  zIndexClass: string
+  info: HinoTyreInfo;
+  x: number;
+  y: number;
+  active: boolean;
+  onToggle: () => void;
+  zIndexClass: string;
 }
 
-function WheelDot({ info, x, y, active, is4Wheel, onToggle, zIndexClass }: WheelDotProps) {
-  const displayCode = is4Wheel ? info.code.replace("-O", "") : info.code;
-
+function WheelDot({ info, x, y, active, onToggle, zIndexClass }: WheelDotProps) {
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-pressed={active}
-      aria-label={`${info.name} (${displayCode})`}
-      title={`${info.name} (${displayCode})`}
+      aria-label={`${info.name} (${info.code})`}
+      title={`${info.name} (${info.code})`}
       style={{ left: `${x}%`, top: `${y}%` }}
       className={cn(
         "group absolute -translate-x-1/2 -translate-y-1/2 outline-none",
         "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-full",
-        zIndexClass
+        zIndexClass,
       )}
     >
       <span
@@ -275,67 +228,133 @@ function WheelDot({ info, x, y, active, is4Wheel, onToggle, zIndexClass }: Wheel
         )}
         aria-hidden
       >
-        {displayCode}
+        {info.code}
       </span>
     </button>
   );
 }
 
 export interface HinoTyreMapProps {
-  tyres?: Partial<Record<BanWheelSlot, HinoTyreInfo>>
-  className?: string
+  /** Inventaris unit dari tabel `equipment` — sumber dropdown nopol & type_vehicle. */
+  equipments?: any[];
+  className?: string;
 }
 
-function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
-  const [activeSlot, setActiveSlot] = useState<BanWheelSlot | null>(null);
+function HinoTyreMapImpl({ equipments, className }: HinoTyreMapProps) {
+  const [activeSlot, setActiveSlot] = useState<string | null>(null);
 
-  // State untuk dropdown Nopol
-  const [selectedNopol, setSelectedNopol] = useState<string>(VEHICLES[2].nopol);
+  const data = CONTOH_DATA_BAN;
 
-  const data: Record<BanWheelSlot, HinoTyreInfo> = { ...CONTOH_DATA_BAN, ...tyres };
+  /** Peta plat (dinormalisasi tanpa spasi, huruf besar) → type_vehicle. */
+  const typeByPlate = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const eq of equipments ?? []) {
+      const plate = String(eq?.license_plate ?? "").replace(/\s+/g, "").toUpperCase();
+      const type = String(eq?.type_vehicle ?? "").trim().toUpperCase();
+      if (plate && type) map.set(plate, type);
+    }
+    return map;
+  }, [equipments]);
 
-  const toggle = (slot: BanWheelSlot) =>
+  /**
+   * Dropdown hanya memuat nopol dari tabel equipment; unit pertama langsung
+   * terpilih supaya peta hidup tanpa klik tambahan.
+   */
+  const plateOptions = useMemo(
+    () =>
+      (equipments ?? [])
+        .map((eq) => String(eq?.license_plate ?? "").trim())
+        .filter((p) => p.length > 0),
+    [equipments],
+  );
+  const [selectedKey, setSelectedKey] = useState<string>("");
+  // Unit pertama terpilih otomatis sekali saja di awal (bukan tiap render),
+  // dan pilihan user tidak pernah ditimpa saat data ter-refresh.
+  const didInitSelection = useRef(false);
+  useEffect(() => {
+    if (!didInitSelection.current && plateOptions.length > 0) {
+      didInitSelection.current = true;
+      setSelectedKey(plateOptions[0]);
+    }
+  }, [plateOptions]);
+  useEffect(() => {
+    // Data equipment terlambat datang (cache dulu, fetch kemudian): kunci
+    // terpilih mungkin belum ada di daftar — pilih unit pertama yang ada.
+    if (selectedKey && plateOptions.length > 0 && !plateOptions.includes(selectedKey)) {
+      setSelectedKey(plateOptions[0]);
+    }
+  }, [plateOptions, selectedKey]);
+
+  const isTypeValue = (v: string): v is VehicleType =>
+    v === "6R" || v === "6D" || v === "4R" || v === "4D";
+
+  /** Tipe kendaraan dari kunci terpilih; "6R" default bila data belum jelas.
+   *  selectedKey adalah plat mentah dari dropdown — key typeByPlate ternormalisasi,
+   *  jadi lookup-nya harus dinormalisasi dengan cara yang sama. */
+  const selectedType = useMemo<VehicleType>(() => {
+    if (isTypeValue(selectedKey)) return selectedKey;
+    const normKey = selectedKey.replace(/\s+/g, "").toUpperCase();
+    const type = typeByPlate.get(normKey) ?? "";
+    return isTypeValue(type) ? type : "6R";
+  }, [selectedKey, typeByPlate]);
+
+  /** Nopol yang type_vehicle-nya tidak dikenal (mis. selain 4R/4D/6R/6D). */
+  const unknownTypePlates = useMemo(() => {
+    const out = new Set<string>();
+    for (const eq of equipments ?? []) {
+      const plate = String(eq?.license_plate ?? "").trim();
+      const type = String(eq?.type_vehicle ?? "").trim().toUpperCase();
+      if (plate && type && !isTypeValue(type)) out.add(plate);
+    }
+    return out;
+  }, [equipments]);
+
+  const is6Wheel = selectedType.startsWith("6");
+  const wheelSlots: readonly string[] = is6Wheel ? SIX_WHEEL_SLOTS : FOUR_WHEEL_SLOTS;
+  const layout = is6Wheel ? SIX_LAYOUT : FOUR_LAYOUT;
+  const activeSlots = [...layout.left, ...layout.right];
+
+  const toggle = (slot: string) =>
     setActiveSlot((prev) => (prev === slot ? null : slot));
 
-  // Menentukan tipe mobil berdasarkan pilihan dropdown
-  const selectedVehicle = useMemo(() => VEHICLES.find(v => v.nopol === selectedNopol) || VEHICLES[2], [selectedNopol]);
-  const is4Wheel = selectedVehicle.type.startsWith("4");
-  const activeSlotsConfig = is4Wheel ? TYPE_4_WHEELS : TYPE_6_WHEELS;
-
-  // Memfilter slot agar yang dirender hanya sesuai dengan tipe mobilnya
-  const activeLeftSlots = LEFT_SLOTS.filter(slot => activeSlotsConfig.includes(slot));
-  const activeRightSlots = RIGHT_SLOTS.filter(slot => activeSlotsConfig.includes(slot));
-  const activeBottomSlots = BOTTOM_SLOTS.filter(slot => activeSlotsConfig.includes(slot));
+  /** Posisi vertikal panel slot: kolom kiri (rear) & kanan (front) punya
+   *  distribusi Y masing-masing supaya panel sejajar dengan roda di gambar. */
+  const boxTop = (slot: string) => {
+    const li = (layout.left as readonly string[]).indexOf(slot);
+    if (li >= 0) return (is6Wheel ? LEFT_Y_6 : LEFT_Y_4)[li] ?? 50;
+    const ri = (layout.right as readonly string[]).indexOf(slot);
+    return (is6Wheel ? RIGHT_Y_6 : RIGHT_Y_4)[ri] ?? 50;
+  };
 
   const getLayerOrder = (slot: string) => {
-    if (slot.includes("kanan")) return 3;
-    if (slot === "serap") return 2;
+    if (slot.startsWith("FR") || slot.startsWith("RR")) return 3;
+    if (slot === "SP") return 2;
     return 1;
   };
 
-  const sortedActiveSlots = (Object.keys(data) as BanWheelSlot[])
-    .filter(slot => activeSlotsConfig.includes(slot))
+  const sortedActiveSlots = (Object.keys(data) as string[])
+    .filter((slot) => wheelSlots.includes(slot) || slot === "SP")
     .sort((a, b) => getLayerOrder(a) - getLayerOrder(b));
 
   const links = sortedActiveSlots.map((slot) => {
     const from = toCanvas(HOTSPOTS[slot]);
     const f = (n: number) => n.toFixed(2);
 
-    if (activeBottomSlots.includes(slot)) {
-      const to = { x: 50, y: BOX_Y[slot] };
+    // Ban serap: panel di bawah gambar, garis turun vertikal dari rangka.
+    if (slot === "SP") {
+      const to = { x: 50, y: 89 };
       const dy = to.y - from.y;
-      const cy1 = from.y + dy * 0.45;
-      const cy2 = to.y - dy * 0.45;
+      const cy = from.y + dy * 0.35;
       return {
         slot,
-        d: `M ${f(from.x)} ${f(from.y)} C ${f(from.x)} ${f(cy1)}, ${f(to.x)} ${f(cy2)}, ${f(to.x)} ${f(to.y)}`,
+        d: `M ${f(from.x)} ${f(from.y)} C ${f(from.x)} ${f(cy)}, ${f(to.x)} ${f(to.y - dy * 0.35)}, ${f(to.x)} ${f(to.y)}`,
       };
     }
 
-    const toLeft = activeLeftSlots.includes(slot);
+    const toLeft = (layout.left as readonly string[]).includes(slot);
     const to = {
       x: toLeft ? BOX_X_LEFT + BOX_W : BOX_X_RIGHT,
-      y: BOX_Y[slot],
+      y: boxTop(slot),
     };
     const dx = to.x - from.x;
     const cx1 = from.x + dx * 0.45;
@@ -346,11 +365,49 @@ function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
     };
   });
 
+  const renderBox = (slot: string, side: "left" | "right") => (
+    <TyreDetailBox
+      key={slot}
+      info={data[slot]}
+      active={activeSlot === slot}
+      onToggle={() => toggle(slot)}
+      className="absolute -translate-y-1/2"
+      style={{
+        left: `${side === "left" ? BOX_X_LEFT : BOX_X_RIGHT}%`,
+        top: `${boxTop(slot)}%`,
+        width: `${BOX_W}%`,
+      }}
+    />
+  );
+
   return (
     <section className={cn("w-full space-y-4", className)}>
+      {/* Dropdown nomor polisi — sumbernya tabel equipment */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={selectedKey} onValueChange={(v) => { setSelectedKey(v); setActiveSlot(null); }}>
+          <SelectTrigger size="sm" className="min-w-[13rem] sm:w-64" aria-label="Pilih nomor polisi unit">
+            <SelectValue placeholder="Pilih nomor polisi" />
+          </SelectTrigger>
+          <SelectContent>
+            {plateOptions.map((plate) => (
+              <SelectItem key={plate} value={plate}>
+                {plate}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <p className="text-xs text-muted-foreground">
+          Panel mengikuti <span className="font-medium text-foreground">type_vehicle</span> unit ini di tabel equipment
+          {" — "}<span className="font-medium text-foreground">{selectedType}</span>{" "}
+          ({is6Wheel ? "6 panel roda" : "4 panel roda"}).
+        </p>
+      </div>
+
       <div className="rounded-2xl border bg-gradient-to-b from-muted/40 to-muted/10 p-3 sm:p-5">
+        {/* Peta desktop: panel di kiri & kanan gambar */}
         <div
-          className="relative hidden w-full sm:block"
+          className="relative hidden w-full md:block"
           style={{ aspectRatio: String(LAYOUT.aspect) }}
         >
           <svg
@@ -401,64 +458,32 @@ function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
                 x={p.x}
                 y={p.y}
                 active={activeSlot === slot}
-                is4Wheel={is4Wheel}
                 onToggle={() => toggle(slot)}
                 zIndexClass={zIndexClass}
               />
             );
           })}
 
-          {activeLeftSlots.map((slot) => (
-            <TyreDetailBox
-              key={slot}
-              info={data[slot]}
-              active={activeSlot === slot}
-              is4Wheel={is4Wheel}
-              onToggle={() => toggle(slot)}
-              className="absolute -translate-y-1/2"
-              style={{
-                left: `${BOX_X_LEFT}%`,
-                top: `${BOX_Y[slot]}%`,
-                width: `${BOX_W}%`,
-              }}
-            />
-          ))}
+          {layout.left.map((slot) => renderBox(slot, "left"))}
+          {layout.right.map((slot) => renderBox(slot, "right"))}
 
-          {activeBottomSlots.map((slot) => (
-            <TyreDetailBox
-              key={slot}
-              info={data[slot]}
-              active={activeSlot === slot}
-              is4Wheel={is4Wheel}
-              onToggle={() => toggle(slot)}
-              className="absolute -translate-x-1/2 -translate-y-1/2 shadow-lg"
-              style={{
-                left: `50%`,
-                top: `${BOX_Y[slot]}%`,
-                width: `${BOX_W}%`,
-              }}
-            />
-          ))}
-
-          {activeRightSlots.map((slot) => (
-            <TyreDetailBox
-              key={slot}
-              info={data[slot]}
-              active={activeSlot === slot}
-              is4Wheel={is4Wheel}
-              onToggle={() => toggle(slot)}
-              className="absolute -translate-y-1/2"
-              style={{
-                left: `${BOX_X_RIGHT}%`,
-                top: `${BOX_Y[slot]}%`,
-                width: `${BOX_W}%`,
-              }}
-            />
-          ))}
+          {/* Ban serap: satu panel di bawah gambar, semua tipe kendaraan */}
+          <TyreDetailBox
+            key="SP"
+            info={data.SP}
+            active={activeSlot === "SP"}
+            onToggle={() => toggle("SP")}
+            className="absolute -translate-x-1/2 -translate-y-1/2 shadow-lg"
+            style={{
+              left: "50%",
+              top: "89%",
+              width: `${BOX_W}%`,
+            }}
+          />
         </div>
 
-        {/* Versi Mobile */}
-        <div className="sm:hidden">
+        {/* Peta mobile: gambar + titik roda, panel bergrid di bawahnya */}
+        <div className="md:hidden space-y-3">
           <div className="relative w-full">
             <img
               src={HINO_IMAGE.src}
@@ -478,26 +503,48 @@ function HinoTyreMapImpl({ tyres, className }: HinoTyreMapProps) {
                   x={HOTSPOTS[slot].x}
                   y={HOTSPOTS[slot].y}
                   active={activeSlot === slot}
-                  is4Wheel={is4Wheel}
                   onToggle={() => toggle(slot)}
                   zIndexClass={zIndexClass}
                 />
               );
             })}
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {sortedActiveSlots.map((slot) => (
+          <div className="grid grid-cols-2 gap-2">
+            {activeSlots.map((slot) => (
               <TyreDetailBox
                 key={slot}
                 info={data[slot]}
                 active={activeSlot === slot}
-                is4Wheel={is4Wheel}
                 onToggle={() => toggle(slot)}
               />
             ))}
           </div>
+          {/* Ban serap: satu panel lebar penuh di bawah grid roda */}
+          <TyreDetailBox
+            key="SP"
+            info={data.SP}
+            active={activeSlot === "SP"}
+            onToggle={() => toggle("SP")}
+          />
         </div>
 
+        {/* Keterangan di bawah gambar */}
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <CircleDot className="h-3.5 w-3.5" aria-hidden />
+            {is6Wheel ? "6 roda — belakang dobel (dalam + luar)" : "4 roda — belakang tunggal"}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded-full border-2 border-primary bg-primary/20" aria-hidden />
+            {wheelSlots.length} panel roda + 1 ban serap
+          </span>
+          {unknownTypePlates.size > 0 && (
+            <span>
+              {unknownTypePlates.size} unit punya type_vehicle di luar 4R/4D/6R/6D — tipe tidak dikenal,
+              panel default 6 roda.
+            </span>
+          )}
+        </div>
       </div>
     </section>
   );

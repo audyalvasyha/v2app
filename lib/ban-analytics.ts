@@ -187,6 +187,11 @@ export function banWheelSides(text: string | null | undefined): BanWheelSide[] {
  * dan jumlah/qty-nya ikut terhitung di keduanya. Itu memang menggandakan
  * angka, jadi `BanSlotPoint.unspecifiedEntries` menandainya supaya UI bisa
  * mengatakannya terus terang, bukan diamkan saja.
+ *
+ * Ban belakang adalah ban dobel (dalam + luar). Catatan yang menyebut
+ * "DALAM"/"INNER" atau "LUAR"/"OUTER" menempel ke satu roda dobel itu;
+ * yang tidak menyebutnya masuk ke keduanya — slot hasil selalu slot yang
+ * valid, jadi `banBySlot` tidak pernah menulis ke roda yang tidak ada.
  */
 export function banWheelSlots(text: string | null | undefined): BanWheelSlot[] {
     const t = normalize(text ?? "")
@@ -196,9 +201,22 @@ export function banWheelSlots(text: string | null | undefined): BanWheelSlot[] {
     const sides = banWheelSides(t)
     // Tanpa keterangan sisi, satu catatan dianggap untuk kedua roda axle itu.
     const axleSides: BanWheelSide[] = sides.length > 0 ? sides : ["kiri", "kanan"]
+    // Ban dobel: "dalam"/"inner" atau "luar"/"outer" memilih satu roda;
+    // tanpa keduanya, catatan dihitung untuk ban dalam sekaligus luar.
+    const isIn = /\b(dlm|dalam|inner|in)\b/.test(t)
+    const isOut = /\b(luar|outer|out)\b/.test(t)
     const slots: BanWheelSlot[] = []
     if (isDepan) for (const s of axleSides) slots.push(`depan-${s}` as BanWheelSlot)
-    if (isBelakang) for (const s of axleSides) slots.push(`belakang-${s}` as BanWheelSlot)
+    if (isBelakang) {
+        for (const s of axleSides) {
+            if (isOut) slots.push(`belakang-${s}-luar` as BanWheelSlot)
+            if (isIn) slots.push(`belakang-${s}-dalam` as BanWheelSlot)
+            if (!isIn && !isOut) {
+                slots.push(`belakang-${s}-luar` as BanWheelSlot)
+                slots.push(`belakang-${s}-dalam` as BanWheelSlot)
+            }
+        }
+    }
     // Ban serap bisa disebut berdampingan dengan posisi lain
     // ("GANTI BAN BELAKANG KIRI 2PCS BAN SERAP 1PCS"), jadi selalu ikut.
     if (isSerap) slots.push("serap")

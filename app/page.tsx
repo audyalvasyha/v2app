@@ -62,8 +62,21 @@ import { startOfZonedDayMonthsAgo, zonedParts } from "@/lib/format"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { usePageTitle } from "@/hooks/use-page-title"
 
-// Kolom minimal yang benar-benar dipakai UI — payload lebih kecil, query lebih cepat
-const EQUIPMENT_COLS = "id,equipment_id,license_plate,description,company_code,construction_year,last_odometer,status"
+// Kolom minimal yang benar-benar dipakai UI — payload lebih kecil, query lebih cepat.
+// type_vehicle (6R/6D/4R/4D) menentukan jumlah panel hotspot di peta Analisa Ban;
+// OPSIONAL — unit lama belum tentu punya kolom ini, bila gagal diulang tanpa itu.
+const EQUIPMENT_COLS_BASE = "id,equipment_id,license_plate,description,company_code,construction_year,last_odometer,status"
+const EQUIPMENT_COLS = `${EQUIPMENT_COLS_BASE},type_vehicle`
+let typeVehicleUnavailable = false
+
+function equipmentCols(): string {
+  return typeVehicleUnavailable ? EQUIPMENT_COLS_BASE : EQUIPMENT_COLS
+}
+
+/** Error PostgREST karena tabel equipment belum punya kolom type_vehicle. */
+function isMissingTypeVehicleColumn(message: string): boolean {
+  return message.toLowerCase().includes("type_vehicle")
+}
 const HISTORY_COLS = "id,tanggal,equipment_id,license_plate,nama_barang_atau_jasa,jumlah_harga"
 const SERVICE_LOG_COLS = "equipment_id,service_date,next_service_date,next_service_odometer,odometer_at_service"
 const OUTBOUND_COLS = "freight_order,no_polisi,jam_out,jam_in,created_at"
@@ -217,12 +230,30 @@ function DashboardContent() {
 
       try {
         const [eqResponse, histResponse, serviceResponse] = await Promise.all([
-          supabase.from('equipment').select(EQUIPMENT_COLS).order('created_at', { ascending: false }),
+          supabase.from('equipment').select(equipmentCols()).order('created_at', { ascending: false }),
           supabase.from('maintenance_histories').select(HISTORY_COLS).order('tanggal', { ascending: false }),
           supabase.from('service_logs').select(SERVICE_LOG_COLS).order('service_date', { ascending: false }),
         ])
 
-        if (eqResponse.error) setError(eqResponse.error.message)
+        if (eqResponse.error) {
+          // Kolom type_vehicle belum ada di database → ulangi sekali tanpa itu,
+          // supaya sisa kolom equipment tetap tampil dan peta ban tetap jalan
+          // (dropdown-nya nanti jatuh ke mode "semua unit 6 panel").
+          if (isMissingTypeVehicleColumn(eqResponse.error.message)) {
+            typeVehicleUnavailable = true
+            const retry = await supabase
+              .from('equipment')
+              .select(equipmentCols())
+              .order('created_at', { ascending: false })
+            if (retry.error) setError(retry.error.message)
+            else {
+              setError(null)
+              setEquipments(retry.data || [])
+            }
+          } else {
+            setError(eqResponse.error.message)
+          }
+        }
         else {
           setError(null)
           setEquipments(eqResponse.data || [])
@@ -712,9 +743,11 @@ function DashboardContent() {
         {activeView === 'ban' && (
           // Data ban tidak punya tabel sendiri: menu ini membaca riwayat
           // perbaikan yang uraiannya menyebut ban, jadi cukup data yang sudah
-          // dimuat dashboard — tanpa query tambahan.
+          // dimuat dashboard — tanpa query tambahan. equipments dipakai untuk
+          // dropdown nopol + tipe kendaraan (4/6 roda) pada peta ban.
           <BanAnalysis
             histories={histories}
+            equipments={equipments}
             isLoading={isLoading}
             error={error}
           />
