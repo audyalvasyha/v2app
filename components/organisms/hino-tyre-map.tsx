@@ -79,14 +79,14 @@ const FOUR_LAYOUT = {
 const HOTSPOTS: Record<string, { x: number; y: number }> = {
   FL: { x: 78, y: 61 },
   FR: { x: 78, y: 85 },
-  "RL-O": { x: 26, y: 57 },
-  "RL-I": { x: 26, y: 67 },
-  "RR-I": { x: 27, y: 80 },
-  "RR-O": { x: 27, y: 90 },
+  "RL-O": { x: 27, y: 60 },
+  "RL-I": { x: 27, y: 60 },
+  "RR-I": { x: 27, y: 85 },
+  "RR-O": { x: 27, y: 85 },
   RL: { x: 26, y: 62 },
   RR: { x: 27, y: 85 },
   // Ban serap: tergantung di rangka tengah-bawah (antara dua axle).
-  SP: { x: 50, y: 70 },
+  SP: { x: 18, y: 72 },
 };
 
 const LAYOUT = {
@@ -111,9 +111,9 @@ function toCanvas(p: { x: number; y: number }) {
  * kolom kanan (front) selalu 2 panel — didistribusikan sejajar gambar.
  */
 const LEFT_Y_6 = [16, 39, 62, 85];
-const RIGHT_Y_6 = [30, 70];
+const RIGHT_Y_6 = [30, 75];
 const LEFT_Y_4 = [25, 75];
-const RIGHT_Y_4 = [30, 70];
+const RIGHT_Y_4 = [30, 75];
 
 const BOX_W = 21;
 const BOX_X_LEFT = 1.5;
@@ -344,7 +344,7 @@ function HinoTyreMapImpl({ equipments, className }: HinoTyreMapProps) {
     if (slot === "SP") {
       const to = { x: 50, y: 89 };
       const dy = to.y - from.y;
-      const cy = from.y + dy * 0.35;
+      const cy = from.y + dy * 0.95;
       return {
         slot,
         d: `M ${f(from.x)} ${f(from.y)} C ${f(from.x)} ${f(cy)}, ${f(to.x)} ${f(to.y - dy * 0.35)}, ${f(to.x)} ${f(to.y)}`,
