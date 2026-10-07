@@ -47,7 +47,7 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
         [focus],
     )
     const outlook = useMemo(() => (focus ? todayOutlook(focus) : null), [focus])
-    const depart = useMemo(() => (focus ? bestDepartureWindow(focus.hourly) : null), [focus.hourly])
+    const depart = useMemo(() => (focus ? bestDepartureWindow(focus.hourly) : null), [focus])
     const desc = focus ? describeWeatherCode(focus.current.code) : null
 
     return (
