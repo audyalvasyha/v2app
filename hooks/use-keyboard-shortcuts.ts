@@ -19,6 +19,7 @@ export const KEYBOARD_SHORTCUTS: Shortcut[] = [
   { key: "s", alt: true, description: "Buka Tab SKR (Sisa Kiriman)" },
   { key: "p", alt: true, description: "Buka Tab Pengiriman" },
   { key: "b", alt: true, description: "Buka Tab Analisa Ban" },
+  { key: "w", alt: true, description: "Buka Tab Perkiraan Cuaca" },
   { key: "t", alt: true, description: "Ganti Tema (Dark/Light)" },
 ]
 
@@ -67,6 +68,10 @@ export function useKeyboardShortcuts(
       // Alt + B : Analisa Ban
       if (e.altKey && e.key.toLowerCase() === "b" && onViewChange) {
         e.preventDefault(); onViewChange("ban");
+      }
+      // Alt + W : Perkiraan Cuaca
+      if (e.altKey && e.key.toLowerCase() === "w" && onViewChange) {
+        e.preventDefault(); onViewChange("weather");
       }
       // Alt + T : Tema
       if (e.altKey && e.key.toLowerCase() === "t" && onToggleTheme) {

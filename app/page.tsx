@@ -11,6 +11,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { DashboardLayout, type View } from "@/components/templates/dashboard-layout"
 import { AuthGate } from "@/components/auth-gate"
 import { AIChat } from "@/components/molecules/ai-chat"
+// Banner cuaca ringan (tanpa recharts) — statis supaya langsung tampil
+// sebagai elemen pertama dashboard tanpa menunggu chunk chart.
+import { WeatherBanner } from "@/components/organisms/weather-banner"
 
 // Tiap menu dimuat sebagai chunk terpisah: chart (recharts ≈ 100 KB+) dan tabel
 // besar cuma diunduh saat tabnya dibuka, bukan saat dashboard pertama dimuat.
@@ -56,11 +59,16 @@ const BanAnalysis = dynamic(
   () => import("@/components/organisms/ban-analysis").then((m) => m.BanAnalysis),
   { ssr: false, loading: ViewFallback },
 )
+const WeatherView = dynamic(
+  () => import("@/components/organisms/weather-view").then((m) => m.WeatherView),
+  { ssr: false, loading: ViewFallback },
+)
 import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
 import { daysInMonth } from "@/lib/skr-analytics"
 import { startOfZonedDayMonthsAgo, zonedParts } from "@/lib/format"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { usePageTitle } from "@/hooks/use-page-title"
+import { useDebounce } from "@/hooks/use-debounce"
 
 // Kolom minimal yang benar-benar dipakai UI — payload lebih kecil, query lebih cepat.
 // type_vehicle (6R/6D/4R/4D) menentukan jumlah panel hotspot di peta Analisa Ban;
@@ -188,6 +196,7 @@ function DashboardContent() {
   const [activeView, setActiveView] = useState<View>('dashboard')
 
   const [filters, setFilters] = useState<EquipmentFilters>({})
+  const debouncedSearch = useDebounce(filters.search ?? "", 250)
   const [equipments, setEquipments] = useState<any[]>([])
   const [histories, setHistories] = useState<any[]>([])
   const [serviceLogs, setServiceLogs] = useState<any[]>([])
@@ -557,7 +566,7 @@ function DashboardContent() {
   }, [skrDetails, skrDateFiltered, skrRange.from, skrRange.to])
 
   // Filter & turunannya di-memoize agar tidak dihitung ulang pada setiap render
-  const searchLower = filters.search?.toLowerCase() ?? ""
+  const searchLower = debouncedSearch.toLowerCase()
 
   const filteredEquipments = useMemo(() => {
     return equipments.filter((item) => {
@@ -604,6 +613,7 @@ function DashboardContent() {
     skr: { title: 'SKR', desc: 'Ringkasan sisa kiriman per armada dan sales, beserta bobot nilai serta alasan POD.' },
     pengiriman: { title: 'Pengiriman', desc: 'Pantau armada outbound: nomor polisi, jam keluar, jam kembali, dan durasi tempuh.' },
     ban: { title: 'Analisa Ban', desc: 'Rincian pengeluaran ban per unit: tren bulanan, unit termahal, catatan setiap penggantian, dan peta ban yang bisa diklik per nopol.' },
+    weather: { title: 'Perkiraan Cuaca', desc: 'Kondisi terkini, peluang hujan 24 jam, dan prakiraan 7 hari untuk pool Bagan Batu, Bagansiapiapi, dan 18 kecamatan Rokan Hilir — dengan penilaian risiko perjalanan per daerah.' },
   }
 
   // Title tab browser mengikuti menu aktif — rapi di riwayat tab & bookmark.
@@ -651,9 +661,9 @@ function DashboardContent() {
 
             {/* Sembunyikan SearchBar di mode Dashboard & menu Ekspedisi yang belum ada datanya.
                 Analisa Ban punya kotak pencarian sendiri di dalam halamannya. */}
-            {activeView !== 'dashboard' && activeView !== 'skr' && activeView !== 'pengiriman' && activeView !== 'ban' && (
+            {activeView !== 'dashboard' && activeView !== 'skr' && activeView !== 'pengiriman' && activeView !== 'ban' && activeView !== 'weather' && (
               <SearchBar
-                filters={filters}
+                filters={{ ...filters, search: debouncedSearch }}
                 onFiltersChange={handleSearchFilterChange}
                 activeView={activeView}
               />
@@ -663,14 +673,19 @@ function DashboardContent() {
 
         {/* Render Konten Sesuai View */}
         {activeView === 'dashboard' && (
-          // Kita berikan data asli (equipments & histories) agar kalkulasi dashboard mencakup semua data tanpa terpengaruh search bar
-          <DashboardView
-            equipments={equipments}
-            histories={histories}
-            serviceLogs={serviceLogs}
-            isLoading={isLoading}
-            onNavigate={handleViewChange}
-          />
+          <>
+            {/* Banner cuaca di paling atas — hal pertama yang dilihat user:
+                kondisi hari ini + beberapa hari ke depan seluruh daerah. */}
+            <WeatherBanner onOpenDetail={() => handleViewChange('weather')} />
+            {/* Kita berikan data asli (equipments & histories) agar kalkulasi dashboard mencakup semua data tanpa terpengaruh search bar */}
+            <DashboardView
+              equipments={equipments}
+              histories={histories}
+              serviceLogs={serviceLogs}
+              isLoading={isLoading}
+              onNavigate={handleViewChange}
+            />
+          </>
         )}
 
         {activeView === 'equipment' && (
@@ -751,6 +766,12 @@ function DashboardContent() {
             isLoading={isLoading}
             error={error}
           />
+        )}
+
+        {activeView === 'weather' && (
+          // Cuaca di-fetch langsung dari Open-Meteo oleh komponen (tanpa
+          // backend) — tidak membebani query Supabase mana pun.
+          <WeatherView />
         )}
 
         {activeView === 'about' && (

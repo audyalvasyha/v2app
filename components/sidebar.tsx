@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, LogOut, type LucideIcon } from "lucide-react"
+import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/utils/supabase"
 // Sumber tunggal tipe View — sebelumnya union ini diduplikasi di tiga
@@ -154,6 +154,14 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           active={activeView === 'ban'}
           collapsed={collapsed}
           onClick={() => onViewChange('ban')}
+        />
+
+        <SidebarButton
+          icon={CloudSun}
+          label="Perkiraan Cuaca"
+          active={activeView === 'weather'}
+          collapsed={collapsed}
+          onClick={() => onViewChange('weather')}
         />
 
         {/* ---------- Kategori: Ekspedisi ---------- */}
