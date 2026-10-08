@@ -1,12 +1,9 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, type LucideIcon } from "lucide-react"
+import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/utils/supabase"
-// Sumber tunggal tipe View — sebelumnya union ini diduplikasi di tiga
-// berkas (layout, sidebar, hook) dan bisa berbeda tanpa disadari.
-// `import type` sehingga tidak menambah siklus impor runtime.
 import type { View } from "@/components/templates/dashboard-layout"
 
 interface SidebarProps {
@@ -49,10 +46,8 @@ function SidebarButton({ icon: Icon, label, active, collapsed, onClick, badge, p
   )
 }
 
-/** Label kecil pemisah antar kategori menu */
 function SidebarSectionLabel({ label, collapsed }: { label: string; collapsed: boolean }) {
   if (collapsed) {
-    // Saat mini, cukup garis pemisah agar ikon menu tetap rapi
     return <div className="mx-2 my-2 border-t border-border" role="presentation" />
   }
   return (
@@ -63,8 +58,6 @@ function SidebarSectionLabel({ label, collapsed }: { label: string; collapsed: b
 }
 
 export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, onToggleCollapsed }: SidebarProps) {
-  // Akun pemilik sesi — email tampil di sidebar, tombol Keluar pindah ke sini
-  // dari header agar area atas tetap lapang (branding + kontrol tampilan).
   const [userEmail, setUserEmail] = useState<string | null>(null)
 
   useEffect(() => {
@@ -80,8 +73,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
-    // Bersihkan cache data armada agar tidak tertinggal di perangkat setelah
-    // keluar (sama dengan CACHE_KEY di app/page.tsx).
     try {
       localStorage.removeItem("fleet-cache-v2")
     } catch {
@@ -108,7 +99,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
       </div>
 
       <nav className="flex-1 p-2 space-y-1 flex flex-col overflow-y-auto">
-        {/* ---------- Kategori: Fleet Management ---------- */}
         <SidebarSectionLabel label="Fleet Management" collapsed={collapsed} />
 
         <SidebarButton
@@ -164,7 +154,14 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           onClick={() => onViewChange('weather')}
         />
 
-        {/* ---------- Kategori: Ekspedisi ---------- */}
+        <SidebarButton
+          icon={MapPin}
+          label="Traffic"
+          active={activeView === 'traffic'}
+          collapsed={collapsed}
+          onClick={() => onViewChange('traffic')}
+        />
+
         <SidebarSectionLabel label="Ekspedisi" collapsed={collapsed} />
 
         <SidebarButton
@@ -183,7 +180,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           onClick={() => onViewChange('pengiriman')}
         />
 
-        {/* ---------- About: menempel di bawah daftar menu ---------- */}
         <SidebarButton
           icon={User}
           label="About"
@@ -193,7 +189,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           pushToBottom
         />
 
-        {/* ---------- Akun & Keluar ---------- */}
         <div className={`border-t border-border pt-2 ${collapsed ? '' : 'mt-1'}`}>
           {collapsed ? (
             <button

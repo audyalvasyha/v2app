@@ -63,6 +63,10 @@ const WeatherView = dynamic(
   () => import("@/components/organisms/weather-view").then((m) => m.WeatherView),
   { ssr: false, loading: ViewFallback },
 )
+const TrafficView = dynamic(
+  () => import("@/components/organisms/traffic-view").then((m) => m.TrafficView),
+  { ssr: false, loading: ViewFallback },
+)
 import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
 import { daysInMonth } from "@/lib/skr-analytics"
 import { startOfZonedDayMonthsAgo, zonedParts } from "@/lib/format"
@@ -614,6 +618,7 @@ function DashboardContent() {
     pengiriman: { title: 'Pengiriman', desc: 'Pantau armada outbound: nomor polisi, jam keluar, jam kembali, dan durasi tempuh.' },
     ban: { title: 'Analisa Ban', desc: 'Rincian pengeluaran ban per unit: tren bulanan, unit termahal, catatan setiap penggantian, dan peta ban yang bisa diklik per nopol.' },
     weather: { title: 'Perkiraan Cuaca', desc: 'Kondisi terkini, peluang hujan 24 jam, dan prakiraan 7 hari untuk pool Bagan Batu, Bagansiapiapi, dan 18 kecamatan Rokan Hilir — dengan penilaian risiko perjalanan per daerah.' },
+    traffic: { title: 'Monitoring Lalu Lintas', desc: 'Pantau kondisi lalu lintas rute pengiriman armada: status per rute, flag kemacetan, dan peta kondisi jalan.' },
   }
 
   // Title tab browser mengikuti menu aktif — rapi di riwayat tab & bookmark.
@@ -661,7 +666,7 @@ function DashboardContent() {
 
             {/* Sembunyikan SearchBar di mode Dashboard & menu Ekspedisi yang belum ada datanya.
                 Analisa Ban punya kotak pencarian sendiri di dalam halamannya. */}
-            {activeView !== 'dashboard' && activeView !== 'skr' && activeView !== 'pengiriman' && activeView !== 'ban' && activeView !== 'weather' && (
+            {activeView !== 'dashboard' && activeView !== 'skr' && activeView !== 'pengiriman' && activeView !== 'ban' && activeView !== 'weather' && activeView !== 'traffic' && (
               <SearchBar
                 filters={{ ...filters, search: debouncedSearch }}
                 onFiltersChange={handleSearchFilterChange}
@@ -772,6 +777,12 @@ function DashboardContent() {
           // Cuaca di-fetch langsung dari Open-Meteo oleh komponen (tanpa
           // backend) — tidak membebani query Supabase mana pun.
           <WeatherView />
+        )}
+
+        {activeView === 'traffic' && (
+          // Lalu lintas di-fetch langsung oleh komponen (server-side) —
+          // tidak membebani query Supabase mana pun.
+          <TrafficView />
         )}
 
         {activeView === 'about' && (

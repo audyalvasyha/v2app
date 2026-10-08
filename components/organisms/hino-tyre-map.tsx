@@ -1,10 +1,11 @@
 "use client";
 
 import React, { memo, useState, useMemo, useEffect, useRef } from "react";
-import { Gauge, Ruler, Tag, CircleDot } from "lucide-react";
+import { Camera, Gauge, Ruler, Tag, CircleDot } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 /**
  * Peta posisi ban untuk menu Analisa Ban.
@@ -16,8 +17,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
  *   4R/4D → 4 panel roda (ban belakang tunggal).
  * - Ban serap (SP) selalu tampil sebagai 1 panel di bawah gambar, di luar
  *   hitungan panel roda — tekanan/ketebalannya masih data contoh.
- * - Gambar rangka tetap `public/Hino Chasis.png`; angka ban pada panel adalah
- *   data contoh sampai kolom tekanan/ketebalan/merk tersedia di database.
+ * - Icon kamera di kanan judul tiap panel membuka modal fullscreen berisi
+ *   foto aktual ban: sidewall & tread. Sumber fotonya berurutan: data
+ *   pemeriksaan `tire_check_details` (prop `tireChecks`), lalu props
+ *   `tyrePhotos`, lalu konvensi file `public/ban/{KODE}-sidewall.jpg` &
+ *   `{KODE}-tread.jpg`. Bila foto gagal dimuat, modal menampilkan placeholder
+ *   beserta path-nya — bukan gambar rusak.
+ * - Angka pada panel memakai data pemeriksaan asli (tekanan psi, ketebalan
+ *   mm, kondisi) bila tersedia untuk posisi itu; tanpa data pemeriksaan,
+ *   panel kembali menampilkan data contoh (tekanan bar, ketebalan, merk).
  */
 
 const HINO_IMAGE = {
@@ -40,6 +48,70 @@ export interface HinoTyreInfo {
   pressureBar: string | null;
   thicknessMm: number | null;
   brand: string | null;
+}
+
+/** Pasangan foto aktual satu posisi ban. */
+export interface TyrePhotos {
+  /** Foto sisi pinggir ban (sidewall) — URL atau path publik. */
+  sidewall?: string | null;
+  /** Foto tapak ban (tread) — URL atau path publik. */
+  tread?: string | null;
+}
+
+/** Hasil pemeriksaan ban harian (tabel `tire_check_details`) untuk satu posisi. */
+export interface TireCheckInfo {
+  /** Tekanan angin terukur (psi). */
+  pressurePsi: number | null;
+  /** Kedalaman tapak (mm). */
+  treadDepthMm: number | null;
+  /** Kondisi ban versi driver/AI (mis. "Bagus", "Gundul"). */
+  condition: string | null;
+  /** Catatan driver saat pemeriksaan. */
+  notes: string | null;
+  /** Tanggal pemeriksaan (YYYY-MM-DD). */
+  inspectionDate: string | null;
+  /** Foto aktual dari Storage; nilai null berarti tidak ada. */
+  photos: TyrePhotos;
+}
+
+/** numeric dari PostgREST bisa berupa number atau string — rapikan ke number|null. */
+export function toFiniteNumber(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmtPsi(v: number | null): string {
+  if (v == null) return "—";
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
+/** Warna teks kondisi ban: merah untuk buruk, amber waspada, hijau bagus. */
+function conditionClass(c: string | null | undefined): string {
+  const v = (c ?? "").toLowerCase();
+  if (!v) return "bg-muted text-muted-foreground";
+  if (/(gundul|aus|habis|rusak|bocor|kempes|ganti|crit)/.test(v))
+    return "bg-red-500/15 text-red-600 dark:text-red-400";
+  if (/(cukup|waspad|perhatian|tipis)/.test(v))
+    return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
+  if (/(bagus|baik|good|normal)/.test(v))
+    return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+  return "bg-muted text-muted-foreground";
+}
+
+/** Kunci plat ternormalisasi (tanpa spasi, huruf besar) — sama dengan peta. */
+function normKey(s: string): string {
+  return s.replace(/\s+/g, "").toUpperCase();
+}
+
+/**
+ * URL foto satu sisi ban: override dari props (database) lebih dulu, lalu
+ * konvensi file di `public/ban/` — cukup upload dengan nama itu, tanpa ubah
+ * kode.
+ */
+function tyrePhotoUrl(slot: string, side: "sidewall" | "tread", override?: TyrePhotos): string {
+  const custom = override?.[side]?.trim();
+  return custom ? custom : `/ban/${slot}-${side}.jpg`;
 }
 
 /** Data ban contoh per roda — dipakai sampai kolom ban tersedia di database. */
@@ -127,19 +199,30 @@ interface DetailBoxProps {
   info: HinoTyreInfo;
   active: boolean;
   onToggle: () => void;
+  /** Buka modal foto aktual (sidewall & tread) posisi ini. */
+  onOpenPhotos: () => void;
+  /** Data pemeriksaan asli posisi ini — bila ada, panel menampilkannya. */
+  check?: TireCheckInfo;
   className?: string;
   style?: React.CSSProperties;
 }
 
-function TyreDetailBox({ info, active, onToggle, className, style }: DetailBoxProps) {
+function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, className, style }: DetailBoxProps) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
       onClick={onToggle}
       aria-pressed={active}
       style={style}
       className={cn(
-        "block w-full rounded-xl border bg-card/95 p-2.5 text-left shadow-sm backdrop-blur transition-all duration-150 relative z-40",
+        "block w-full rounded-xl border bg-card/95 p-2.5 text-left shadow-sm backdrop-blur transition-all duration-150 relative z-40 cursor-pointer",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         active
           ? "border-primary/70 shadow-md ring-2 ring-primary/40"
@@ -159,6 +242,18 @@ function TyreDetailBox({ info, active, onToggle, className, style }: DetailBoxPr
         <span className="truncate text-[11px] font-semibold leading-none">
           {info.name} <span className="font-normal text-muted-foreground">({info.code})</span>
         </span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenPhotos();
+          }}
+          title="Lihat foto aktual ban (sidewall & tread)"
+          aria-label={`Lihat foto aktual ban ${info.name} (${info.code})`}
+          className="ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Camera className="h-3.5 w-3.5" aria-hidden />
+        </button>
       </div>
 
       <dl className="mt-2 space-y-1">
@@ -167,7 +262,11 @@ function TyreDetailBox({ info, active, onToggle, className, style }: DetailBoxPr
             <Gauge className="h-3 w-3" aria-hidden /> Tekanan
           </dt>
           <dd className="truncate text-[11px] font-medium leading-none tabular-nums">
-            {info.pressureBar ?? "—"}
+            {check
+              ? check.pressurePsi != null
+                ? `${fmtPsi(check.pressurePsi)} psi`
+                : "—"
+              : info.pressureBar ?? "—"}
           </dd>
         </div>
         <div className="flex items-center justify-between gap-2">
@@ -175,17 +274,62 @@ function TyreDetailBox({ info, active, onToggle, className, style }: DetailBoxPr
             <Ruler className="h-3 w-3" aria-hidden /> Ketebalan
           </dt>
           <dd className="truncate text-[11px] font-medium leading-none tabular-nums">
-            {fmtThickness(info.thicknessMm)}
+            {check ? fmtThickness(check.treadDepthMm) : fmtThickness(info.thicknessMm)}
           </dd>
         </div>
         <div className="flex items-center justify-between gap-2">
           <dt className="flex items-center gap-1 text-[10px] leading-none text-muted-foreground">
-            <Tag className="h-3 w-3" aria-hidden /> Merk
+            {check ? (
+              <>
+                <CircleDot className="h-3 w-3" aria-hidden /> Kondisi
+              </>
+            ) : (
+              <>
+                <Tag className="h-3 w-3" aria-hidden /> Merk
+              </>
+            )}
           </dt>
-          <dd className="truncate text-[11px] font-medium leading-none">{info.brand ?? "—"}</dd>
+          {check ? (
+            <dd className="truncate">
+              <span
+                className={cn(
+                  "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                  conditionClass(check.condition),
+                )}
+              >
+                {check.condition ?? "—"}
+              </span>
+            </dd>
+          ) : (
+            <dd className="truncate text-[11px] font-medium leading-none">{info.brand ?? "—"}</dd>
+          )}
         </div>
       </dl>
-    </button>
+    </div>
+  );
+}
+
+/** Foto satu sisi ban; bila gagal dimuat tampilkan placeholder + path-nya. */
+function TyrePhoto({ src, alt }: { src: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <div className="flex min-h-24 flex-1 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-center">
+        <Camera className="h-5 w-5 text-muted-foreground/50" aria-hidden />
+        <p className="text-xs text-muted-foreground">Foto belum tersedia</p>
+        {src ? (
+          <p className="max-w-full truncate font-mono text-[10px] text-muted-foreground/70">{src}</p>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="min-h-0 flex-1 rounded-lg border border-border/60 object-contain"
+      onError={() => setFailed(true)}
+    />
   );
 }
 
@@ -237,11 +381,17 @@ function WheelDot({ info, x, y, active, onToggle, zIndexClass }: WheelDotProps) 
 export interface HinoTyreMapProps {
   /** Inventaris unit dari tabel `equipment` — sumber dropdown nopol & type_vehicle. */
   equipments?: any[];
+  /** Foto aktual per posisi ban (dari database nantinya) — override konvensi file. */
+  tyrePhotos?: Partial<Record<string, TyrePhotos>>;
+  /** Data pemeriksaan ban harian: plat (ternormalisasi) → posisi → hasil cek. */
+  tireChecks?: Record<string, Record<string, TireCheckInfo>>;
   className?: string;
 }
 
-function HinoTyreMapImpl({ equipments, className }: HinoTyreMapProps) {
+function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: HinoTyreMapProps) {
   const [activeSlot, setActiveSlot] = useState<string | null>(null);
+  /** Posisi ban yang modalnya terbuka (foto aktual sidewall & tread). */
+  const [photoSlot, setPhotoSlot] = useState<string | null>(null);
 
   const data = CONTOH_DATA_BAN;
 
@@ -285,6 +435,12 @@ function HinoTyreMapImpl({ equipments, className }: HinoTyreMapProps) {
     }
   }, [plateOptions, selectedKey]);
 
+  /** Hasil pemeriksaan ban untuk unit terpilih (plat dinormalisasi). */
+  const checksForUnit = useMemo(
+    () => tireChecks?.[normKey(selectedKey)] ?? {},
+    [tireChecks, selectedKey],
+  );
+
   const isTypeValue = (v: string): v is VehicleType =>
     v === "6R" || v === "6D" || v === "4R" || v === "4D";
 
@@ -293,8 +449,8 @@ function HinoTyreMapImpl({ equipments, className }: HinoTyreMapProps) {
    *  jadi lookup-nya harus dinormalisasi dengan cara yang sama. */
   const selectedType = useMemo<VehicleType>(() => {
     if (isTypeValue(selectedKey)) return selectedKey;
-    const normKey = selectedKey.replace(/\s+/g, "").toUpperCase();
-    const type = typeByPlate.get(normKey) ?? "";
+    const normalized = selectedKey.replace(/\s+/g, "").toUpperCase();
+    const type = typeByPlate.get(normalized) ?? "";
     return isTypeValue(type) ? type : "6R";
   }, [selectedKey, typeByPlate]);
 
@@ -365,12 +521,17 @@ function HinoTyreMapImpl({ equipments, className }: HinoTyreMapProps) {
     };
   });
 
+  /** Data pemeriksaan (bila ada) untuk posisi yang modal fotonya terbuka. */
+  const activeCheck = photoSlot != null ? checksForUnit[photoSlot] : undefined;
+
   const renderBox = (slot: string, side: "left" | "right") => (
     <TyreDetailBox
       key={slot}
       info={data[slot]}
       active={activeSlot === slot}
       onToggle={() => toggle(slot)}
+      onOpenPhotos={() => setPhotoSlot(slot)}
+      check={checksForUnit[slot]}
       className="absolute -translate-y-1/2"
       style={{
         left: `${side === "left" ? BOX_X_LEFT : BOX_X_RIGHT}%`,
@@ -473,6 +634,8 @@ function HinoTyreMapImpl({ equipments, className }: HinoTyreMapProps) {
             info={data.SP}
             active={activeSlot === "SP"}
             onToggle={() => toggle("SP")}
+            onOpenPhotos={() => setPhotoSlot("SP")}
+            check={checksForUnit["SP"]}
             className="absolute -translate-x-1/2 -translate-y-1/2 shadow-lg"
             style={{
               left: "50%",
@@ -516,6 +679,8 @@ function HinoTyreMapImpl({ equipments, className }: HinoTyreMapProps) {
                 info={data[slot]}
                 active={activeSlot === slot}
                 onToggle={() => toggle(slot)}
+                onOpenPhotos={() => setPhotoSlot(slot)}
+                check={checksForUnit[slot]}
               />
             ))}
           </div>
@@ -525,6 +690,8 @@ function HinoTyreMapImpl({ equipments, className }: HinoTyreMapProps) {
             info={data.SP}
             active={activeSlot === "SP"}
             onToggle={() => toggle("SP")}
+            onOpenPhotos={() => setPhotoSlot("SP")}
+            check={checksForUnit["SP"]}
           />
         </div>
 
@@ -546,6 +713,51 @@ function HinoTyreMapImpl({ equipments, className }: HinoTyreMapProps) {
           )}
         </div>
       </div>
+
+      {/* Modal foto aktual ban: fullscreen, sidewall & tread berdampingan */}
+      <Dialog open={photoSlot != null} onOpenChange={(open) => !open && setPhotoSlot(null)}>
+        {photoSlot != null && data[photoSlot] && (
+          <DialogContent className="h-screen w-screen max-w-none rounded-none border-none bg-black/95 p-4 sm:p-6 [&>button]:top-3 [&>button]:right-3 [&>button]:z-10">
+            <DialogHeader className="sr-only">
+              <DialogTitle>
+                Foto ban {data[photoSlot].name} ({data[photoSlot].code})
+              </DialogTitle>
+              <DialogDescription>Pasangan foto aktual sidewall dan tread ban posisi ini.</DialogDescription>
+            </DialogHeader>
+            <div className="flex min-h-0 flex-1 flex-col gap-3 pt-8">
+              <div className="flex items-center justify-center gap-2">
+                <span className="rounded bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
+                  {data[photoSlot].code}
+                </span>
+                <span className="text-sm font-semibold text-foreground">{data[photoSlot].name}</span>
+              </div>
+              {(activeCheck?.inspectionDate || activeCheck?.condition || activeCheck?.notes) && (
+                <p className="text-center text-xs text-muted-foreground">
+                  {activeCheck?.inspectionDate && <span>Pemeriksaan {activeCheck.inspectionDate} · </span>}
+                  {activeCheck?.condition && <span>Kondisi: {activeCheck.condition} · </span>}
+                  {activeCheck?.notes && <span>Catatan: {activeCheck.notes}</span>}
+                </p>
+              )}
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+                {(["sidewall", "tread"] as const).map((side) => (
+                  <figure key={side} className="flex min-h-0 flex-col gap-1.5">
+                    <figcaption className="text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {side === "sidewall" ? "Sidewall — sisi pinggir ban" : "Tread — tapak ban"}
+                    </figcaption>
+                    <TyrePhoto
+                      src={
+                        activeCheck?.photos?.[side] ??
+                        tyrePhotoUrl(photoSlot, side, tyrePhotos?.[photoSlot])
+                      }
+                      alt={`Foto ${side === "sidewall" ? "sidewall" : "tread"} ban ${data[photoSlot].name} (${data[photoSlot].code})`}
+                    />
+                  </figure>
+                ))}
+              </div>
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
     </section>
   );
 }

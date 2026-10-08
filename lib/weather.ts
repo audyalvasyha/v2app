@@ -32,13 +32,13 @@ export const WEATHER_LOCATIONS: WeatherLocationDef[] = [
     { id: "bagansiapiapi", name: "Bagansiapiapi", note: "Ibu kota kabupaten · pesisir", latitude: 2.107, longitude: 100.979 }, // [perkiraan]
     // 18 kecamatan (urutan mengikuti daftar operasional)
     { id: "kec-bagan-sinembah", name: "Kec. Bagan Sinembah", note: "Rokan Hilir", latitude: 1.67841, longitude: 100.46275 },
-    { id: "kec-bagansiniapi", name: "Kec. Bagansiniapi", note: "Rokan Hilir", latitude: 1.86, longitude: 100.62 }, // [perkiraan]
-    { id: "kec-balaian-jaya", name: "Kec. Balaian Jaya", note: "Rokan Hilir", latitude: 1.69047, longitude: 100.54387 },
+    { id: "kec-bagan-sinembah-raya", name: "Kec. Bagan Sinembah Raya", note: "Rokan Hilir", latitude: 1.837, longitude: 100.501 }, // geocode OSM
+    { id: "kec-balaian-jaya", name: "Kec. Balai Jaya", note: "Rokan Hilir", latitude: 1.69047, longitude: 100.54387 },
     { id: "kec-bangko", name: "Kec. Bangko", note: "Rokan Hilir", latitude: 1.77813, longitude: 100.95218 },
     { id: "kec-bangko-pusako", name: "Kec. Bangko Pusako", note: "Rokan Hilir", latitude: 1.76, longitude: 101.03 }, // [perkiraan]
     { id: "kec-batu-hampar", name: "Kec. Batu Hampar", note: "Rokan Hilir", latitude: 1.63, longitude: 100.36 }, // [perkiraan]
     { id: "kec-kubu", name: "Kec. Kubu", note: "Rokan Hilir", latitude: 2.08571, longitude: 100.65309 },
-    { id: "kec-kubu-babu", name: "Kec. Kubu Babu", note: "Rokan Hilir", latitude: 2.135, longitude: 100.735 }, // [perkiraan]
+    { id: "kec-kubu-babu", name: "Kec. Kubu Babussalam", note: "Rokan Hilir", latitude: 2.135, longitude: 100.735 }, // [perkiraan]
     { id: "kec-pasir-limau-kapas", name: "Kec. Pasir Limau Kapas", note: "Pesisir utara · Rokan Hilir", latitude: 2.47177, longitude: 100.31652 },
     { id: "kec-pekaitan", name: "Kec. Pekaitan", note: "Rokan Hilir", latitude: 2.01014, longitude: 100.82299 },
     { id: "kec-pujud", name: "Kec. Pujud", note: "Rokan Hilir", latitude: 1.43393, longitude: 100.64714 },
