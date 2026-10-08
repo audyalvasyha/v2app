@@ -158,3 +158,37 @@ export function remainingKmLabel(n: number | null): string {
     if (n === 0) return "Tepat jadwal"
     return `Kelebihan ${Math.abs(n).toLocaleString("id-ID")} km`
 }
+
+/**
+ * Satu baris ringkasan jadwal yang koheren — dipakai di tempat yang hanya
+ * punya satu sel untuk keduanya (mis. kolom "Jadwal" di email reminder).
+ *
+ * Kasus yang diperbaiki: unit bisa berstatus "Terlewat" karena **odometer**
+ * saja padahal tanggal servisnya masih jauh. Menempelkan "122 hari lagi"
+ * apa adanya di bawah badge Terlewat terbaca kontradiktif, jadi diberi
+ * konteks eksplisit bahwa yang terlewat adalah odometer, bukan tanggal.
+ */
+export function scheduleDetailLabel(
+    status: Pick<ServiceScheduleStatus, "id" | "remainingDays" | "remainingKm">,
+): string {
+    const days = remainingDaysLabel(status.remainingDays)
+    const km = remainingKmLabel(status.remainingKm)
+
+    if (status.remainingDays == null) return km === "—" ? "—" : km
+    if (status.remainingKm == null) return days
+
+    const kmOver = status.remainingKm < 0
+    const daysOver = status.remainingDays < 0
+
+    // Dua-duanya lewat / dua-duanya dalam ambang: pasangan labelnya sudah
+    // saling melengkapi, tidak perlu konteks tambahan.
+    if (kmOver === daysOver) return `${days} · ${km}`
+
+    // Hanya odometer yang lewat: jelaskan bahwa tanggalnya memang masih jauh.
+    if (kmOver) {
+        return `Odometer terlewati ${Math.abs(status.remainingKm).toLocaleString("id-ID")} km · servis terjadwal ${days.toLowerCase()}`
+    }
+
+    // Hanya tanggal yang lewat: "Terlambat 12 hari · Sisa 1.000 km" sudah jelas.
+    return `${days} · ${km}`
+}

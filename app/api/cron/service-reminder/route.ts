@@ -3,8 +3,7 @@ import { supabase } from "@/utils/supabase"
 import { getSupabaseAdmin } from "@/utils/supabase-admin"
 import {
     evaluateServiceStatus,
-    remainingDaysLabel,
-    remainingKmLabel,
+    scheduleDetailLabel,
 } from "@/lib/service-status"
 
 /**
@@ -36,7 +35,10 @@ const SERVICE_LOG_COLS =
     "equipment_id,service_date,next_service_date,next_service_odometer,odometer_at_service"
 
 const RECIPIENT_FALLBACK = "audialfasha@gmail.com"
-const FROM = "Midaa Reminder <onboarding@resend.dev>"
+// Pengirim dari domain terverifikasi (transportbaganbatu.com) — bebas kirim
+// ke siapa pun. Pengirim test onboarding@resend.dev hanya boleh ke email
+// pemilik akun Resend dan menolak CC.
+const FROM = "Midaa Reminder <reminder@transportbaganbatu.com>"
 
 /**
  * Escape karakter HTML agar nilai dari database (mis. nomor plat) tidak
@@ -137,9 +139,7 @@ export async function GET(request: Request) {
             .map((r) => {
                 const color = r.status.id === "overdue" ? "#dc2626" : "#d97706"
                 const bg = r.status.id === "overdue" ? "#fef2f2" : "#fffbeb"
-                const detail = [remainingDaysLabel(r.status.remainingDays), remainingKmLabel(r.status.remainingKm)]
-                    .filter((s) => s !== "—")
-                    .join(" · ")
+                const detail = scheduleDetailLabel(r.status)
                 return `<tr>
   <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600">${esc(r.eq.license_plate) || "-"}</td>
   <td style="padding:8px 12px;border-bottom:1px solid #eee"><span style="background:${bg};color:${color};padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600">${esc(r.status.label)}</span></td>
