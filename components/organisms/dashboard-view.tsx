@@ -275,9 +275,18 @@ function DashboardContent({
             null,
         )
 
+        // Peta STDM → nomor polisi untuk label peringkat biaya (tampil nopol, bukan STDM)
+        const plateByUnit = new Map<string, string>()
+        for (const eq of equipments) {
+            const id = String(eq.equipment_id ?? "").trim()
+            const plate = String(eq.license_plate ?? "").trim()
+            if (id && plate) plateByUnit.set(id, plate)
+        }
+
         // Peringkat biaya per unit (6 bulan)
         const ranking = Array.from(byUnit6m.entries()).map(([equipment_id, v]) => ({
             equipment_id,
+            label: plateByUnit.get(equipment_id) ?? equipment_id,
             totalCost: v.totalCost,
             count: v.count,
         }))
@@ -470,7 +479,7 @@ function DashboardContent({
                 <CardHeader>
                     <CardTitle>Peringkat Biaya Unit (6 Bulan)</CardTitle>
                     <CardDescription>
-                        Perbandingan akumulasi biaya perbaikan per unit. Top 5 paling boros dan Bottom 5 paling hemat dalam 6 bulan terakhir.
+                        Perbandingan akumulasi biaya perbaikan per nomor polisi. Top 5 paling boros dan Bottom 5 paling hemat dalam 6 bulan terakhir.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

@@ -11,6 +11,8 @@ import { compactRupiah } from "@/lib/format"
 
 export interface RankedUnit {
     equipment_id: string
+    /** Nomor polisi untuk ditampilkan; fallback ke equipment_id bila kosong */
+    label?: string
     totalCost: number
     count: number // berapa entri histori yang menyumbang total ini
 }
@@ -43,7 +45,7 @@ function RankBar({
 
     // Data grafik dibalik agar bar terpanjang ada di atas (paling mudah diseran mata)
     const chartData = [...data].reverse().map((d) => ({
-        label: d.equipment_id,
+        label: d.label || d.equipment_id,
         cost: d.totalCost,
     }))
 
@@ -77,7 +79,7 @@ function RankBar({
                         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border bg-card font-mono text-[10px] tabular-nums text-muted-foreground">
                             {idx + 1}
                         </span>
-                        <span className="min-w-0 flex-1 truncate font-medium">{row.equipment_id}</span>
+                        <span className="min-w-0 flex-1 truncate font-medium">{row.label || row.equipment_id}</span>
                         <span className="shrink-0 font-mono tabular-nums text-foreground">
                             {compactRupiah(row.totalCost)}
                         </span>
