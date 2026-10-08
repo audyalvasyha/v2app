@@ -19,11 +19,11 @@ export const metadata: Metadata = {
   // File ikon berada di public/ sehingga tidak otomatis dideteksi Next.js — ditautkan manual
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/icon-light-32x32.png", sizes: "32x32", type: "image/png" },
-      { url: "/icon-dark-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-o.svg", type: "image/svg+xml" },
+      { url: "/icon-o-light-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-o-dark-32x32.png", sizes: "32x32", type: "image/png" },
     ],
-    apple: "/apple-icon.png",
+    apple: "/apple-o-icon.png",
   },
 }
 
