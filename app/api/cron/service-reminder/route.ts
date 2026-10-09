@@ -151,7 +151,7 @@ export async function GET(request: Request) {
 
         const subject =
             overdueCount > 0
-                ? `⚠️ Midaa: ${overdueCount} unit terlewat servis (${rows.length} perlu perhatian)`
+                ? `[URGENT] Laporan Status Servis Midaa: ${overdueCount} unit terlewat servis (${rows.length} perlu perhatian)`
                 : `Midaa: ${rows.length} unit mendekati jadwal servis`
 
         const res = await fetch("https://api.resend.com/emails", {

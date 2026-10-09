@@ -44,7 +44,7 @@ export interface TrafficMapProps {
 }
 
 const LEVEL_COLOR: Record<string, string> = {
-    good: "#10b981",
+    good: "#0842a0",
     warning: "#f59e0b",
     critical: "#ef4444",
     unknown: "#64748b",
