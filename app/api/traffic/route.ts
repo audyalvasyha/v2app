@@ -19,6 +19,7 @@ import { getAllRouteStatuses, type RouteLiveStatus } from "@/lib/tomtom/route-mo
 import { sampleRouteFlow, type FlowSampleResult } from "@/lib/traffic-flow"
 import { fetchAllRouteGeometries, type RouteGeometry, ORIGIN } from "@/lib/osrm"
 import { WEATHER_LOCATIONS } from "@/lib/weather"
+import { saveHistorySnapshots } from "@/lib/traffic-history"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -102,9 +103,42 @@ export async function GET() {
     const byName = new Map(live.map((r) => [r.routeName.toLowerCase(), r]))
     const flowByLoc = await sampleAllFlows(geometries)
 
+    // Historis: simpan snapshot jam ini (PK per jam → upsert aman dipukul
+    // berkali-kali). Best-effort — gagal DB tidak boleh memengaruhi respons.
+    void saveHistorySnapshots(
+        [...flowByLoc.entries()].flatMap(([locationId, flow]) =>
+            flow ? [{ locationId, level: flow.level, source: flow.source, currentSpeed: flow.currentSpeed, freeFlowSpeed: flow.freeFlowSpeed }] : [],
+        ),
+    )
+
     const locations = WEATHER_LOCATIONS.map((loc) => {
         const liveStatus = byName.get(loc.name.toLowerCase())
         const geo = geometries[loc.id] ?? null
+
+        // ── ETA dinamis ─────────────────────────────────────────────
+        // Durasi OSRM mengasumsikan free-flow (jalan kosong). Kalau sampel
+        // traffic ada, durasi aktual ≈ durasi / rasio kecepatan aktual vs
+        // free-flow. Contoh: rasio 0,5 = lalu lintas setengah kencang →
+        // waktu tempuh 2× lebih lama. Live Route Monitoring lebih akurat
+        // bila ada (delayMin diukur langsung), jadi yang dipilih adalah
+        // sumber dengan estimasi paling besar (worst-of dua sumber).
+        const flow = flowByLoc.get(loc.id) ?? null
+        let etaMin: number | null = null
+        let etaSource: "live" | "estimated" | null = null
+        if (flow && flow.level !== "unknown" && flow.freeFlowSpeed > 0) {
+            const ratio = flow.currentSpeed / flow.freeFlowSpeed
+            if (ratio > 0) {
+                etaMin = Math.round((geo?.durationMin ?? 0) / ratio)
+                etaSource = flow.source
+            }
+        }
+        if (liveStatus && liveStatus.level !== "unknown") {
+            const liveEta = Math.round(liveStatus.travelTimeMin + Math.max(0, liveStatus.delayMin))
+            if (liveEta > 0 && (etaMin == null || liveEta > etaMin)) {
+                etaMin = liveEta
+                etaSource = "live"
+            }
+        }
 
         return {
             id: loc.id,
@@ -121,6 +155,8 @@ export async function GET() {
                       durationMin: Math.round(geo.durationMin),
                   }
                 : null,
+            // ETA dinamis: durasi yang sudah memperhitungkan kepadatan.
+            eta: etaMin != null ? { durationMin: etaMin, source: etaSource } : null,
             // Status live Route Monitoring (maks 2 rute free tier).
             live: liveStatus
                 ? {
@@ -131,7 +167,7 @@ export async function GET() {
                   }
                 : null,
             // Sampling traffic flow per-rute (live TomTom atau fallback estimasi).
-            trafficFlow: flowByLoc.get(loc.id) ?? null,
+            trafficFlow: flow,
         }
     })
 

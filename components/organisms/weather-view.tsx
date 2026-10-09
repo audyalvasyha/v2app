@@ -20,6 +20,7 @@ import {
     regionWeatherSummary,
     todayOutlook,
     WEATHER_LOCATIONS,
+    type HourForecast,
     type LocationWeather,
 } from "@/lib/weather"
 import { cn } from "@/lib/utils"
@@ -31,6 +32,7 @@ import {
     formatTime,
     bestDepartureWindow,
 } from "./weather-display"
+import { useTrafficHistory } from "@/hooks/use-traffic-history"
 
 // Grafik keluar dari boundary charts.tsx (satu chunk recharts untuk semua menu)
 const WeatherChart = dynamic(
@@ -82,11 +84,45 @@ function LocationTile({ loc, selected, onSelect }: { loc: LocationWeather; selec
     )
 }
 
-function LocationDetail({ loc }: { loc: LocationWeather }) {
+/**
+ * Rekomendasi jam berangkat gabungan cuaca + traffic historis untuk satu lokasi.
+ *
+ * Cuaca: pilih jam dalam sisa hari ini/imungkin depan dengan peluang hujan < 30%.
+ * Traffic (bila historis tersedia): hindari jam yang rata-rata rasionya < 58%
+ * (istorisnya biasanya macet — dari traffic_history).
+ * Keduanya kosong → null; yang dirender hanya block bila benar-benar ada rekom.
+ */
+function combinedDepartureSuggestion(
+    hours: HourForecast[],
+    trafficPattern: Array<{ hour: number; avgRatio: number; samples: number }> | undefined,
+): { hour: number; reason: string } | null {
+    const rainSafe = hours
+        .filter((h) => (h.precipitationProbability ?? 0) < 30)
+        .map((h) => Number(h.time.slice(11, 13)))
+        .filter((n) => Number.isFinite(n))
+    if (rainSafe.length === 0) return null
+
+    const congested = new Set(
+        (trafficPattern ?? [])
+            .filter((p) => p.samples >= 3 && p.avgRatio < 0.58)
+            .map((p) => p.hour),
+    )
+    const best = rainSafe.find((h) => !congested.has(h))
+    if (best == null) {
+        // Semua jam aman-cuaca adalah jam macet historis — sarankan terawal saja
+        // dengan catatan eksplisit, bukan dihening tanpa saran.
+        return { hour: rainSafe[0], reason: "Cuaca aman tapi jam ini biasanya padat — berangkat terawal mungkin" }
+    }
+    return congested.size > 0
+        ? { hour: best, reason: "Cuaca aman & di luar jam padat biasa" }
+        : { hour: best, reason: "Cuaca aman untuk perjalanan" }
+}
+
+function LocationDetail({ loc, trafficPattern }: { loc: LocationWeather; trafficPattern?: Array<{ hour: number; avgRatio: number; samples: number }> }) {
     const desc = describeWeatherCode(loc.current.code)
     const risk = useMemo(() => assessTravelRisk(loc.current, loc.hourly), [loc])
     const tone = RISK_TONE[risk.level]
-    const depart = useMemo(() => bestDepartureWindow(loc.hourly), [loc.hourly])
+    const depart = useMemo(() => combinedDepartureSuggestion(loc.hourly, trafficPattern), [loc.hourly, trafficPattern])
 
     return (
         <Card>
@@ -124,7 +160,8 @@ function LocationDetail({ loc }: { loc: LocationWeather }) {
                     </span>
                     {depart && (
                         <span className="text-[11px] text-muted-foreground">
-                            Jam aman berangkat: <span className="font-medium text-foreground tabular-nums">{depart}</span>
+                            Jam berangkat ideal: <span className="font-medium text-foreground tabular-nums">{String(depart.hour).padStart(2, "0")}.00</span>
+                            {" — "}{depart.reason}
                         </span>
                     )}
                 </div>
@@ -171,6 +208,10 @@ export function WeatherView() {
     const selected = locations.find((l) => l.def.id === selectedId) ?? locations[0] ?? null
     const summary = useMemo(() => regionWeatherSummary(locations), [locations])
     const hasData = locations.length > 0
+    // Pola traffic historis untuk rekomendasi jam berangkat (toggle byId,
+    // bukan fetch per tile — data pola jarang berubah dalam satu kunjungan).
+    const destIds = useMemo(() => WEATHER_LOCATIONS.filter((l) => l.id !== "bagan-batu").map((l) => l.id), [])
+    const history = useTrafficHistory(destIds)
 
     return (
         <div className="space-y-4">
@@ -254,7 +295,9 @@ export function WeatherView() {
                     </div>
 
                     {/* Detail lokasi terpilih */}
-                    {selected && <LocationDetail loc={selected} />}
+                    {selected && (
+                        <LocationDetail loc={selected} trafficPattern={history.byId.get(selected.def.id)?.hourlyPattern} />
+                    )}
                 </>
             )}
         </div>

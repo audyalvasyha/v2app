@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { timingSafeEqual } from "node:crypto"
 import { supabase } from "@/utils/supabase"
 import { getSupabaseAdmin } from "@/utils/supabase-admin"
 import {
@@ -55,6 +56,13 @@ function esc(value: unknown): string {
         .replace(/'/g, "&#39;")
 }
 
+function safeEqual(a: string, b: string): boolean {
+    const bufA = Buffer.from(a, "utf8")
+    const bufB = Buffer.from(b, "utf8")
+    if (bufA.length !== bufB.length) return false
+    return timingSafeEqual(bufA, bufB)
+}
+
 export async function GET(request: Request) {
     // Fail-closed: tanpa CRON_SECRET, endpoint ini terbuka untuk siapa pun
     // yang tahu URL-nya — dan endpoint ini mengirim email sungguhan, jadi
@@ -72,7 +80,12 @@ export async function GET(request: Request) {
             { status: 503 },
         )
     }
-    if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+    // Perbandingan timing-safe: tanpa ini, sekecil apa pun risikonya,
+    // pengukuran waktu respons bisa dipakai menebak isi CRON_SECRET
+    // karakter demi karakter.
+    const header = request.headers.get("authorization") ?? ""
+    const expected = `Bearer ${secret}`
+    if (header.length !== expected.length || !safeEqual(header, expected)) {
         return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 })
     }
 

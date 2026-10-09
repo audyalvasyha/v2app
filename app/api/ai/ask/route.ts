@@ -260,7 +260,7 @@ export async function POST(request: Request) {
       if (parsed && parsed.jawaban) {
         finalAnswer = parsed.jawaban;
       }
-    } catch (e) {
+    } catch {
       // Abaikan error jika ternyata AI tidak mengirim JSON (biarkan finalAnswer apa adanya)
     }
     // -------------------------------------------

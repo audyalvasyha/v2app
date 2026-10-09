@@ -138,25 +138,27 @@ export function statusFromDetails(d: RouteDetails): RouteLiveStatus {
 /** Semua route + status live-nya (dipakai endpoint /api/traffic). */
 export async function getAllRouteStatuses(): Promise<RouteLiveStatus[]> {
     const routes = await listRegisteredRoutes()
-    const out: RouteLiveStatus[] = []
-    for (const r of routes) {
-        try {
-            out.push(statusFromDetails(await getRouteDetails(r.routeId)))
-        } catch {
-            out.push({
-                routeId: r.routeId,
-                routeName: r.routeName,
-                level: "unknown",
-                travelTimeMin: 0,
-                delayMin: 0,
-                delayRatio: 0,
-                completeness: 0,
-                lengthKm: num(r.routeLength) / 1000,
-                pathPoints: [],
-            })
+    // Paralel — free tier TomTom dirata-rata 5 req/detik, jumlah registered
+    // route biasanya maksimal 2, jadi para per batch aman dan latensinya
+    // turun dari N×roundtrip jadi 1× roundtrip paling lambat.
+    const details = await Promise.allSettled(
+        routes.map((r) => getRouteDetails(r.routeId)),
+    )
+    return details.map((res, i) => {
+        const r = routes[i]
+        if (res.status === "fulfilled") return statusFromDetails(res.value)
+        return {
+            routeId: r.routeId,
+            routeName: r.routeName,
+            level: "unknown" as TrafficLevel,
+            travelTimeMin: 0,
+            delayMin: 0,
+            delayRatio: 0,
+            completeness: 0,
+            lengthKm: num(r.routeLength) / 1000,
+            pathPoints: [],
         }
-    }
-    return out
+    })
 }
 
 /** Sampling titik representatif dari geometri rute untuk traffic flow sampling. */

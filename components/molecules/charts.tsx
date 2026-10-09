@@ -11,3 +11,4 @@ export { default as UnitCostRankingChart } from "@/components/organisms/unit-cos
 export { SkrMonthChart } from "@/components/molecules/skr-month-chart"
 export { BanMonthChart } from "@/components/molecules/ban-month-chart"
 export { WeatherChart } from "@/components/organisms/weather-chart"
+export { HistoryChart } from "@/components/organisms/traffic-history-chart"

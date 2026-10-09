@@ -23,6 +23,7 @@ import {
     AlertTriangle,
     CloudRain,
     Gauge,
+    History,
     Info,
     Layers,
     MapPin,
@@ -31,16 +32,24 @@ import {
     Route,
     Satellite,
     Truck,
+    Clock,
     Wifi,
     WifiOff,
 } from "lucide-react"
 import type { MapLocation } from "@/components/organisms/traffic-map"
+import { useTrafficHistory, type LocationHistoryUi } from "@/hooks/use-traffic-history"
 
 // Peta Leaflet — ssr:false karena Leaflet menyentuh window saat init.
 const TrafficMap = dynamic(() => import("@/components/organisms/traffic-map").then((m) => m.TrafficMap), {
     ssr: false,
     loading: () => <div className="h-[420px] w-full animate-pulse rounded-xl bg-muted/40 lg:h-[560px]" />,
 })
+
+// Grafik historis keluar dari boundary charts.tsx (satu chunk recharts).
+const HistoryChart = dynamic(
+    () => import("@/components/molecules/charts").then((m) => m.HistoryChart),
+    { ssr: false, loading: () => <div className="h-[180px] w-full animate-pulse rounded-md bg-muted/40" /> },
+)
 
 type TrafficLevel = "good" | "warning" | "critical" | "unknown"
 type FlowSource = "live" | "estimated"
@@ -68,6 +77,11 @@ interface ApiLocation {
         level: TrafficLevel
         currentSpeed: number
         freeFlowSpeed: number
+        source: FlowSource
+    } | null
+    /** ETA dinamis — durasi yang sudah memperhitungkan kepadatan. */
+    eta: {
+        durationMin: number
         source: FlowSource
     } | null
 }
@@ -135,6 +149,29 @@ function relativeTime(iso: string): string {
     return `${Math.floor(min / 60)} jam lalu`
 }
 
+/**
+ * Grafik pola historis rute terpilih — jam berapa biasanya padat.
+ * Muncul hanya bila tabel `traffic_history` sudah terisi (SQL script
+ * dijalankan + snapshot terkumpul); kalau belum, block ini hilang senyap.
+ */
+function SelectedRouteHistory({ history }: { history: LocationHistoryUi | null }) {
+    if (!history || !history.available || history.hourlyPattern.length < 4) return null
+    const worst = [...history.hourlyPattern].sort((a, b) => a.avgRatio - b.avgRatio)[0]
+    return (
+        <div className="rounded-lg border bg-muted/20 p-2">
+            <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                <History className="h-3 w-3 shrink-0" /> Pola kepadatan (30 hari · WIB)
+            </p>
+            <HistoryChart data={history.hourlyPattern} />
+            {worst && worst.avgRatio < 0.8 && (
+                <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                    Biasanya paling padat jam {String(worst.hour).padStart(2, "0")}.00 ({Math.round(worst.avgRatio * 100)}% dari kecepatan normal)
+                </p>
+            )}
+        </div>
+    )
+}
+
 export function TrafficView() {
     const [data, setData] = useState<TrafficApiResponse | null>(null)
     const [loading, setLoading] = useState(true)
@@ -172,6 +209,11 @@ export function TrafficView() {
     }, [load])
 
     const locations = data?.locations ?? []
+    const destinationIds = useMemo(
+        () => locations.filter((l) => !l.isOrigin).map((l) => l.id),
+        [locations],
+    )
+    const history = useTrafficHistory(destinationIds)
     const hasLive = (data?.summary.liveCount ?? 0) > 0
     const liveFlowCount = locations.filter((l) => l.trafficFlow?.source === "live").length
 
@@ -443,7 +485,7 @@ export function TrafficView() {
                                                         aria-label="estimasi"
                                                     />
                                                 )}
-                                                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                                                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                                                     {l.geometry ? `${l.geometry.distanceKm.toFixed(1)} km` : "—"}
                                                 </span>
                                             </button>
@@ -512,10 +554,17 @@ export function TrafficView() {
                                             </p>
                                         </div>
                                         <div className="rounded-lg bg-muted/40 p-1.5">
-                                            <p className="text-[10px] text-muted-foreground">Estimasi</p>
-                                            <p className="text-xs font-semibold tabular-nums">
-                                                {selected.geometry ? `${selected.geometry.durationMin} mnt` : "—"}
+                                            <p className="flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
+                                                <Clock className="h-2.5 w-2.5" /> ETA kini
                                             </p>
+                                            <p className="text-xs font-semibold tabular-nums">
+                                                {selected.eta ? `${selected.eta.durationMin} mnt` : selected.geometry ? `${selected.geometry.durationMin} mnt` : "—"}
+                                            </p>
+                                            {selected.eta && selected.geometry && selected.eta.durationMin > selected.geometry.durationMin && (
+                                                <p className="text-[10px] tabular-nums text-amber-700 dark:text-amber-400">
+                                                    +{selected.eta.durationMin - selected.geometry.durationMin} mnt vs normal
+                                                </p>
+                                            )}
                                         </div>
                                         <div className="rounded-lg bg-muted/40 p-1.5">
                                             <p className="text-[10px] text-muted-foreground">Kondisi</p>
@@ -573,6 +622,8 @@ export function TrafficView() {
                                             )}
                                         </p>
                                     )}
+                                    {/* ── Grafik pola historis (jika data sudah terkumpul) ── */}
+                                    <SelectedRouteHistory history={history.byId.get(selected.id) ?? null} />
                                 </div>
                             )}
                         </div>

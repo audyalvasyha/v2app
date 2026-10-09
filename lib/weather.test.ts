@@ -182,7 +182,7 @@ describe("parseWeatherPayload - pencocokan per-indeks dengan WEATHER_LOCATIONS",
         const parsed = parseWeatherPayload(raw)
         expect(parsed.find((p) => p.def.id === "kec-bangko")).toBeUndefined()
         // Tetangganya tetap ada dan tetap di posisinya
-        expect(parsed.find((p) => p.def.id === "kec-bagansiniapi")).toBeDefined()
+        expect(parsed.find((p) => p.def.id === "kec-bagan-sinembah")).toBeDefined()
         expect(parsed.find((p) => p.def.id === "kec-bangko-pusako")).toBeDefined()
     })
 
