@@ -9,9 +9,10 @@
  * - Marker pool (origin) beda bentuk dari tujuan.
  */
 
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import "leaflet/dist/leaflet.css"
 import type { Map as LeafletMap, LayerGroup, TileLayer } from "leaflet"
+import { Maximize2, Minimize2 } from "lucide-react"
 
 export interface MapLocation {
     id: string
@@ -69,6 +70,36 @@ export function TrafficMap({
     const groupRef = useRef<LayerGroup | null>(null)
     const flowLayerRef = useRef<TileLayer | null>(null)
     const fitOnceRef = useRef(false)
+    const [isFullscreen, setIsFullscreen] = useState(false)
+
+    // Masuk/keluar fullscreen via Fullscreen API bawaan browser (native,
+    // tanpa library). Leaflet perlu invalidateSize() setelah ukuran container
+    // berubah supaya tile tidak terpotong/tergeser.
+    const toggleFullscreen = useCallback(() => {
+        const el = containerRef.current
+        if (!el) return
+        if (document.fullscreenElement) {
+            void document.exitFullscreen()
+        } else if (typeof el.requestFullscreen === "function") {
+            // Fullscreen API bisa diblokir oleh kebijakan keamanan environment
+            // (mis. embedded preview/iframe) — jangan crash, cukup abaikan.
+            try {
+                void el.requestFullscreen()
+            } catch {
+                // Disallowed by permissions policy — tombol tidak berfungsi di sini.
+            }
+        }
+    }, [])
+
+    useEffect(() => {
+        const onChange = () => {
+            setIsFullscreen(Boolean(document.fullscreenElement))
+            // Tunggu transisi ukuran selesai lalu beri tahu Leaflet.
+            setTimeout(() => mapRef.current?.invalidateSize(), 150)
+        }
+        document.addEventListener("fullscreenchange", onChange)
+        return () => document.removeEventListener("fullscreenchange", onChange)
+    }, [])
 
     // Simpan props terbaru agar callback map (tanpa re-init) selalu baca data baru.
     const propsRef = useRef({ locations, selectedId, onSelect, showLines, showTraffic, onTrafficTileError, onTrafficTileRestore })
@@ -270,10 +301,31 @@ export function TrafficMap({
             ref={containerRef}
             // isolate + z-0: bikin stacking context sendiri supaya z-index internal
             // Leaflet (pane 200-1000) tidak menembus header sticky aplikasi.
-            className="relative isolate z-0 h-[420px] w-full overflow-hidden rounded-xl border bg-muted/30 lg:h-[560px]"
+            // Fullscreen: peta memenuhi layar (lebih tinggi dari viewport karena
+            // control bar ada di dalam, dan Leaflet invalidateSize menyesuaikan).
+            className={
+                isFullscreen
+                    ? "relative isolate z-0 h-screen w-screen overflow-hidden border-0 bg-muted/30"
+                    : "relative isolate z-0 h-[420px] w-full overflow-hidden rounded-xl border bg-muted/30 lg:h-[560px]"
+            }
             data-testid="traffic-map"
             role="application"
             aria-label="Peta rute pengiriman Rokan Hilir"
-        />
+        >
+            {/* Tombol fullscreen — tumpuk di kanan atas peta */}
+            <button
+                type="button"
+                onClick={toggleFullscreen}
+                title={isFullscreen ? "Keluar dari layar penuh (Esc)" : "Tampilkan layar penuh"}
+                aria-label={isFullscreen ? "Keluar dari layar penuh" : "Tampilkan layar penuh"}
+                className="absolute right-2.5 top-2.5 z-[500] inline-flex h-8 w-8 items-center justify-center rounded-md border bg-white/95 shadow-sm transition-colors hover:bg-white dark:bg-slate-800/95 dark:hover:bg-slate-800"
+            >
+                {isFullscreen ? (
+                    <Minimize2 className="h-4 w-4 text-foreground" />
+                ) : (
+                    <Maximize2 className="h-4 w-4 text-foreground" />
+                )}
+            </button>
+        </div>
     )
 }

@@ -12,8 +12,8 @@
  *  - Overlay traffic jalan (tile TomTom via proxy): otomatis disembunyikan
  *    bila tile gagal dimuat (kuota habis), dengan notifikasi di UI.
  *
- * Interaksi: klik kartu / garis rute → peta zoom ke rute itu + kartu lain
- * diredupkan. Klik area kosong peta atau kartu lagi → reset.
+ * Layout: peta di kiri, panel kanan berisi daftar rute compact (scrollable)
+ * + detail rute terpilih. Klik baris / garis / pin → peta zoom ke rute itu.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -21,7 +21,6 @@ import dynamic from "next/dynamic"
 import {
     Activity,
     AlertTriangle,
-    ArrowRight,
     CloudRain,
     Gauge,
     Info,
@@ -349,7 +348,7 @@ export function TrafficView() {
                 </div>
             </div>
 
-            {/* ── Peta + panel detail ─────────────────────────────────────── */}
+            {/* ── Peta (kiri) + daftar rute & detail (kanan) ──────────────── */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
                 <div className="lg:col-span-3">
                     <TrafficMap
@@ -394,222 +393,194 @@ export function TrafficView() {
                     </div>
                 </div>
 
-                {/* Panel detail rute terpilih */}
+                {/* Panel kanan: daftar rute compact + detail rute terpilih */}
                 <div className="lg:col-span-2">
-                    <div className="flex h-full min-h-[260px] flex-col rounded-xl border bg-card p-4">
-                        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                            <Navigation className="h-4 w-4" /> Detail Rute
+                    <div className="flex h-full flex-col rounded-xl border bg-card p-3">
+                        <h2 className="mb-2 flex shrink-0 items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            <Navigation className="h-3.5 w-3.5" /> Rute dari Pool Bagan Batu
                         </h2>
-                        {!selected ? (
-                            <div className="flex flex-1 flex-col gap-3">
-                                <p className="text-sm text-muted-foreground">
-                                    Klik pin atau kartu rute untuk membuka detailnya.
-                                </p>
-                                {counts.unknown > 0 && (
+
+                        {/* Daftar rute — compact, satu kolom, scrollable */}
+                        <div className="max-h-[240px] shrink-0 space-y-1 overflow-y-auto pr-1 lg:max-h-[280px]">
+                            {loading ? (
+                                <div className="space-y-1">
+                                    {locations.slice(0, 8).map((l) => (
+                                        <div key={l.id} className="h-7 animate-pulse rounded-md bg-muted/40" />
+                                    ))}
+                                </div>
+                            ) : (
+                                locations
+                                    .filter((l) => !l.isOrigin)
+                                    .map((l) => {
+                                        const level = effLevel(l)
+                                        const isSelected = selectedId === l.id
+                                        const flow = l.trafficFlow
+                                        return (
+                                            <button
+                                                key={l.id}
+                                                onClick={() => onSelect(l.id)}
+                                                title={
+                                                    l.geometry
+                                                        ? `${l.name} — ${l.geometry.distanceKm.toFixed(1)} km · ${l.geometry.durationMin} mnt${flow && flow.level !== "unknown" ? ` · ${STATUS_META[level].label}` : ""}`
+                                                        : l.name
+                                                }
+                                                className={[
+                                                    "flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
+                                                    isSelected
+                                                        ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30"
+                                                        : "hover:bg-muted/40",
+                                                ].join(" ")}
+                                            >
+                                                <span className={`h-2 w-2 shrink-0 rounded-full ${LEVEL_DOT[level]}`} />
+                                                <span className="min-w-0 flex-1 truncate text-xs font-medium">{l.name}</span>
+                                                {l.live && l.live.delayMin >= 1 && (
+                                                    <span className="shrink-0 text-[10px] font-medium tabular-nums text-amber-700 dark:text-amber-400">
+                                                        +{l.live.delayMin}m
+                                                    </span>
+                                                )}
+                                                {flow?.source === "estimated" && (
+                                                    <Satellite
+                                                        className="h-3 w-3 shrink-0 text-blue-700 dark:text-blue-400"
+                                                        aria-label="estimasi"
+                                                    />
+                                                )}
+                                                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                                                    {l.geometry ? `${l.geometry.distanceKm.toFixed(1)} km` : "—"}
+                                                </span>
+                                            </button>
+                                        )
+                                    })
+                            )}
+                        </div>
+
+                        <p className="mt-2 flex shrink-0 items-start gap-1.5 text-[10px] leading-snug text-muted-foreground">
+                            <CloudRain className="mt-0.5 h-3 w-3 shrink-0" />
+                            Estimasi memperhitungkan cuaca (Open-Meteo) &amp; pola jam kepadatan. Warna titik = kondisi
+                            rute; angka = jarak dari pool.
+                        </p>
+
+                        {/* Detail rute terpilih */}
+                        <div className="mt-3 border-t pt-3">
+                            {!selected ? (
+                                <div className="flex flex-1 flex-col gap-2">
                                     <p className="text-xs text-muted-foreground">
-                                        {counts.unknown} rute belum punya data kondisi.
+                                        Klik pin, garis, atau baris di atas untuk membuka detail rute.
                                     </p>
-                                )}
-                                {longest && (
-                                    <button
-                                        onClick={() => onSelect(longest.id)}
-                                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-muted/40"
-                                    >
-                                        <div>
-                                            <p className="text-sm font-medium">Rute terjauh</p>
-                                            <p className="text-xs text-muted-foreground tabular-nums">
-                                                {longest.name} · {longest.geometry?.distanceKm.toFixed(1)} km ·{" "}
-                                                {longest.geometry?.durationMin} mnt
+                                    {counts.unknown > 0 && (
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {counts.unknown} rute belum punya data kondisi.
+                                        </p>
+                                    )}
+                                    {longest && (
+                                        <button
+                                            onClick={() => onSelect(longest.id)}
+                                            className="flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors hover:bg-muted/40"
+                                        >
+                                            <div>
+                                                <p className="text-xs font-medium">Rute terjauh</p>
+                                                <p className="text-[11px] text-muted-foreground tabular-nums">
+                                                    {longest.name} · {longest.geometry?.distanceKm.toFixed(1)} km ·{" "}
+                                                    {longest.geometry?.durationMin} mnt
+                                                </p>
+                                            </div>
+                                            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-2.5">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="flex items-center gap-2 text-sm font-semibold">
+                                                <Truck className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+                                                <span className="truncate">{selected.name}</span>
+                                            </p>
+                                            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{selected.note}</p>
+                                        </div>
+                                        <span
+                                            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                                STATUS_META[effLevel(selected)].badge
+                                            } ${STATUS_META[effLevel(selected)].text}`}
+                                        >
+                                            {STATUS_META[effLevel(selected)].icon}
+                                            {STATUS_META[effLevel(selected)].label}
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 text-center">
+                                        <div className="rounded-lg bg-muted/40 p-1.5">
+                                            <p className="text-[10px] text-muted-foreground">Jarak</p>
+                                            <p className="text-xs font-semibold tabular-nums">
+                                                {selected.geometry ? `${selected.geometry.distanceKm.toFixed(1)} km` : "—"}
                                             </p>
                                         </div>
-                                        <MapPin className="h-4 w-4 text-muted-foreground" />
-                                    </button>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                        <p className="flex items-center gap-2 font-semibold">
-                                            <Truck className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
-                                            <span className="truncate">{selected.name}</span>
-                                        </p>
-                                        <p className="mt-0.5 text-xs text-muted-foreground">{selected.note}</p>
-                                    </div>
-                                    <span
-                                        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
-                                            STATUS_META[effLevel(selected)].badge
-                                        } ${STATUS_META[effLevel(selected)].text}`}
-                                    >
-                                        {STATUS_META[effLevel(selected)].icon}
-                                        {STATUS_META[effLevel(selected)].label}
-                                    </span>
-                                </div>
-                                <div className="grid grid-cols-3 gap-2 text-center">
-                                    <div className="rounded-lg bg-muted/40 p-2">
-                                        <p className="text-[11px] text-muted-foreground">Jarak</p>
-                                        <p className="text-sm font-semibold tabular-nums">
-                                            {selected.geometry ? `${selected.geometry.distanceKm.toFixed(1)} km` : "—"}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-lg bg-muted/40 p-2">
-                                        <p className="text-[11px] text-muted-foreground">Estimasi</p>
-                                        <p className="text-sm font-semibold tabular-nums">
-                                            {selected.geometry ? `${selected.geometry.durationMin} mnt` : "—"}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-lg bg-muted/40 p-2">
-                                        <p className="text-[11px] text-muted-foreground">Kondisi</p>
-                                        <p className="text-sm font-semibold tabular-nums">
-                                            {selected.trafficFlow && selected.trafficFlow.level !== "unknown"
-                                                ? `${selected.trafficFlow.currentSpeed} km/j`
-                                                : "—"}
-                                        </p>
-                                    </div>
-                                </div>
-                                {/* Bar rasio kecepatan aktual vs free-flow */}
-                                {selected.trafficFlow && selected.trafficFlow.level !== "unknown" && (
-                                    <div>
-                                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                                            <span className="inline-flex items-center gap-1">
-                                                <Gauge className="h-3 w-3" /> Kecepatan vs normal
-                                            </span>
-                                            <span className="tabular-nums">
-                                                {selected.trafficFlow.currentSpeed}/{selected.trafficFlow.freeFlowSpeed} km/j
-                                            </span>
+                                        <div className="rounded-lg bg-muted/40 p-1.5">
+                                            <p className="text-[10px] text-muted-foreground">Estimasi</p>
+                                            <p className="text-xs font-semibold tabular-nums">
+                                                {selected.geometry ? `${selected.geometry.durationMin} mnt` : "—"}
+                                            </p>
                                         </div>
-                                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
-                                            <div
-                                                className={`h-full rounded-full transition-all ${
-                                                    effLevel(selected) === "good"
-                                                        ? "bg-emerald-500"
-                                                        : effLevel(selected) === "warning"
-                                                          ? "bg-amber-500"
-                                                          : "bg-red-500"
-                                                }`}
-                                                style={{
-                                                    width: `${Math.min(100, Math.round((selected.trafficFlow.currentSpeed / (selected.trafficFlow.freeFlowSpeed || 1)) * 100))}%`,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                                {selected.live && selected.live.delayMin >= 1 && (
-                                    <p className="flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
-                                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                        Tundaan +{selected.live.delayMin} menit dibanding kondisi normal.
-                                    </p>
-                                )}
-                                {/* Flag sumber data — jujur live vs estimasi */}
-                                {selected.trafficFlow && (
-                                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                        {selected.trafficFlow.source === "live" ? (
-                                            <>
-                                                <Wifi className="h-3 w-3 text-emerald-600" /> Data live TomTom.
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Satellite className="h-3 w-3 text-blue-600" /> Estimasi fallback gratis
-                                                (pola jam × jarak × cuaca) — bukan pengukuran live.
-                                            </>
-                                        )}
-                                    </p>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* ── Daftar rute ─────────────────────────────────────────────── */}
-            <div className="rounded-xl border bg-card p-4">
-                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Rute dari Pool Bagan Batu
-                </h2>
-                {loading ? (
-                    <div className="space-y-2">
-                        {locations.slice(0, 6).map((l) => (
-                            <div key={l.id} className="h-14 animate-pulse rounded-lg bg-muted/40" />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-                        {locations
-                            .filter((l) => !l.isOrigin)
-                            .map((l) => {
-                                const level = effLevel(l)
-                                const meta = STATUS_META[level]
-                                const isSelected = selectedId === l.id
-                                const flow = l.trafficFlow
-                                const ratio =
-                                    flow && flow.freeFlowSpeed > 0
-                                        ? Math.min(1, flow.currentSpeed / flow.freeFlowSpeed)
-                                        : null
-                                return (
-                                    <button
-                                        key={l.id}
-                                        onClick={() => onSelect(l.id)}
-                                        className={[
-                                            "group rounded-lg border px-3 py-2.5 text-left transition-colors",
-                                            isSelected
-                                                ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30"
-                                                : "hover:bg-muted/40",
-                                        ].join(" ")}
-                                    >
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div className="flex min-w-0 items-center gap-1.5">
-                                                <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                                <span className="truncate text-sm font-medium">{l.name}</span>
-                                            </div>
-                                            <span
-                                                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.badge} ${meta.text}`}
-                                            >
-                                                <span className={`h-1.5 w-1.5 rounded-full ${LEVEL_DOT[level]}`} />
-                                                {meta.label}
-                                            </span>
-                                        </div>
-                                        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                                            <ArrowRight className="h-3 w-3" />
-                                            <span className="tabular-nums">
-                                                {l.geometry
-                                                    ? `${l.geometry.distanceKm.toFixed(1)} km · ${l.geometry.durationMin} mnt`
+                                        <div className="rounded-lg bg-muted/40 p-1.5">
+                                            <p className="text-[10px] text-muted-foreground">Kondisi</p>
+                                            <p className="text-xs font-semibold tabular-nums">
+                                                {selected.trafficFlow && selected.trafficFlow.level !== "unknown"
+                                                    ? `${selected.trafficFlow.currentSpeed} km/j`
                                                     : "—"}
-                                            </span>
-                                            {l.live && l.live.delayMin >= 1 && (
-                                                <span className="text-amber-700 dark:text-amber-400">
-                                                    +{l.live.delayMin} mnt
-                                                </span>
-                                            )}
-                                            {flow?.source === "estimated" && (
-                                                <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-blue-700 dark:text-blue-400">
-                                                    <Satellite className="h-2.5 w-2.5" /> est
-                                                </span>
-                                            )}
+                                            </p>
                                         </div>
-                                        {ratio != null && (
-                                            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                                    </div>
+                                    {/* Bar rasio kecepatan aktual vs free-flow */}
+                                    {selected.trafficFlow && selected.trafficFlow.level !== "unknown" && (
+                                        <div>
+                                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                                                <span className="inline-flex items-center gap-1">
+                                                    <Gauge className="h-3 w-3" /> Kecepatan vs normal
+                                                </span>
+                                                <span className="tabular-nums">
+                                                    {selected.trafficFlow.currentSpeed}/{selected.trafficFlow.freeFlowSpeed} km/j
+                                                </span>
+                                            </div>
+                                            <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
                                                 <div
-                                                    className={`h-full rounded-full ${
-                                                        level === "good"
+                                                    className={`h-full rounded-full transition-all ${
+                                                        effLevel(selected) === "good"
                                                             ? "bg-emerald-500"
-                                                            : level === "warning"
+                                                            : effLevel(selected) === "warning"
                                                               ? "bg-amber-500"
                                                               : "bg-red-500"
                                                     }`}
-                                                    style={{ width: `${Math.round(ratio * 100)}%` }}
+                                                    style={{
+                                                        width: `${Math.min(100, Math.round((selected.trafficFlow.currentSpeed / (selected.trafficFlow.freeFlowSpeed || 1)) * 100))}%`,
+                                                    }}
                                                 />
                                             </div>
-                                        )}
-                                    </button>
-                                )
-                            })}
+                                        </div>
+                                    )}
+                                    {selected.live && selected.live.delayMin >= 1 && (
+                                        <p className="flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                            Tundaan +{selected.live.delayMin} menit dibanding kondisi normal.
+                                        </p>
+                                    )}
+                                    {/* Flag sumber data — jujur live vs estimasi */}
+                                    {selected.trafficFlow && (
+                                        <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                                            {selected.trafficFlow.source === "live" ? (
+                                                <>
+                                                    <Wifi className="mt-0.5 h-3 w-3 shrink-0 text-emerald-600" /> Data live TomTom.
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Satellite className="mt-0.5 h-3 w-3 shrink-0 text-blue-600" /> Estimasi fallback
+                                                    gratis (pola jam × jarak × cuaca) — bukan pengukuran live.
+                                                </>
+                                            )}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                )}
-                <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <CloudRain className="h-3 w-3" />
-                    Estimasi memperhitungkan cuaca terkini (Open-Meteo) dan pola kepadatan jam — bar menunjukkan rasio
-                    kecepatan terhadap kondisi normal.
-                </p>
+                </div>
             </div>
         </div>
     )

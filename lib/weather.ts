@@ -28,7 +28,7 @@ export interface WeatherLocationDef {
 
 export const WEATHER_LOCATIONS: WeatherLocationDef[] = [
     // Dua kota utama operasional
-    { id: "bagan-batu", name: "Bagan Batu", note: "Pool utama & workshop", latitude: 1.704, longitude: 100.53 }, // [perkiraan]
+    { id: "bagan-batu", name: "Bagan Batu", note: "Pool utama & workshop · [koordinat dari Google Maps: https://www.google.com/maps/place/PT+PDR+Wings+Bagan+Batu/@1.6696448,100.4473387,18.37z/data=!4m6!3m5!1s0x302cd100474030f5:0xa4406c224b2d0974!8m2!3d1.6689167!4d100.447755!16s%2Fg%2F11yxjd4sgn?entry=ttu&g_ep=EgoyMDI2MTAwNi4wIKXMDSoASAFQAw%3D%3D]", latitude: 1.6689167, longitude: 100.447755 },
     { id: "bagansiapiapi", name: "Bagansiapiapi", note: "Ibu kota kabupaten · pesisir", latitude: 2.107, longitude: 100.979 }, // [perkiraan]
     // 18 kecamatan (urutan mengikuti daftar operasional)
     { id: "kec-bagan-sinembah", name: "Kec. Bagan Sinembah", note: "Rokan Hilir", latitude: 1.67841, longitude: 100.46275 },

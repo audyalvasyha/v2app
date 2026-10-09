@@ -183,7 +183,7 @@ function SkrViewImpl({
         () => skrRanking(filtered, rankGroup, metric, 5, rankingOptions),
         [filtered, rankGroup, metric, rankingOptions],
     )
-    const reasons = useMemo(() => skrReasonBreakdown(filtered, 6), [filtered])
+    const reasons = useMemo(() => skrReasonBreakdown(filtered, 200), [filtered])
 
     //_5 Teratas Redelivery: peringkat & alasan difokuskan ke kategori
     // redelivery, menggantikan "5 Terbawah" dan "Alasan POD Terbanyak"
@@ -196,10 +196,40 @@ function SkrViewImpl({
         () => skrRanking(redeliveryRows, rankGroup, metric, 5, rankingOptions),
         [redeliveryRows, rankGroup, metric, rankingOptions],
     )
-    const redeliveryReasons = useMemo(
-        () => reasons.filter((r) => skrCategory(r.reason).category === "redelivery").slice(0, 5),
-        [reasons],
-    )
+    //_Alasan SKR terbanyak per kategori: seluruh alasan POD dikelompokkan
+    //ke kategorinya masing-masing (internal/operasional/pelanggan/redelivery/
+    //lainnya), lalu tiap kategori menampilkan 3 alasan dengan nilai terbesar.
+    const reasonsByCategory = useMemo(() => {
+        type ReasonRow = (typeof reasons)[number]
+        const groups = new Map<
+            SkrCategory,
+            { category: SkrCategory; label: string; className: string; rows: number; nilai: number; reasons: ReasonRow[] }
+        >()
+        for (const r of reasons) {
+            const info = skrCategory(r.reason)
+            const g = groups.get(info.category)
+            if (g) {
+                g.rows += r.rows
+                g.nilai += r.nilai
+                g.reasons.push(r)
+            } else {
+                groups.set(info.category, {
+                    category: info.category,
+                    label: info.label,
+                    className: info.className,
+                    rows: r.rows,
+                    nilai: r.nilai,
+                    reasons: [r],
+                })
+            }
+        }
+        const list = [...groups.values()]
+        for (const g of list) {
+            g.reasons = g.reasons.sort((a, b) => b.nilai - a.nilai).slice(0, 3)
+        }
+        // Kategori dengan total nilai terbesar tampil lebih dulu.
+        return list.sort((a, b) => b.nilai - a.nilai)
+    }, [reasons])
     const customers = useMemo(
         () => skrCustomerSummary(filtered, customerById),
         [filtered, customerById],
@@ -674,47 +704,58 @@ function SkrViewImpl({
                 </div>
             </div>
 
-            {/* SEBARAN ALASAN REDELIVERY — hanya kategori redelivery,
-                maksimal 5 baris, tinggi baris tetap pendek supaya padat. */}
-            {redeliveryReasons.length > 0 && (
+            {/* SEBARAN ALASAN SKR PER KATEGORI — semua kategori POD,
+                tiap kategori menampilkan 3 alasan dengan nilai terbesar.
+                Tinggi baris tetap pendek supaya padat. */}
+            {reasonsByCategory.length > 0 && (
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                     <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2">
-                        <h3 className="text-sm font-semibold">Alasan Redelivery Terbanyak</h3>
-                        <p className="text-[11px] text-muted-foreground">5 teratas · nilai terbesar</p>
+                        <h3 className="text-sm font-semibold">Alasan SKR Terbanyak per Kategori</h3>
+                        <p className="text-[11px] text-muted-foreground">3 teratas per kategori · nilai terbesar</p>
                     </div>
-                    <ul className="divide-y">
-                        {redeliveryReasons.map((r, i) => (
-                            <li
-                                key={r.reason}
-                                className="flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-muted/40"
-                            >
-                                <span className="w-4 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
-                                    {i + 1}
-                                </span>
-                                <span className="min-w-0 flex-1 truncate text-sm" title={r.reason}>
-                                    {r.reason}
-                                </span>
-                                <Badge
-                                    variant="outline"
-                                    className={cn(
-                                        "hidden h-5 shrink-0 px-1.5 text-[10px] sm:inline-flex",
-                                        r.className,
-                                    )}
-                                >
-                                    {r.label}
-                                </Badge>
-                                <span className="w-14 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
-                                    {r.rows.toLocaleString("id-ID")} b
-                                </span>
-                                <span
-                                    className="shrink-0 whitespace-nowrap text-right font-mono text-sm font-medium tabular-nums"
-                                    title={formatNilai(r.nilai)}
-                                >
-                                    {compactNilai(r.nilai)}
-                                </span>
-                            </li>
+                    <div className="divide-y">
+                        {reasonsByCategory.map((group) => (
+                            <div key={group.category}>
+                                {/* Kepala kategori: badge + total baris & nilai */}
+                                <div className="flex items-center gap-2 bg-muted/30 px-3 py-1.5">
+                                    <Badge
+                                        variant="outline"
+                                        className={cn("h-5 shrink-0 px-1.5 text-[10px]", group.className)}
+                                    >
+                                        {group.label}
+                                    </Badge>
+                                    <span className="text-[11px] tabular-nums text-muted-foreground">
+                                        {group.rows.toLocaleString("id-ID")} baris ·{" "}
+                                        {compactNilai(group.nilai)}
+                                    </span>
+                                </div>
+                                <ul className="divide-y">
+                                    {group.reasons.map((r, i) => (
+                                        <li
+                                            key={r.reason}
+                                            className="flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-muted/40"
+                                        >
+                                            <span className="w-4 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                                                {i + 1}
+                                            </span>
+                                            <span className="min-w-0 flex-1 truncate text-sm" title={r.reason}>
+                                                {r.reason}
+                                            </span>
+                                            <span className="w-14 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                                                {r.rows.toLocaleString("id-ID")} b
+                                            </span>
+                                            <span
+                                                className="shrink-0 whitespace-nowrap text-right font-mono text-sm font-medium tabular-nums"
+                                                title={formatNilai(r.nilai)}
+                                            >
+                                                {compactNilai(r.nilai)}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
                         ))}
-                    </ul>
+                    </div>
                 </div>
             )}
 
