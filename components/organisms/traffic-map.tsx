@@ -325,43 +325,6 @@ export function TrafficMap({
         }
     }, [locations, selectedId, showLines, showTraffic])
 
-    // return (
-    //     <div
-    //         ref={containerRef}
-    //         // isolate + z-0: bikin stacking context sendiri supaya z-index internal
-    //         // Leaflet (pane 200-1000) tidak menembus header sticky aplikasi.
-    //         // Fullscreen: peta memenuhi layar (lebih tinggi dari viewport karena
-    //         // control bar ada di dalam, dan Leaflet invalidateSize menyesuaikan).
-    //         className={
-    //             isFullscreen
-    //                 ? // fixed inset-0 lebih andal daripada h-screen/w-screen di
-    //                   // top-layer fullscreen (100vw bisa melebihi viewport karena
-    //                   // scrollbar). Background SOLID (bukan transparan) supaya
-    //                   // backdrop hitam bawaan fullscreen tidak pernah terlihat
-    //                   // sebelum tile Leaflet selesai di-render ulang.
-    //                   "fixed inset-0 z-[10000] h-full w-full overflow-hidden rounded-none border-0 bg-background"
-    //                 : "relative isolate z-0 h-[420px] w-full overflow-hidden rounded-xl border bg-muted/30 lg:h-[560px]"
-    //         }
-    //         data-testid="traffic-map"
-    //         role="application"
-    //         aria-label="Peta rute pengiriman Rokan Hilir"
-    //     >
-    //         {/* Tombol fullscreen — tumpuk di kanan atas peta */}
-    //         <button
-    //             type="button"
-    //             onClick={toggleFullscreen}
-    //             title={isFullscreen ? "Keluar dari layar penuh (Esc)" : "Tampilkan layar penuh"}
-    //             aria-label={isFullscreen ? "Keluar dari layar penuh" : "Tampilkan layar penuh"}
-    //             className="absolute right-2.5 top-2.5 z-[500] inline-flex h-8 w-8 items-center justify-center rounded-md border bg-white/95 shadow-sm transition-colors hover:bg-white dark:bg-slate-800/95 dark:hover:bg-slate-800"
-    //         >
-    //             {isFullscreen ? (
-    //                 <Minimize2 className="h-4 w-4 text-foreground" />
-    //             ) : (
-    //                 <Maximize2 className="h-4 w-4 text-foreground" />
-    //             )}
-    //         </button>
-    //     </div>
-    // )
     return (
         <div
             ref={containerRef}

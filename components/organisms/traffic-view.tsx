@@ -204,8 +204,8 @@ export function TrafficView() {
                     l.live && l.live.level !== "unknown"
                         ? ` · ${l.live.travelTimeMin} mnt${l.live.delayMin >= 1 ? ` (+${l.live.delayMin} mnt)` : ""}`
                         : l.trafficFlow && l.trafficFlow.level !== "unknown"
-                          ? ` · ${l.trafficFlow.currentSpeed}/${l.trafficFlow.freeFlowSpeed} km/j${l.trafficFlow.source === "estimated" ? " (est)" : ""}`
-                          : ""
+                            ? ` · ${l.trafficFlow.currentSpeed}/${l.trafficFlow.freeFlowSpeed} km/j${l.trafficFlow.source === "estimated" ? " (est)" : ""}`
+                            : ""
                 return {
                     id: l.id,
                     name: l.name,
@@ -349,7 +349,7 @@ export function TrafficView() {
             </div>
 
             {/* ── Peta (kiri) + daftar rute & detail (kanan) ──────────────── */}
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
                 <div className="lg:col-span-3">
                     <TrafficMap
                         locations={mapLocations}
@@ -377,9 +377,8 @@ export function TrafficView() {
                         <button
                             onClick={() => setShowTraffic((s) => !s)}
                             disabled={tileUnavailable}
-                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
-                                showTraffic && !tileUnavailable ? "border-primary/50 bg-primary/5 text-foreground" : "hover:bg-muted"
-                            }`}
+                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${showTraffic && !tileUnavailable ? "border-primary/50 bg-primary/5 text-foreground" : "hover:bg-muted"
+                                }`}
                             title={tileUnavailable ? "Tile traffic tidak tersedia saat ini" : undefined}
                         >
                             <Layers className="h-3 w-3" /> Overlay traffic: {showTraffic && !tileUnavailable ? "AKTIF" : "MATI"}
@@ -394,7 +393,7 @@ export function TrafficView() {
                 </div>
 
                 {/* Panel kanan: daftar rute compact + detail rute terpilih */}
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-1">
                     <div className="flex h-full flex-col rounded-xl border bg-card p-3">
                         <h2 className="mb-2 flex shrink-0 items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             <Navigation className="h-3.5 w-3.5" /> Rute dari Pool Bagan Batu
@@ -498,9 +497,8 @@ export function TrafficView() {
                                             <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{selected.note}</p>
                                         </div>
                                         <span
-                                            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                                                STATUS_META[effLevel(selected)].badge
-                                            } ${STATUS_META[effLevel(selected)].text}`}
+                                            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_META[effLevel(selected)].badge
+                                                } ${STATUS_META[effLevel(selected)].text}`}
                                         >
                                             {STATUS_META[effLevel(selected)].icon}
                                             {STATUS_META[effLevel(selected)].label}
@@ -541,13 +539,12 @@ export function TrafficView() {
                                             </div>
                                             <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
                                                 <div
-                                                    className={`h-full rounded-full transition-all ${
-                                                        effLevel(selected) === "good"
+                                                    className={`h-full rounded-full transition-all ${effLevel(selected) === "good"
                                                             ? "bg-emerald-500"
                                                             : effLevel(selected) === "warning"
-                                                              ? "bg-amber-500"
-                                                              : "bg-red-500"
-                                                    }`}
+                                                                ? "bg-amber-500"
+                                                                : "bg-red-500"
+                                                        }`}
                                                     style={{
                                                         width: `${Math.min(100, Math.round((selected.trafficFlow.currentSpeed / (selected.trafficFlow.freeFlowSpeed || 1)) * 100))}%`,
                                                     }}
