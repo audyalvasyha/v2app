@@ -1,14 +1,16 @@
 "use client"
 
 /**
- * TrafficView — Monitoring Lalu Lintas Rute Pengiriman (redesign).
+ * TrafficView — Monitoring Lalu Lintas Rute Pengiriman (redesign 2026).
  *
  * Sumber data: GET /api/traffic.
- *  - Garis rute: geometri jalan asli dari OSRM untuk SEMUA 20 daerah —
- *    tidak lagi bergantung produk Route Monitoring TomTom (akun free tier
- *    bisa tanpa produk aktif, itulah sebabnya dulu garis tidak muncul).
- *  - Status live (Lancar / Perlu perhatian / Macet): dari TomTom bila
- *    TOMTOM_API_KEY tersedia; tanpa key rute tetap tergambar biru netral.
+ *  - Garis rute: geometri jalan asli dari OSRM (gratis, tanpa key) untuk
+ *    SEMUA daerah.
+ *  - Status kondisi: live dari TomTom selama kuota free tier tersedia,
+ *    otomatis fallback ke ESTIMASI (jadwal × jarak × cuaca) bila key ditolak /
+ *    kuota habis — setiap rute punya flag `source` supaya UI jujur.
+ *  - Overlay traffic jalan (tile TomTom via proxy): otomatis disembunyikan
+ *    bila tile gagal dimuat (kuota habis), dengan notifikasi di UI.
  *
  * Interaksi: klik kartu / garis rute → peta zoom ke rute itu + kartu lain
  * diredupkan. Klik area kosong peta atau kartu lagi → reset.
@@ -20,12 +22,18 @@ import {
     Activity,
     AlertTriangle,
     ArrowRight,
-    Clock,
+    CloudRain,
+    Gauge,
+    Info,
+    Layers,
     MapPin,
     Navigation,
     RefreshCw,
     Route,
+    Satellite,
     Truck,
+    Wifi,
+    WifiOff,
 } from "lucide-react"
 import type { MapLocation } from "@/components/organisms/traffic-map"
 
@@ -36,6 +44,7 @@ const TrafficMap = dynamic(() => import("@/components/organisms/traffic-map").th
 })
 
 type TrafficLevel = "good" | "warning" | "critical" | "unknown"
+type FlowSource = "live" | "estimated"
 
 interface ApiLocation {
     id: string
@@ -55,18 +64,26 @@ interface ApiLocation {
         delayMin: number
         completeness: number
     } | null
-    /** Status traffic flow sampling per-rute dari geometri OSRM. */
+    /** Kondisi traffic per-rute — live TomTom atau fallback estimasi. */
     trafficFlow: {
         level: TrafficLevel
         currentSpeed: number
         freeFlowSpeed: number
+        source: FlowSource
     } | null
 }
 
 interface TrafficApiResponse {
     configured: boolean
     generatedAt: string
-    summary: { totalRoutes: number; routedGeometries: number; liveCount: number; badCount: number; trafficCount: number }
+    summary: {
+        totalRoutes: number
+        routedGeometries: number
+        liveCount: number
+        badCount: number
+        trafficCount: number
+        estimatedCount: number
+    }
     locations: ApiLocation[]
 }
 
@@ -90,9 +107,9 @@ const STATUS_META: Record<TrafficLevel, { label: string; text: string; badge: st
         icon: <AlertTriangle className="h-3.5 w-3.5" />,
     },
     unknown: {
-        label: "Estimasi",
-        text: "text-blue-700 dark:text-blue-400",
-        badge: "border-blue-300/60 bg-blue-500/10",
+        label: "Tanpa data",
+        text: "text-slate-600 dark:text-slate-400",
+        badge: "border-slate-300/60 bg-slate-500/10",
         icon: <Navigation className="h-3.5 w-3.5" />,
     },
 }
@@ -101,26 +118,7 @@ const LEVEL_DOT: Record<TrafficLevel, string> = {
     good: "bg-emerald-500",
     warning: "bg-amber-500",
     critical: "bg-red-500",
-    unknown: "bg-blue-500",
-}
-
-/**
- * Penjelasan cakupan data live — supaya user ngerti kenapa kebanyakan rute
- * cuma punya estimasi:
- *  - Free tier Route Monitoring membatasi 2 rute terdaftar.
- *  - Traffic Flow API (tanpa registrasi rute) perlu produk terpisah yang
- *    belum aktif di key (403).
- */
-function coverageNote(data: TrafficApiResponse | null): string | null {
-    if (!data) return null
-    if (!data.configured) return null // banner key belum diset sudah ada
-    if (data.summary.liveCount >= data.summary.totalRoutes) return null
-    return (
-        `Status live baru tersedia untuk ${data.summary.liveCount} dari ${data.summary.totalRoutes} rute. ` +
-        `Traffic Flow sampling aktif untuk ${data.summary.trafficCount} rute. ` +
-        `Free tier Route Monitoring membatasi 2 rute terdaftar. Rute lain memakai estimasi jarak & ` +
-        `waktu dari OSRM — bukan kondisi live.`
-    )
+    unknown: "bg-slate-400",
 }
 
 /** Level efektif: Route Monitoring (jika ada) → Traffic Flow sampling → unknown. */
@@ -144,9 +142,9 @@ export function TrafficView() {
     const [refreshing, setRefreshing] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [selectedId, setSelectedId] = useState<string | null>(null)
-    const [filter, setFilter] = useState<"all" | "live">("all")
     const [showLines, setShowLines] = useState(false)
     const [showTraffic, setShowTraffic] = useState(true)
+    const [tileUnavailable, setTileUnavailable] = useState(false)
 
     const load = useCallback(async (isRefresh = false) => {
         isRefresh ? setRefreshing(true) : setLoading(true)
@@ -168,14 +166,27 @@ export function TrafficView() {
         load()
     }, [load])
 
-    const locations = data?.locations ?? []
+    // Auto-refresh tiap 5 menit — data live berubah, UI tetap segar.
+    useEffect(() => {
+        const t = setInterval(() => load(true), 5 * 60_000)
+        return () => clearInterval(t)
+    }, [load])
 
-    const visible = useMemo(
-        () => (filter === "live" ? locations.filter((l) => effLevel(l) !== "unknown") : locations),
-        [locations, filter],
-    )
+    const locations = data?.locations ?? []
+    const hasLive = (data?.summary.liveCount ?? 0) > 0
+    const liveFlowCount = locations.filter((l) => l.trafficFlow?.source === "live").length
 
     const selected = locations.find((l) => l.id === selectedId) ?? null
+
+    const counts = useMemo(
+        () => ({
+            good: locations.filter((l) => !l.isOrigin && effLevel(l) === "good").length,
+            warning: locations.filter((l) => effLevel(l) === "warning").length,
+            critical: locations.filter((l) => effLevel(l) === "critical").length,
+            unknown: locations.filter((l) => !l.isOrigin && effLevel(l) === "unknown").length,
+        }),
+        [locations],
+    )
 
     const longest = useMemo(
         () =>
@@ -189,13 +200,12 @@ export function TrafficView() {
         () =>
             locations.map((l) => {
                 const level = effLevel(l)
-                const meta = STATUS_META[level]
                 const km = l.geometry ? `${l.geometry.distanceKm.toFixed(1)} km` : "—"
                 const livePart =
                     l.live && l.live.level !== "unknown"
                         ? ` · ${l.live.travelTimeMin} mnt${l.live.delayMin >= 1 ? ` (+${l.live.delayMin} mnt)` : ""}`
                         : l.trafficFlow && l.trafficFlow.level !== "unknown"
-                          ? ` · ${l.trafficFlow.currentSpeed}/${l.trafficFlow.freeFlowSpeed} km/j`
+                          ? ` · ${l.trafficFlow.currentSpeed}/${l.trafficFlow.freeFlowSpeed} km/j${l.trafficFlow.source === "estimated" ? " (est)" : ""}`
                           : ""
                 return {
                     id: l.id,
@@ -207,7 +217,7 @@ export function TrafficView() {
                     hasGeometry: Boolean(l.geometry),
                     geometry: l.geometry,
                     trafficFlow: l.trafficFlow,
-                    tooltip: `${l.name} — ${km}${livePart} · ${meta.label}`,
+                    tooltip: `${l.name} — ${km}${livePart} · ${STATUS_META[level].label}`,
                 }
             }),
         [locations],
@@ -217,94 +227,129 @@ export function TrafficView() {
         setSelectedId((prev) => (prev && id === prev ? null : id))
     }, [])
 
-    const toggleFilter = () => setFilter((f) => (f === "all" ? "live" : "all"))
+    const onTileError = useCallback(() => {
+        setTileUnavailable(true)
+        setShowTraffic(false)
+    }, [])
+    const onTileRestore = useCallback(() => setTileUnavailable(false), [])
+
+    const summary = data?.summary
 
     return (
         <div className="space-y-4">
-            {/* Header */}
-            <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h1 className="flex items-center gap-2 text-lg font-semibold">
-                        <Route className="h-5 w-5 text-primary" />
-                        Monitoring Lalu Lintas
-                    </h1>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                        {locations.filter((l) => l.geometry).length} rute pengiriman digambar di jalan asli ·
-                        {data ? ` diperbarui ${relativeTime(data.generatedAt)}` : " memuat…"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                        Traffic live: {data?.summary.liveCount ?? "—"} · Sampling traffic: {data?.summary.trafficCount ?? "—"} dari {data?.summary.totalRoutes ?? "—"} rute
-                    </p>
+            {/* ── Hero header ─────────────────────────────────────────────── */}
+            <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-sky-600/10 via-card to-card">
+                <div className="flex flex-wrap items-center justify-between gap-3 p-5">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h1 className="flex items-center gap-2 text-lg font-semibold">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/15">
+                                    <Route className="h-4.5 w-4.5 text-sky-600 dark:text-sky-400" />
+                                </span>
+                                Monitoring Lalu Lintas
+                            </h1>
+                            {/* Sumber data — jujur live vs estimasi */}
+                            {data && (
+                                liveFlowCount > 0 ? (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/60 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                                        <Wifi className="h-3 w-3" /> Data live TomTom
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-300/60 bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-medium text-blue-700 dark:text-blue-400">
+                                        <Satellite className="h-3 w-3" /> Mode estimasi (fallback gratis)
+                                    </span>
+                                )
+                            )}
+                        </div>
+                        <p className="mt-1.5 text-sm text-muted-foreground">
+                            {summary ? `${summary.routedGeometries} dari ${summary.totalRoutes} rute digambar di jalan asli` : "Memuat rute…"}
+                            {data ? ` · diperbarui ${relativeTime(data.generatedAt)}` : ""}
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => load(true)}
+                        disabled={refreshing || loading}
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+                    >
+                        <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                        {refreshing ? "Memuat…" : "Segarkan"}
+                    </button>
                 </div>
-                <button
-                    onClick={() => load(true)}
-                    disabled={refreshing || loading}
-                    className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm transition-colors hover:bg-muted disabled:opacity-50"
-                >
-                    <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                    Refresh
-                </button>
             </div>
 
             {error && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                    {error}
+                <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                    <WifiOff className="h-4 w-4 shrink-0" /> {error}
                 </div>
             )}
 
             {data && !data.configured && (
-                <div className="rounded-lg border border-amber-300/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
-                    TOMTOM_API_KEY belum diset — garis rute tetap tampil (OSRM), tapi status kemacetan live tidak
-                    tersedia. Isi key di Settings → Environment, lalu refresh.
+                <div className="flex items-start gap-2 rounded-lg border border-amber-300/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                        TOMTOM_API_KEY belum diset — seluruh status memakai <strong>estimasi fallback gratis</strong> (jadwal
+                        kepadatan × jarak × cuaca). Garis rute tetap akurat dari OSRM. Isi key di Settings → Environment untuk
+                        data live.
+                    </span>
                 </div>
             )}
 
-            {coverageNote(data) && (
-                <div className="rounded-lg border border-blue-300/50 bg-blue-500/10 p-3 text-sm text-blue-800 dark:text-blue-300">
-                    {coverageNote(data)}
+            {data && data.configured && !hasLive && liveFlowCount === 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-blue-300/50 bg-blue-500/10 p-3 text-sm text-blue-800 dark:text-blue-300">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                        Kuota free tier TomTom terbatas — status live tidak tersedia saat ini, jadi aplikasi otomatis beralih
+                        ke <strong>estimasi fallback gratis</strong>. Estimasi dihitung dari pola kepadatan jam rush,
+                        karakteristik jalan, dan cuaca terkini (Open-Meteo), dan tetap berguna untuk perencanaan pengiriman.
+                    </span>
                 </div>
             )}
 
-            {/* KPI */}
+            {tileUnavailable && showTraffic && (
+                <div className="flex items-start gap-2 rounded-lg border border-slate-300/50 bg-slate-500/10 p-3 text-sm text-slate-700 dark:text-slate-300">
+                    <Layers className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                        Lapisan warna traffic di peta tidak tersedia (kuota tile habis) — lapisan dimatikan sementara. Garis
+                        rute &amp; status per daerah tetap berfungsi.
+                    </span>
+                </div>
+            )}
+
+            {/* ── KPI ─────────────────────────────────────────────────────── */}
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <div className="rounded-xl border bg-card p-4">
-                    <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-                        <Route className="h-3.5 w-3.5" /> Rute digambar
+                <div className="rounded-xl border border-emerald-300/40 bg-emerald-500/5 p-4">
+                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <Activity className="h-3.5 w-3.5 text-emerald-600" /> Lancar
                     </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums">
-                        {data ? data.summary.routedGeometries : "—"}
-                        <span className="ml-1 text-sm font-normal text-muted-foreground">
-                            / {data?.summary.totalRoutes ?? "—"}
-                        </span>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                        {loading ? "—" : counts.good}
+                    </p>
+                </div>
+                <div className="rounded-xl border border-amber-300/40 bg-amber-500/5 p-4">
+                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" /> Perlu perhatian
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                        {loading ? "—" : counts.warning}
+                    </p>
+                </div>
+                <div className="rounded-xl border border-red-300/40 bg-red-500/5 p-4">
+                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-600" /> Macet
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-red-700 dark:text-red-400">
+                        {loading ? "—" : counts.critical}
                     </p>
                 </div>
                 <div className="rounded-xl border bg-card p-4">
-                    <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-                        <Activity className="h-3.5 w-3.5" /> Status live
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums">{data?.summary.liveCount ?? "—"}</p>
-                </div>
-                <div className="rounded-xl border bg-card p-4">
-                    <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-                        <AlertTriangle className="h-3.5 w-3.5" /> Perlu perhatian
-                    </p>
-                    <p
-                        className={`mt-1 text-2xl font-semibold tabular-nums ${
-                            (data?.summary.badCount ?? 0) > 0 ? "text-amber-700 dark:text-amber-400" : ""
-                        }`}
-                    >
-                        {data?.summary.badCount ?? "—"}
-                    </p>
-                </div>
-                <div className="rounded-xl border bg-card p-4">
-                    <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         <Truck className="h-3.5 w-3.5" /> Pool utama
                     </p>
                     <p className="mt-1 text-2xl font-semibold">Bagan Batu</p>
                 </div>
             </div>
 
-            {/* Peta besar + panel rute terpilih */}
+            {/* ── Peta + panel detail ─────────────────────────────────────── */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
                 <div className="lg:col-span-3">
                     <TrafficMap
@@ -312,73 +357,59 @@ export function TrafficView() {
                         selectedId={selectedId}
                         onSelect={onSelect}
                         showLines={showLines}
-                        showTraffic={showTraffic}
+                        showTraffic={showTraffic && !tileUnavailable}
+                        onTrafficTileError={onTileError}
+                        onTrafficTileRestore={onTileRestore}
                     />
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1.5">
                             <span className={`h-2.5 w-2.5 rounded-full ${LEVEL_DOT.good}`} /> Lancar
                         </span>
                         <span className="flex items-center gap-1.5">
-                            <span className={`h-2.5 w-2.5 rounded-full ${LEVEL_DOT.warning}`} /> Perlu perhatian
+                            <span className={`h-2.5 w-2.5 rounded-full ${LEVEL_DOT.warning}`} /> Perhatian
                         </span>
                         <span className="flex items-center gap-1.5">
                             <span className={`h-2.5 w-2.5 rounded-full ${LEVEL_DOT.critical}`} /> Macet
                         </span>
                         <span className="flex items-center gap-1.5">
-                            <span className={`h-2.5 w-2.5 rounded-full ${LEVEL_DOT.unknown}`} /> Estimasi (bukan live)
+                            <span className="h-2.5 w-2.5 rounded-full bg-sky-500" /> Pool
                         </span>
-                        <span className="flex items-center gap-1.5">
-                            <span className="h-2.5 w-2.5 rounded-full bg-sky-500" /> Pool Bagan Batu
-                        </span>
+                        <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
                         <button
                             onClick={() => setShowTraffic((s) => !s)}
-                            className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                                showTraffic ? "border-primary/50 bg-primary/5 text-foreground" : "hover:bg-muted"
+                            disabled={tileUnavailable}
+                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                                showTraffic && !tileUnavailable ? "border-primary/50 bg-primary/5 text-foreground" : "hover:bg-muted"
                             }`}
+                            title={tileUnavailable ? "Tile traffic tidak tersedia saat ini" : undefined}
                         >
-                            Lapisan traffic jalan: {showTraffic ? "AKTIF" : "MATI"}
+                            <Layers className="h-3 w-3" /> Overlay traffic: {showTraffic && !tileUnavailable ? "AKTIF" : "MATI"}
                         </button>
                         <button
                             onClick={() => setShowLines((s) => !s)}
-                            className="rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors hover:bg-muted"
+                            className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors hover:bg-muted"
                         >
-                            {showLines ? "Sembunyikan semua garis" : "Tampilkan semua garis"}
+                            <Route className="h-3 w-3" /> {showLines ? "Sembunyikan semua garis" : "Tampilkan semua garis"}
                         </button>
-                        <span className="ml-auto hidden sm:inline">Warna jalan = kemacetan live · klik pin untuk detail rute</span>
                     </div>
                 </div>
 
                 {/* Panel detail rute terpilih */}
                 <div className="lg:col-span-2">
-                    <div className="flex h-full min-h-[220px] flex-col rounded-xl border bg-card p-4">
+                    <div className="flex h-full min-h-[260px] flex-col rounded-xl border bg-card p-4">
                         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                             <Navigation className="h-4 w-4" /> Detail Rute
                         </h2>
                         {!selected ? (
                             <div className="flex flex-1 flex-col gap-3">
                                 <p className="text-sm text-muted-foreground">
-                                    Klik pin atau kartu rute untuk membuka detailnya. Ringkasan kondisi sekarang:
+                                    Klik pin atau kartu rute untuk membuka detailnya.
                                 </p>
-                                <div className="grid grid-cols-3 gap-2 text-center">
-                                    <div className="rounded-lg border border-emerald-300/40 bg-emerald-500/5 p-2">
-                                        <p className="text-[11px] text-muted-foreground">Lancar</p>
-                                        <p className="text-lg font-semibold tabular-nums">
-                                            {locations.filter((l) => !l.isOrigin && effLevel(l) === "good").length}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-lg border border-amber-300/40 bg-amber-500/5 p-2">
-                                        <p className="text-[11px] text-muted-foreground">Perhatian</p>
-                                        <p className="text-lg font-semibold tabular-nums">
-                                            {locations.filter((l) => effLevel(l) === "warning").length}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-lg border border-red-300/40 bg-red-500/5 p-2">
-                                        <p className="text-[11px] text-muted-foreground">Macet</p>
-                                        <p className="text-lg font-semibold tabular-nums">
-                                            {locations.filter((l) => effLevel(l) === "critical").length}
-                                        </p>
-                                    </div>
-                                </div>
+                                {counts.unknown > 0 && (
+                                    <p className="text-xs text-muted-foreground">
+                                        {counts.unknown} rute belum punya data kondisi.
+                                    </p>
+                                )}
                                 {longest && (
                                     <button
                                         onClick={() => onSelect(longest.id)}
@@ -398,10 +429,10 @@ export function TrafficView() {
                         ) : (
                             <div className="space-y-3">
                                 <div className="flex items-start justify-between gap-2">
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="flex items-center gap-2 font-semibold">
-                                            <Truck className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                                            {selected.name}
+                                            <Truck className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+                                            <span className="truncate">{selected.name}</span>
                                         </p>
                                         <p className="mt-0.5 text-xs text-muted-foreground">{selected.note}</p>
                                     </div>
@@ -428,27 +459,60 @@ export function TrafficView() {
                                         </p>
                                     </div>
                                     <div className="rounded-lg bg-muted/40 p-2">
-                                        <p className="text-[11px] text-muted-foreground">Live</p>
+                                        <p className="text-[11px] text-muted-foreground">Kondisi</p>
                                         <p className="text-sm font-semibold tabular-nums">
-                                            {selected.live && selected.live.level !== "unknown"
-                                                ? `${selected.live.travelTimeMin} mnt`
-                                                : selected.trafficFlow && selected.trafficFlow.level !== "unknown"
-                                                  ? `${selected.trafficFlow.currentSpeed} km/j`
-                                                  : "—"}
+                                            {selected.trafficFlow && selected.trafficFlow.level !== "unknown"
+                                                ? `${selected.trafficFlow.currentSpeed} km/j`
+                                                : "—"}
                                         </p>
                                     </div>
                                 </div>
+                                {/* Bar rasio kecepatan aktual vs free-flow */}
+                                {selected.trafficFlow && selected.trafficFlow.level !== "unknown" && (
+                                    <div>
+                                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                                            <span className="inline-flex items-center gap-1">
+                                                <Gauge className="h-3 w-3" /> Kecepatan vs normal
+                                            </span>
+                                            <span className="tabular-nums">
+                                                {selected.trafficFlow.currentSpeed}/{selected.trafficFlow.freeFlowSpeed} km/j
+                                            </span>
+                                        </div>
+                                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
+                                            <div
+                                                className={`h-full rounded-full transition-all ${
+                                                    effLevel(selected) === "good"
+                                                        ? "bg-emerald-500"
+                                                        : effLevel(selected) === "warning"
+                                                          ? "bg-amber-500"
+                                                          : "bg-red-500"
+                                                }`}
+                                                style={{
+                                                    width: `${Math.min(100, Math.round((selected.trafficFlow.currentSpeed / (selected.trafficFlow.freeFlowSpeed || 1)) * 100))}%`,
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                                 {selected.live && selected.live.delayMin >= 1 && (
                                     <p className="flex items-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
                                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                                         Tundaan +{selected.live.delayMin} menit dibanding kondisi normal.
                                     </p>
                                 )}
-                                {!selected.live && (
-                                    <p className="text-xs text-muted-foreground">
-                                        Badge di atas adalah <strong>estimasi</strong> dari OSRM (jarak & waktu normal),
-                                        bukan kondisi live. Status live butuh Traffic API aktif di key TomTom atau rute
-                                        terdaftar di Route Monitoring.
+                                {/* Flag sumber data — jujur live vs estimasi */}
+                                {selected.trafficFlow && (
+                                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                        {selected.trafficFlow.source === "live" ? (
+                                            <>
+                                                <Wifi className="h-3 w-3 text-emerald-600" /> Data live TomTom.
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Satellite className="h-3 w-3 text-blue-600" /> Estimasi fallback gratis
+                                                (pola jam × jarak × cuaca) — bukan pengukuran live.
+                                            </>
+                                        )}
                                     </p>
                                 )}
                             </div>
@@ -457,19 +521,11 @@ export function TrafficView() {
                 </div>
             </div>
 
-            {/* Daftar rute */}
+            {/* ── Daftar rute ─────────────────────────────────────────────── */}
             <div className="rounded-xl border bg-card p-4">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                        {visible.length} Rute dari Pool Bagan Batu
-                    </h2>
-                    <button
-                        onClick={toggleFilter}
-                        className="rounded-md border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
-                    >
-                        {filter === "all" ? "Tampilkan hanya yang live" : "Tampilkan semua"}
-                    </button>
-                </div>
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Rute dari Pool Bagan Batu
+                </h2>
                 {loading ? (
                     <div className="space-y-2">
                         {locations.slice(0, 6).map((l) => (
@@ -478,32 +534,42 @@ export function TrafficView() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-                        {visible.map((l) => {
-                            const meta = STATUS_META[effLevel(l)]
-                            const isSelected = selectedId === l.id
-                            return (
-                                <button
-                                    key={l.id}
-                                    onClick={() => onSelect(l.id)}
-                                    className={[
-                                        "flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors",
-                                        isSelected
-                                            ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30"
-                                            : "hover:bg-muted/40",
-                                        l.isOrigin ? "border-sky-300/60 bg-sky-500/5" : "",
-                                    ].join(" ")}
-                                >
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-1.5 text-sm font-medium">
-                                            {l.isOrigin ? (
-                                                <span className="h-2 w-2 rounded-full bg-sky-500" />
-                                            ) : (
+                        {locations
+                            .filter((l) => !l.isOrigin)
+                            .map((l) => {
+                                const level = effLevel(l)
+                                const meta = STATUS_META[level]
+                                const isSelected = selectedId === l.id
+                                const flow = l.trafficFlow
+                                const ratio =
+                                    flow && flow.freeFlowSpeed > 0
+                                        ? Math.min(1, flow.currentSpeed / flow.freeFlowSpeed)
+                                        : null
+                                return (
+                                    <button
+                                        key={l.id}
+                                        onClick={() => onSelect(l.id)}
+                                        className={[
+                                            "group rounded-lg border px-3 py-2.5 text-left transition-colors",
+                                            isSelected
+                                                ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30"
+                                                : "hover:bg-muted/40",
+                                        ].join(" ")}
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex min-w-0 items-center gap-1.5">
                                                 <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                            )}
-                                            <span className="truncate">{l.name}</span>
+                                                <span className="truncate text-sm font-medium">{l.name}</span>
+                                            </div>
+                                            <span
+                                                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.badge} ${meta.text}`}
+                                            >
+                                                <span className={`h-1.5 w-1.5 rounded-full ${LEVEL_DOT[level]}`} />
+                                                {meta.label}
+                                            </span>
                                         </div>
-                                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                                            <Clock className="h-3 w-3" />
+                                        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                            <ArrowRight className="h-3 w-3" />
                                             <span className="tabular-nums">
                                                 {l.geometry
                                                     ? `${l.geometry.distanceKm.toFixed(1)} km · ${l.geometry.durationMin} mnt`
@@ -514,25 +580,36 @@ export function TrafficView() {
                                                     +{l.live.delayMin} mnt
                                                 </span>
                                             )}
+                                            {flow?.source === "estimated" && (
+                                                <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-blue-700 dark:text-blue-400">
+                                                    <Satellite className="h-2.5 w-2.5" /> est
+                                                </span>
+                                            )}
                                         </div>
-                                    </div>
-                                    {l.isOrigin ? (
-                                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-sky-300/60 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-400">
-                                            <ArrowRight className="h-3 w-3" /> Pool
-                                        </span>
-                                    ) : (
-                                        <span
-                                            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.badge} ${meta.text}`}
-                                        >
-                                            <span className={`h-1.5 w-1.5 rounded-full ${LEVEL_DOT[effLevel(l)]}`} />
-                                            {meta.label}
-                                        </span>
-                                    )}
-                                </button>
-                            )
-                        })}
+                                        {ratio != null && (
+                                            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                                                <div
+                                                    className={`h-full rounded-full ${
+                                                        level === "good"
+                                                            ? "bg-emerald-500"
+                                                            : level === "warning"
+                                                              ? "bg-amber-500"
+                                                              : "bg-red-500"
+                                                    }`}
+                                                    style={{ width: `${Math.round(ratio * 100)}%` }}
+                                                />
+                                            </div>
+                                        )}
+                                    </button>
+                                )
+                            })}
                     </div>
                 )}
+                <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <CloudRain className="h-3 w-3" />
+                    Estimasi memperhitungkan cuaca terkini (Open-Meteo) dan pola kepadatan jam — bar menunjukkan rasio
+                    kecepatan terhadap kondisi normal.
+                </p>
             </div>
         </div>
     )

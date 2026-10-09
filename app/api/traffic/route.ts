@@ -4,45 +4,32 @@
  * Sumber data per lokasi:
  *  - geometry   : garis jalan asli dari OSRM (gratis, tanpa key) — sumber peta.
  *  - live       : Route Monitoring TomTom (rute terdaftar, free tier max 2).
- *  - trafficFlow: sampling Traffic Flow TomTom di 3 titik sepanjang geometri
- *    rute — aktif untuk SEMUA rute selama key punya produk Traffic.
+ *  - trafficFlow: kondisi lalu lintas per rute — live dari Traffic Flow TomTom
+ *    selama kuota free tier tersedia, lalu otomatis FALLBACK GRATIS ke
+ *    estimator jadwal (time-of-day × jarak × cuaca Open-Meteo) bila key
+ *    ditolak / kuota habis. Setiap sample diberi `source: "live" | "estimated"`
+ *    supaya UI jujur soal asal datanya.
  *
  * Quota: sampling di-cache in-memory 5 menit per rute, jadi refresh berkali
  * tidak membakar jatah API. Sampling berjalan paralel terbatas 4 sekaligus.
  */
 import { NextResponse } from "next/server"
 import { hasTomTomKey } from "@/lib/tomtom/config"
-import { getAllRouteStatuses, sampleTrafficFlow, type RouteLiveStatus, type TrafficLevel } from "@/lib/tomtom/route-monitoring"
+import { getAllRouteStatuses, type RouteLiveStatus } from "@/lib/tomtom/route-monitoring"
+import { sampleRouteFlow, type FlowSampleResult } from "@/lib/traffic-flow"
 import { fetchAllRouteGeometries, type RouteGeometry, ORIGIN } from "@/lib/osrm"
 import { WEATHER_LOCATIONS } from "@/lib/weather"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-interface FlowInfo {
-    level: TrafficLevel
-    currentSpeed: number
-    freeFlowSpeed: number
-}
-
 /** Cache sampling 5 menit per lokasi — hemat kuota Traffic API. */
 const FLOW_TTL_MS = 5 * 60 * 1000
-const flowCache = new Map<string, { value: FlowInfo | null; expiresAt: number }>()
-
-function worstOfSamples(samples: Array<{ currentSpeed: number; freeFlowSpeed: number; level: TrafficLevel }>): FlowInfo | null {
-    if (!samples.length) return null
-    const order: Record<TrafficLevel, number> = { critical: 3, warning: 2, good: 1, unknown: 0 }
-    const worst = samples.reduce((a, b) =>
-        order[b.level] > order[a.level] || (order[b.level] === order[a.level] && b.currentSpeed / (b.freeFlowSpeed || 1) < a.currentSpeed / (a.freeFlowSpeed || 1))
-            ? b
-            : a,
-    )
-    return { level: worst.level, currentSpeed: worst.currentSpeed, freeFlowSpeed: worst.freeFlowSpeed }
-}
+const flowCache = new Map<string, { value: FlowSampleResult | null; expiresAt: number }>()
 
 /** Sampling semua rute: baca cache dulu, yang kosong diambil paralel (4 slot). */
-async function sampleAllFlows(geometries: Record<string, RouteGeometry | null>): Promise<Map<string, FlowInfo | null>> {
-    const out = new Map<string, FlowInfo | null>()
+async function sampleAllFlows(geometries: Record<string, RouteGeometry | null>): Promise<Map<string, FlowSampleResult | null>> {
+    const out = new Map<string, FlowSampleResult | null>()
     const now = Date.now()
     const pending: string[] = []
 
@@ -57,16 +44,19 @@ async function sampleAllFlows(geometries: Record<string, RouteGeometry | null>):
     }
 
     if (pending.length > 0) {
-        const key = process.env.TOMTOM_API_KEY ?? ""
+        const weather = await fetchWeatherCodes().catch(() => new Map<string, number>())
         const worker = async () => {
             while (pending.length > 0) {
                 const id = pending.shift()
                 if (!id) break
                 const geo = geometries[id]
-                let value: FlowInfo | null = null
+                let value: FlowSampleResult | null = null
                 try {
-                    const samples = await sampleTrafficFlow(geo!.coordinates, key, AbortSignal.timeout(20_000))
-                    value = worstOfSamples(samples)
+                    value = await sampleRouteFlow(geo!.coordinates, {
+                        distanceKm: geo!.distanceKm,
+                        weatherCode: weather.get(id) ?? null,
+                        signal: AbortSignal.timeout(20_000),
+                    })
                 } catch {
                     value = null
                 }
@@ -77,6 +67,25 @@ async function sampleAllFlows(geometries: Record<string, RouteGeometry | null>):
         await Promise.all([worker(), worker(), worker(), worker()])
     }
 
+    return out
+}
+
+/** Kode cuaca WMO terkini per lokasi (Open-Meteo, gratis) — input estimator. */
+async function fetchWeatherCodes(): Promise<Map<string, number>> {
+    const url = new URL("https://api.open-meteo.com/v1/forecast")
+    url.searchParams.set("latitude", WEATHER_LOCATIONS.map((l) => l.latitude).join(","))
+    url.searchParams.set("longitude", WEATHER_LOCATIONS.map((l) => l.longitude).join(","))
+    url.searchParams.set("current", "weather_code")
+    url.searchParams.set("timezone", "Asia/Jakarta")
+
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
+    if (!res.ok) throw new Error(`Open-Meteo ${res.status}`)
+    const body = (await res.json()) as Array<{ current?: { weather_code?: number } }>
+    const out = new Map<string, number>()
+    WEATHER_LOCATIONS.forEach((loc, i) => {
+        const code = body[i]?.current?.weather_code
+        if (typeof code === "number") out.set(loc.id, code)
+    })
     return out
 }
 
@@ -91,7 +100,7 @@ export async function GET() {
     ])
 
     const byName = new Map(live.map((r) => [r.routeName.toLowerCase(), r]))
-    const flowByLoc = hasTomTomKey() ? await sampleAllFlows(geometries) : new Map<string, FlowInfo | null>()
+    const flowByLoc = await sampleAllFlows(geometries)
 
     const locations = WEATHER_LOCATIONS.map((loc) => {
         const liveStatus = byName.get(loc.name.toLowerCase())
@@ -121,12 +130,13 @@ export async function GET() {
                       completeness: liveStatus.completeness,
                   }
                 : null,
-            // Sampling Traffic Flow per-rute (semua rute selama produk aktif).
+            // Sampling traffic flow per-rute (live TomTom atau fallback estimasi).
             trafficFlow: flowByLoc.get(loc.id) ?? null,
         }
     })
 
     const liveCount = locations.filter((l) => l.live && l.live.level !== "unknown").length
+    const estimatedCount = locations.filter((l) => l.trafficFlow?.source === "estimated").length
     const badCount = locations.filter(
         (l) =>
             l.live?.level === "warning" ||
@@ -143,8 +153,9 @@ export async function GET() {
             totalRoutes: locations.length,
             routedGeometries: locations.filter((l) => l.geometry).length,
             liveCount,
-            badCount,
             trafficCount,
+            estimatedCount,
+            badCount,
         },
         locations,
     })

@@ -11,6 +11,21 @@
  */
 import { TOMTOM_BASE_URL } from "./config"
 
+/**
+ * Error TomTom dengan status HTTP — dipakai route handler untuk membedakan
+ * kuota habis / key ditolak (401/403/429) dari gangguan jaringan biasa.
+ * Kalau key ditolak, pemanggil bisa membuka circuit breaker dan beralih ke
+ * provider fallback tanpa membakar kuota dengan retry.
+ */
+export class TomTomApiError extends Error {
+    status: number
+    constructor(message: string, status: number) {
+        super(message)
+        this.name = "TomTomApiError"
+        this.status = status
+    }
+}
+
 export interface TomTomFlowSegment {
     /** Kecepatan aktual segmen (km/h). */
     currentSpeed: number
@@ -57,7 +72,7 @@ export async function fetchFlowSegmentData(params: {
 
     if (!res.ok) {
         const text = await res.text().catch(() => "")
-        throw new Error(`TomTom flowSegmentData gagal: ${res.status} ${text.slice(0, 200)}`)
+        throw new TomTomApiError(`TomTom flowSegmentData gagal: ${res.status} ${text.slice(0, 200)}`, res.status)
     }
 
     const body = (await res.json().catch(() => null)) as FlowSegmentDataEnvelope | null

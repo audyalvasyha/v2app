@@ -45,7 +45,18 @@ export async function GET(_req: Request, ctx: TileParams) {
         const upstream = await fetch(url, { signal: AbortSignal.timeout(10_000) })
         const ctype = upstream.headers.get("content-type") ?? ""
         if (!upstream.ok || !ctype.includes("image")) {
-            return new NextResponse("Upstream error", { status: 502 })
+            // PENTING: 401/403/429 (key ditolak / kuota habis) TIDAK boleh
+            // dikonversi jadi 502 dengan cache panjang — cukup 503 dengan
+            // no-store supaya browser tidak menyimpan respons ini dan layer
+            // overlay otomatis jadi kosong (transparan), bukan gambar error.
+            const retryable = upstream.status === 401 || upstream.status === 403 || upstream.status === 429
+            return new NextResponse(JSON.stringify({ error: "traffic_tile_unavailable", status: upstream.status }), {
+                status: retryable ? 503 : 502,
+                headers: {
+                    "Content-Type": "application/json",
+                    "Cache-Control": "no-store",
+                },
+            })
         }
         const body = await upstream.arrayBuffer()
         return new NextResponse(body, {

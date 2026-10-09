@@ -36,6 +36,10 @@ export interface TrafficMapProps {
     showLines?: boolean
     /** Overlay traffic jalan ala Google Maps (tile TomTom via proxy). Default on. */
     showTraffic?: boolean
+    /** Callback dipanggil bila overlay traffic tile gagal dimuat (quota/403). */
+    onTrafficTileError?: () => void
+    /** Callback dipanggil bila overlay traffic tile sudah kembali normal. */
+    onTrafficTileRestore?: () => void
 }
 
 const LEVEL_COLOR: Record<string, string> = {
@@ -51,7 +55,15 @@ const NEUTRAL_COLOR = "#3b82f6"
 const CENTER: [number, number] = [1.9, 100.72]
 const ZOOM = 9
 
-export function TrafficMap({ locations, selectedId, onSelect, showLines = false, showTraffic = true }: TrafficMapProps) {
+export function TrafficMap({
+    locations,
+    selectedId,
+    onSelect,
+    showLines = false,
+    showTraffic = true,
+    onTrafficTileError,
+    onTrafficTileRestore,
+}: TrafficMapProps) {
     const containerRef = useRef<HTMLDivElement | null>(null)
     const mapRef = useRef<LeafletMap | null>(null)
     const groupRef = useRef<LayerGroup | null>(null)
@@ -59,8 +71,8 @@ export function TrafficMap({ locations, selectedId, onSelect, showLines = false,
     const fitOnceRef = useRef(false)
 
     // Simpan props terbaru agar callback map (tanpa re-init) selalu baca data baru.
-    const propsRef = useRef({ locations, selectedId, onSelect, showLines, showTraffic })
-    propsRef.current = { locations, selectedId, onSelect, showLines, showTraffic }
+    const propsRef = useRef({ locations, selectedId, onSelect, showLines, showTraffic, onTrafficTileError, onTrafficTileRestore })
+    propsRef.current = { locations, selectedId, onSelect, showLines, showTraffic, onTrafficTileError, onTrafficTileRestore }
 
     // Bootstrap map sekali
     useEffect(() => {
@@ -76,20 +88,52 @@ export function TrafficMap({ locations, selectedId, onSelect, showLines = false,
                 zoom: ZOOM,
                 scrollWheelZoom: false, // scroll halaman nggak ikut zoom peta
             })
-            // Basemap ala Google Maps (Carto Voyager — gratis, tanpa key)
-            L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-                maxZoom: 19,
-                subdomains: "abcd",
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-            }).addTo(map)
+            // Basemap — Carto raster kini WAJIB API key (sejak 25 Sep 2026 tile
+            // tanpa key menampilkan watermark "API KEY REQUIRED"), jadi:
+            //  - Kalau NEXT_PUBLIC_CARTO_BASEMAPS_KEY diset → Carto Voyager.
+            //  - Kalau tidak → OpenStreetMap standar (keyless, tetap gratis).
+            // Carto key gratis: https://carto.com/basemaps/apikey/
+            // PENTING: parameter resminya `key` (bukan `apikey`) — dengan
+            // `apikey` Carto tetap menyajikan tile watermark (terverifikasi:
+            // tile 2 KB watermark vs 9,7 KB tile asli).
+            const cartoKey = process.env.NEXT_PUBLIC_CARTO_BASEMAPS_KEY
+            if (cartoKey) {
+                L.tileLayer(
+                    `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(cartoKey)}`,
+                    {
+                        maxZoom: 19,
+                        subdomains: "abcd",
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+                    },
+                ).addTo(map)
+            } else {
+                L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                    maxZoom: 19,
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                }).addTo(map)
+            }
 
             // Overlay traffic jalan live (TomTom flow tiles via proxy server) —
             // warna jalan = kecepatan live, persis lapisan traffic Google Maps.
+            let tileErrors = 0
+            let tileOk = false
             const flow = L.tileLayer("/api/traffic/tiles/flow/relative0/{z}/{x}/{y}.png", {
                 maxZoom: 19,
                 opacity: 0.9,
                 attribution: "Traffic &copy; TomTom",
-            }).addTo(map)
+            })
+            flow.on("tileerror", () => {
+                tileErrors++
+                if (tileErrors >= 3 && !tileOk) propsRef.current.onTrafficTileError?.()
+            })
+            flow.on("tileload", () => {
+                tileErrors = 0
+                if (!tileOk) {
+                    tileOk = true
+                    propsRef.current.onTrafficTileRestore?.()
+                }
+            })
+            flow.addTo(map)
             flowLayerRef.current = flow
 
             map.on("click", () => propsRef.current.onSelect(null))
