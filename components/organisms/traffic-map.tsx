@@ -94,11 +94,22 @@ export function TrafficMap({
     useEffect(() => {
         const onChange = () => {
             setIsFullscreen(Boolean(document.fullscreenElement))
-            // Tunggu transisi ukuran selesai lalu beri tahu Leaflet.
-            setTimeout(() => mapRef.current?.invalidateSize(), 150)
+            // Leaflet wajib tahu ukuran baru container. Beberapa browser menunda
+            // relayout elemen top-layer fullscreen, jadi invalidateSize dipanggil
+            // berkali-kali (rAF + 150ms + 400ms) supaya tile selalu mengisi layar
+            // penuh — kalau hanya sekali, peta bisa tampak blank/hitam.
+            const resize = () => mapRef.current?.invalidateSize({ animate: false })
+            requestAnimationFrame(resize)
+            setTimeout(resize, 150)
+            setTimeout(resize, 400)
         }
         document.addEventListener("fullscreenchange", onChange)
-        return () => document.removeEventListener("fullscreenchange", onChange)
+        // Jaga-jaga kalau ukuran viewport berubah saat fullscreen (rotate, devtools).
+        window.addEventListener("resize", onChange)
+        return () => {
+            document.removeEventListener("fullscreenchange", onChange)
+            window.removeEventListener("resize", onChange)
+        }
     }, [])
 
     // Simpan props terbaru agar callback map (tanpa re-init) selalu baca data baru.
@@ -128,9 +139,27 @@ export function TrafficMap({
             // `apikey` Carto tetap menyajikan tile watermark (terverifikasi:
             // tile 2 KB watermark vs 9,7 KB tile asli).
             const cartoKey = process.env.NEXT_PUBLIC_CARTO_BASEMAPS_KEY
+            // Cek sebelum pakai: Carto mengembalikan tile WATERMARK berukuran ~2 KB
+            // dengan HTTP 200 kalau key tidak valid/kuota habis (bukan error 4xx!),
+            // jadi tileerror tidak pernah terpanggil dan peta tampak hitam/abu —
+            // persis kasus screenshot tablet. Satu tile di-fetch langsung: kalau
+            // responsnya kecil (watermark) atau gagal → pakai OSM standar (keyless).
+            let useCarto = false
             if (cartoKey) {
+                try {
+                    const probe = await fetch(
+                        "https://a.basemaps.cartocdn.com/rastertiles/voyager/9/398/255.png?key=" + encodeURIComponent(cartoKey),
+                        { signal: AbortSignal.timeout(5_000) },
+                    )
+                    const size = (await probe.blob()).size
+                    useCarto = probe.ok && size > 3000
+                } catch {
+                    useCarto = false
+                }
+            }
+            if (useCarto) {
                 L.tileLayer(
-                    `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(cartoKey)}`,
+                    `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(cartoKey!)}`,
                     {
                         maxZoom: 19,
                         subdomains: "abcd",
@@ -305,7 +334,12 @@ export function TrafficMap({
             // control bar ada di dalam, dan Leaflet invalidateSize menyesuaikan).
             className={
                 isFullscreen
-                    ? "relative isolate z-0 h-screen w-screen overflow-hidden border-0 bg-muted/30"
+                    ? // fixed inset-0 lebih andal daripada h-screen/w-screen di
+                      // top-layer fullscreen (100vw bisa melebihi viewport karena
+                      // scrollbar). Background SOLID (bukan transparan) supaya
+                      // backdrop hitam bawaan fullscreen tidak pernah terlihat
+                      // sebelum tile Leaflet selesai di-render ulang.
+                      "fixed inset-0 z-[10000] h-full w-full overflow-hidden rounded-none border-0 bg-background"
                     : "relative isolate z-0 h-[420px] w-full overflow-hidden rounded-xl border bg-muted/30 lg:h-[560px]"
             }
             data-testid="traffic-map"

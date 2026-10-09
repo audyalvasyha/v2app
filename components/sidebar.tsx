@@ -146,22 +146,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           onClick={() => onViewChange('ban')}
         />
 
-        <SidebarButton
-          icon={CloudSun}
-          label="Perkiraan Cuaca"
-          active={activeView === 'weather'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('weather')}
-        />
-
-        <SidebarButton
-          icon={MapPin}
-          label="Traffic"
-          active={activeView === 'traffic'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('traffic')}
-        />
-
         <SidebarSectionLabel label="Ekspedisi" collapsed={collapsed} />
 
         <SidebarButton
@@ -178,6 +162,22 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           active={activeView === 'pengiriman'}
           collapsed={collapsed}
           onClick={() => onViewChange('pengiriman')}
+        />
+
+        <SidebarButton
+          icon={CloudSun}
+          label="Perkiraan Cuaca"
+          active={activeView === 'weather'}
+          collapsed={collapsed}
+          onClick={() => onViewChange('weather')}
+        />
+
+        <SidebarButton
+          icon={MapPin}
+          label="Traffic"
+          active={activeView === 'traffic'}
+          collapsed={collapsed}
+          onClick={() => onViewChange('traffic')}
         />
 
         <SidebarButton
