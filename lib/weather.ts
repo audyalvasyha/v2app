@@ -29,16 +29,16 @@ export interface WeatherLocationDef {
 export const WEATHER_LOCATIONS: WeatherLocationDef[] = [
     // Dua kota utama operasional
     { id: "bagan-batu", name: "Bagan Batu", note: "Pool utama & workshop · [koordinat dari Google Maps: https://www.google.com/maps/place/PT+PDR+Wings+Bagan+Batu/@1.6696448,100.4473387,18.37z/data=!4m6!3m5!1s0x302cd100474030f5:0xa4406c224b2d0974!8m2!3d1.6689167!4d100.447755!16s%2Fg%2F11yxjd4sgn?entry=ttu&g_ep=EgoyMDI2MTAwNi4wIKXMDSoASAFQAw%3D%3D]", latitude: 1.6689167, longitude: 100.447755 },
-    { id: "bagansiapiapi", name: "Bagansiapiapi", note: "Ibu kota kabupaten · pesisir", latitude: 2.107, longitude: 100.979 }, // [perkiraan]
+    { id: "bagansiapiapi", name: "Bagansiapiapi", note: "Ibu kota kabupaten · pesisir", latitude: 2.080465, longitude: 100.855204 }, 
     // 18 kecamatan (urutan mengikuti daftar operasional)
     { id: "kec-bagan-sinembah", name: "Kec. Bagan Sinembah", note: "Rokan Hilir", latitude: 1.67841, longitude: 100.46275 },
-    { id: "kec-bagan-sinembah-raya", name: "Kec. Bagan Sinembah Raya", note: "Rokan Hilir", latitude: 1.837, longitude: 100.501 }, // geocode OSM
+    { id: "kec-bagan-sinembah-raya", name: "Kec. Bagan Sinembah Raya", note: "Rokan Hilir", latitude: 1.837, longitude: 100.501 }, 
     { id: "kec-balaian-jaya", name: "Kec. Balai Jaya", note: "Rokan Hilir", latitude: 1.69047, longitude: 100.54387 },
     { id: "kec-bangko", name: "Kec. Bangko", note: "Rokan Hilir", latitude: 1.77813, longitude: 100.95218 },
-    { id: "kec-bangko-pusako", name: "Kec. Bangko Pusako", note: "Rokan Hilir", latitude: 1.76, longitude: 101.03 }, // [perkiraan]
-    { id: "kec-batu-hampar", name: "Kec. Batu Hampar", note: "Rokan Hilir", latitude: 1.63, longitude: 100.36 }, // [perkiraan]
-    { id: "kec-kubu", name: "Kec. Kubu", note: "Rokan Hilir", latitude: 2.08571, longitude: 100.65309 },
-    { id: "kec-kubu-babu", name: "Kec. Kubu Babussalam", note: "Rokan Hilir", latitude: 2.135, longitude: 100.735 }, // [perkiraan]
+    { id: "kec-bangko-pusako", name: "Kec. Bangko Pusako", note: "Rokan Hilir", latitude: 1.824169, longitude: 100.776009 }, 
+    { id: "kec-batu-hampar", name: "Kec. Batu Hampar", note: "Rokan Hilir", latitude: 1.488442, longitude: 101.177977 }, 
+    { id: "kec-kubu", name: "Kec. Kubu", note: "Rokan Hilir", latitude: 2.120181, longitude: 100.476692 },
+    { id: "kec-kubu-babu", name: "Kec. Kubu Babussalam", note: "Rokan Hilir", latitude: 2.04294, longitude: 100.62876 }, 
     { id: "kec-pasir-limau-kapas", name: "Kec. Pasir Limau Kapas", note: "Pesisir utara · Rokan Hilir", latitude: 2.47177, longitude: 100.31652 },
     { id: "kec-pekaitan", name: "Kec. Pekaitan", note: "Rokan Hilir", latitude: 2.01014, longitude: 100.82299 },
     { id: "kec-pujud", name: "Kec. Pujud", note: "Rokan Hilir", latitude: 1.43393, longitude: 100.64714 },
@@ -46,7 +46,7 @@ export const WEATHER_LOCATIONS: WeatherLocationDef[] = [
     { id: "kec-rimba-melintang", name: "Kec. Rimba Melintang", note: "Rokan Hilir", latitude: 1.74277, longitude: 101.01177 },
     { id: "kec-simpang-kanan", name: "Kec. Simpang Kanan", note: "Rokan Hilir", latitude: 1.85477, longitude: 100.29938 },
     { id: "kec-sinaboi", name: "Kec. Sinaboi", note: "Pesisir utara · Rokan Hilir", latitude: 2.28, longitude: 101.03 },
-    { id: "kec-tanah-putih", name: "Kec. Tanah Putih", note: "Rokan Hilir", latitude: 1.4803, longitude: 100.8572 },
+    { id: "kec-tanah-putih", name: "Kec. Tanah Putih", note: "Rokan Hilir", latitude: 1.513955, longitude: 100.941972 },
     { id: "kec-tanah-putih-tanjung-melawan", name: "Kec. Tanah Putih Tanjung Melawan", note: "Rokan Hilir", latitude: 1.68585, longitude: 101.05418 },
     { id: "kec-tanjung-medan", name: "Kec. Tanjung Medan", note: "Rokan Hilir", latitude: 1.43602, longitude: 100.56378 },
 ]

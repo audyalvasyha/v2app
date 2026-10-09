@@ -128,7 +128,7 @@ export function TrafficMap({
             const map = L.map(containerRef.current, {
                 center: CENTER,
                 zoom: ZOOM,
-                scrollWheelZoom: false, // scroll halaman nggak ikut zoom peta
+                scrollWheelZoom: true, // scroll halaman nggak ikut zoom peta
             })
             // Basemap — Carto raster kini WAJIB API key (sejak 25 Sep 2026 tile
             // tanpa key menampilkan watermark "API KEY REQUIRED"), jadi:
