@@ -8,7 +8,8 @@ const SPECS: { label: string; value: string }[] = [
     { label: "Bahasa", value: "TypeScript" },
     { label: "Antarmuka", value: "Tailwind CSS + shadcn/ui" },
     { label: "Basis Data", value: "Supabase · PostgreSQL" },
-    { label: "Visualisasi", value: "Recharts" },
+    { label: "Integrasi", value: "TomTom · OSRM · Open-Meteo · Gemini" },
+    { label: "Visualisasi", value: "Recharts · Leaflet" },
 ]
 
 const CAPABILITIES: { index: string; title: string; desc: string }[] = [
@@ -19,13 +20,13 @@ const CAPABILITIES: { index: string; title: string; desc: string }[] = [
     },
     {
         index: "02",
-        title: "Riwayat Perbaikan",
-        desc: "Seluruh pengeluaran pemeliharaan tersimpan per unit, lalu dirangkum menjadi tren biaya harian untuk tiga bulan terakhir.",
+        title: "Riwayat Perbaikan & Ban",
+        desc: "Seluruh pengeluaran pemeliharaan tersimpan per unit, dirangkum jadi tren biaya harian — termasuk analisa ban dengan peta posisi roda interaktif.",
     },
     {
         index: "03",
-        title: "Jadwal Servis",
-        desc: "Bandingkan tanggal dan odometer servis berikutnya untuk menandai unit yang aman, mendekati, atau sudah terlambat servis.",
+        title: "Jadwal Servis & Reminder Email",
+        desc: "Status servis dari tanggal dan odometer; unit terlewat atau mendekati jadwal dikirim otomatis lewat email harian.",
     },
     {
         index: "04",
@@ -39,6 +40,21 @@ const CAPABILITIES: { index: string; title: string; desc: string }[] = [
     },
     {
         index: "06",
+        title: "Monitoring Lalu Lintas",
+        desc: "Peta 19 rute dari pool Bagan Batu: garis jalan asli OSRM, kondisi live TomTom dengan fallback estimator, ETA yang memperhitungkan kepadatan, dan pola historis per jam.",
+    },
+    {
+        index: "07",
+        title: "Perkiraan Cuaca",
+        desc: "Ramalan 7 hari untuk 20 titik Rokan Hilir dengan penilaian risiko perjalanan dan rekomendasi jam berangkat ideal — menggabungkan cuaca dan kebiasaan macet.",
+    },
+    {
+        index: "08",
+        title: "Tanya Data (AI)",
+        desc: "Pertanyaan bahasa sehari-hari diubah jadi SQL dan dijawab dari angka database asli — AI tidak pernah melihat data sebelum query dieksekusi, dan mengingat preferensi antar sesi.",
+    },
+    {
+        index: "09",
         title: "Import Data Harian",
         desc: "Halaman terproteksi login untuk mengunggah CSV dari sistem: baris yang sama ditimpa, yang baru ditambah — data hari sebelumnya tetap aman.",
     },
@@ -73,9 +89,11 @@ export function AboutView() {
                         <span className="text-primary">.</span>
                     </h1>
                     <p className="mt-8 max-w-xl text-pretty text-[15px] leading-relaxed text-muted-foreground">
-                        Satu dasbor operasional untuk mengelola armada kendaraan mulai dari inventaris
-                        unit, riwayat perbaikan, hingga pengingat servis yang dihitung dari tanggal maupun
-                        odometer. Dibangun agar tim lapangan dan tim administrasi membaca angka yang sama.
+                        Satu dasbor operasional untuk mengelola armada kendaraan: inventaris unit,
+                        riwayat perbaikan, pengingat servis, sisa kiriman, keadaan lalu lintas rute
+                        pengiriman, perkiraan cuaca, sampai asisten AI yang menjawab pertanyaan data
+                        langsung dari database. Dibangun agar tim lapangan dan tim administrasi
+                        membaca angka yang sama.
                     </p>
                 </div>
 
