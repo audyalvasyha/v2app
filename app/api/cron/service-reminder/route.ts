@@ -155,6 +155,7 @@ export async function GET(request: Request) {
                 const detail = scheduleDetailLabel(r.status)
                 return `<tr>
   <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600">${esc(r.eq.license_plate) || "-"}</td>
+  <td style="padding:8px 12px;border-bottom:1px solid #eee;color:#666">${esc(r.eq.equipment_id) || "-"}</td>
   <td style="padding:8px 12px;border-bottom:1px solid #eee"><span style="background:${bg};color:${color};padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600">${esc(r.status.label)}</span></td>
   <td style="padding:8px 12px;border-bottom:1px solid #eee">${esc(detail)}</td>
   <td style="padding:8px 12px;border-bottom:1px solid #eee;color:#666">${Number(r.eq.last_odometer ?? 0).toLocaleString("id-ID")} km</td>
@@ -178,13 +179,14 @@ export async function GET(request: Request) {
                 to: [to],
                 ...(cc.length > 0 ? { cc } : {}),
                 subject,
-                html: `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:640px">
+                html: `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px">
   <h2 style="margin:0 0 4px">Reminder Servis Armada</h2>
   <p style="margin:0 0 16px;color:#666">${dateLabel} · ${rows.length} unit perlu perhatian</p>
   <table style="border-collapse:collapse;width:100%;font-size:14px">
     <thead>
       <tr style="text-align:left;color:#666">
         <th style="padding:8px 12px;border-bottom:2px solid #ddd">Unit</th>
+        <th style="padding:8px 12px;border-bottom:2px solid #ddd">Equipment ID</th>
         <th style="padding:8px 12px;border-bottom:2px solid #ddd">Status</th>
         <th style="padding:8px 12px;border-bottom:2px solid #ddd">Jadwal</th>
         <th style="padding:8px 12px;border-bottom:2px solid #ddd">Odometer</th>
