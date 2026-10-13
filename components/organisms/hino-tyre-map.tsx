@@ -74,7 +74,7 @@ function plateGroupLabel(key: PlateGroupKey): string {
 }
 
 /** Enam roda fisik pada konfigurasi ban dobel. */
-const SIX_WHEEL_SLOTS = ["FL", "FR", "RL-O", "RL-I", "RR-I", "RR-O"] as const;
+const SIX_WHEEL_SLOTS = ["FL", "FR", "RLO", "RLI", "RRI", "RRO"] as const;
 /** Empat roda fisik pada konfigurasi ban tunggal (tanpa ban dalam). */
 const FOUR_WHEEL_SLOTS = ["FL", "FR", "RL", "RR"] as const;
 
@@ -168,10 +168,10 @@ function tyrePhotoUrl(_slot: string, side: "sidewall" | "tread", override?: Tyre
 const CONTOH_DATA_BAN: Record<string, HinoTyreInfo> = {
   FL: { code: "FL", name: "Front Left", pressureBar: "5.6 bar", thicknessMm: 6.4, brand: "GT Radial" },
   FR: { code: "FR", name: "Front Right", pressureBar: "5.8 bar", thicknessMm: 6.8, brand: "GT Radial" },
-  "RL-I": { code: "RL-I", name: "Rear Left In", pressureBar: "6.2 bar", thicknessMm: 7.2, brand: "Dunlop" },
-  "RL-O": { code: "RL-O", name: "Rear Left Out", pressureBar: "6.2 bar", thicknessMm: 7.2, brand: "Dunlop" },
-  "RR-O": { code: "RR-O", name: "Rear Right Out", pressureBar: "6.0 bar", thicknessMm: 7.5, brand: "Dunlop" },
-  "RR-I": { code: "RR-I", name: "Rear Right In", pressureBar: "6.0 bar", thicknessMm: 7.5, brand: "Dunlop" },
+  "RLI": { code: "RLI", name: "Rear Left In", pressureBar: "6.2 bar", thicknessMm: 7.2, brand: "Dunlop" },
+  "RLO": { code: "RLO", name: "Rear Left Out", pressureBar: "6.2 bar", thicknessMm: 7.2, brand: "Dunlop" },
+  "RRO": { code: "RRO", name: "Rear Right Out", pressureBar: "6.0 bar", thicknessMm: 7.5, brand: "Dunlop" },
+  "RRI": { code: "RRI", name: "Rear Right In", pressureBar: "6.0 bar", thicknessMm: 7.5, brand: "Dunlop" },
   RL: { code: "RL", name: "Rear Left", pressureBar: "6.2 bar", thicknessMm: 7.2, brand: "Dunlop" },
   RR: { code: "RR", name: "Rear Right", pressureBar: "6.0 bar", thicknessMm: 7.5, brand: "Dunlop" },
   SP: { code: "SP", name: "Ban Serap", pressureBar: "6.0 bar", thicknessMm: 8.1, brand: "GT Radial" },
@@ -183,7 +183,7 @@ const CONTOH_DATA_BAN: Record<string, HinoTyreInfo> = {
  * kiri (mengikuti posisi axle di gambar: depan di kanan, belakang di kiri).
  */
 const SIX_LAYOUT = {
-  left: ["RL-O", "RL-I", "RR-O", "RR-I"],
+  left: ["RLO", "RLI", "RRO", "RRI"],
   right: ["FL", "FR"],
 } as const;
 const FOUR_LAYOUT = {
@@ -201,10 +201,10 @@ const FOUR_LAYOUT = {
 const HOTSPOTS: Record<string, { x: number; y: number }> = {
   FL: { x: 78, y: 61 },
   FR: { x: 78, y: 85 },
-  "RL-O": { x: 27, y: 60 },
-  "RL-I": { x: 27, y: 60 },
-  "RR-I": { x: 27, y: 85 },
-  "RR-O": { x: 27, y: 85 },
+  "RLO": { x: 27, y: 60 },
+  "RLI": { x: 27, y: 60 },
+  "RRI": { x: 27, y: 85 },
+  "RRO": { x: 27, y: 85 },
   RL: { x: 26, y: 62 },
   RR: { x: 27, y: 85 },
   // Ban serap: tergantung di rangka tengah-bawah (antara dua axle).
@@ -689,9 +689,9 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
   /** Riwayat posisi yang modal fotonya terbuka — entri terbaru dulu. */
   const activeHistory = useMemo(
     () =>
-      (photoSlot != null
-        ? tireHistory?.[normKey(effectivePlate)]?.[photoSlot] ?? []
-        : []),
+    (photoSlot != null
+      ? tireHistory?.[normKey(effectivePlate)]?.[photoSlot] ?? []
+      : []),
     [tireHistory, effectivePlate, photoSlot],
   );
 

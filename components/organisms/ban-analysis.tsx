@@ -60,7 +60,7 @@ export interface BanAnalysisProps {
 }
 
 /** Kode posisi ban yang dikenali peta. */
-const VALID_SLOTS = new Set(["FL", "FR", "RL", "RR", "SP", "RL-I", "RL-O", "RR-I", "RR-O"]);
+const VALID_SLOTS = new Set(["FL", "FR", "RL", "RR", "SP", "RLI", "RLO", "RRI", "RRO"]);
 
 /** "FR - (Depan Kanan)" → "FR"; null bila kode tidak dikenali peta. */
 function normalizePosition(raw: unknown): string | null {
