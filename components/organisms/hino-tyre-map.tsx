@@ -1,31 +1,48 @@
 "use client";
 
 import React, { memo, useState, useMemo, useEffect, useRef } from "react";
-import { Camera, Gauge, Ruler, Tag, CircleDot } from "lucide-react";
+import Image from "next/image";
+import { Camera, Gauge, Ruler, Tag, CircleDot, History } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TIRE_HEALTH_TONE, tireHealthLevel, type TireHealthLevel } from "@/lib/tire-health";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 /**
  * Peta posisi ban untuk menu Analisa Ban.
  *
- * - Dropdown nomor polisi diisi dari tabel `equipment` (pilihan kedua tipe
- *   6R/6D/4R/4D disimpan sebagai entri sintetis bila belum dipilih).
+ * - Dropdown nomor polisi diisi dari tabel `equipment`, dikelompokkan per
+ *   `type_vehicle`: grup 6R/6D/4R/4D berlabel jumlah unit, tipe di luar daftar
+ *   itu masuk grup "Tipe lain" di paling bawah (panel default 6 roda).
  * - Jumlah panel hotspot mengikuti `type_vehicle` di tabel itu:
  *   6R/6D → 6 panel roda (ban belakang dobel: dalam + luar),
  *   4R/4D → 4 panel roda (ban belakang tunggal).
  * - Ban serap (SP) selalu tampil sebagai 1 panel di bawah gambar, di luar
  *   hitungan panel roda — tekanan/ketebalannya masih data contoh.
  * - Icon kamera di kanan judul tiap panel membuka modal fullscreen berisi
- *   foto aktual ban: sidewall & tread. Sumber fotonya berurutan: data
- *   pemeriksaan `tire_check_details` (prop `tireChecks`), lalu props
- *   `tyrePhotos`, lalu konvensi file `public/ban/{KODE}-sidewall.jpg` &
- *   `{KODE}-tread.jpg`. Bila foto gagal dimuat, modal menampilkan placeholder
- *   beserta path-nya — bukan gambar rusak.
+ *   foto aktual ban: sidewall & tread. Sumber fotonya: data pemeriksaan
+ *   `tire_check_details` (prop `tireChecks`) atau override prop `tyrePhotos`
+ *   (URL http(s) atau path AppSheet — dirangkai jadi proxy gettablefileurl).
+ *   Bila tidak ada foto / gagal dimuat, modal menampilkan placeholder "Foto
+ *   belum tersedia" — bukan gambar rusak, dan tidak ada path internal yang
+ *   dikira URL asli oleh pembacanya.
  * - Angka pada panel memakai data pemeriksaan asli (tekanan psi, ketebalan
  *   mm, kondisi) bila tersedia untuk posisi itu; tanpa data pemeriksaan,
  *   panel kembali menampilkan data contoh (tekanan bar, ketebalan, merk).
+ * - Warna status ban: titik roda & badge panel mengikuti level kesehatan dari
+ *   `lib/tire-health.ts` (merah = perlu tindakan, kuning = waspada, hijau =
+ *   aman) — ditentukan dari kondisi verbal, ketebalan mm, dan tekanan psi.
+ * - Modal foto menampilkan riwayat pemeriksaan posisi itu (psi/mm antar
+ *   tanggal + Δ) bila prop `tireHistory` disediakan pemanggil.
  */
 
 const HINO_IMAGE = {
@@ -36,6 +53,25 @@ const HINO_IMAGE = {
 
 /** Empat konfigurasi roda yang dikenal tabel equipment. */
 export type VehicleType = "6R" | "6D" | "4R" | "4D";
+
+/**
+ * Grup dropdown: 4 tipe kendaraan yang dikenal (urutan tetap) + catch-all
+ * "Tipe lain" paling bawah, supaya dropdown unit yang panjang tetap gampang
+ * discan per kategori.
+ */
+const GROUP_ORDER = ["6R", "6D", "4R", "4D", "Tipe lain"] as const;
+type PlateGroupKey = (typeof GROUP_ORDER)[number];
+
+function plateGroupKey(type: unknown): PlateGroupKey {
+  const t = String(type ?? "").trim().toUpperCase();
+  return ((GROUP_ORDER as readonly string[]).includes(t) ? t : "Tipe lain") as PlateGroupKey;
+}
+
+/** Label kepala grup: kode tipe + konfigurasi rodanya. */
+function plateGroupLabel(key: PlateGroupKey): string {
+  if (key === "Tipe lain") return "Tipe lain";
+  return `${key} — ${key.startsWith("6") ? "6 roda, belakang dobel" : "4 roda"}`;
+}
 
 /** Enam roda fisik pada konfigurasi ban dobel. */
 const SIX_WHEEL_SLOTS = ["FL", "FR", "RL-O", "RL-I", "RR-I", "RR-O"] as const;
@@ -74,6 +110,18 @@ export interface TireCheckInfo {
   photos: TyrePhotos;
 }
 
+/**
+ * Satu catatan di riwayat pemeriksaan satu posisi ban — termasuk Δ psi/mm
+ * dibanding pengukuran tepat sebelumnya (null bila salah satu tak tercatat).
+ */
+export interface TireCheckHistoryEntry {
+  /** Timestamp baris dari database (created_at). */
+  createdAt: string;
+  info: TireCheckInfo;
+  deltaPsi: number | null;
+  deltaMm: number | null;
+}
+
 /** numeric dari PostgREST bisa berupa number atau string — rapikan ke number|null. */
 export function toFiniteNumber(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -105,13 +153,15 @@ function normKey(s: string): string {
 }
 
 /**
- * URL foto satu sisi ban: override dari props (database) lebih dulu, lalu
- * konvensi file di `public/ban/` — cukup upload dengan nama itu, tanpa ubah
- * kode.
+ * URL foto satu sisi ban: hanya dari data asli (database / AppSheet).
+ * Konvensi `public/ban/{KODE}--{side}.jpg` dihapus — file itu tidak pernah
+ * disediakan, jadi fallback itu memicu permintaan yang pasti 404
+ * (= placeholder + path internal yang menyesatkan). Tidak ada foto di
+ * database berarti memang sudah jujur saja tanpa foto (placeholder).
  */
-function tyrePhotoUrl(slot: string, side: "sidewall" | "tread", override?: TyrePhotos): string {
+function tyrePhotoUrl(_slot: string, side: "sidewall" | "tread", override?: TyrePhotos): string | null {
   const custom = override?.[side]?.trim();
-  return custom ? custom : `/ban/${slot}-${side}.jpg`;
+  return custom ? custom : null;
 }
 
 /** Data ban contoh per roda — dipakai sampai kolom ban tersedia di database. */
@@ -195,6 +245,21 @@ function fmtThickness(v: number | null): string {
   return v == null ? "—" : `${v.toFixed(1)} mm`;
 }
 
+/** Δ.Format untuk blok riwayat: nilai bertanda + satuan, dash bila kosong. */
+function fmtDelta(v: number | null, unit: string): string {
+  if (v == null) return "—";
+  const number = Number.isInteger(v) ? String(v) : v.toFixed(1);
+  return `${v > 0 ? "+" : ""}${number} ${unit}`;
+}
+
+/** Warna teks Δ: turun (merah) biasanya yang lain untuk ban. */
+function deltaClass(v: number | null): string {
+  if (v == null) return "text-muted-foreground";
+  return v < 0
+    ? "text-red-500 dark:text-red-400"
+    : "text-emerald-500 dark:text-emerald-400";
+}
+
 interface DetailBoxProps {
   info: HinoTyreInfo;
   active: boolean;
@@ -203,11 +268,13 @@ interface DetailBoxProps {
   onOpenPhotos: () => void;
   /** Data pemeriksaan asli posisi ini — bila ada, panel menampilkannya. */
   check?: TireCheckInfo;
+  /** Level kesehatan posisi ini dari lib/tire-health — mewarnai border. */
+  health?: TireHealthLevel;
   className?: string;
   style?: React.CSSProperties;
 }
 
-function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, className, style }: DetailBoxProps) {
+function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, health, className, style }: DetailBoxProps) {
   return (
     <div
       role="button"
@@ -226,7 +293,13 @@ function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, className,
         "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         active
           ? "border-primary/70 shadow-md ring-2 ring-primary/40"
-          : "border-border hover:border-primary/50 hover:shadow-md",
+          : health === "action"
+            ? "border-red-500/60 hover:border-red-500 hover:shadow-md"
+            : health === "warning"
+              ? "border-amber-500/50 hover:border-amber-500 hover:shadow-md"
+              : health === "ok"
+                ? "border-emerald-500/40 hover:border-emerald-500 hover:shadow-md"
+                : "border-border hover:border-primary/50 hover:shadow-md",
         className,
       )}
     >
@@ -309,9 +382,20 @@ function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, className,
   );
 }
 
-/** Foto satu sisi ban; bila gagal dimuat tampilkan placeholder + path-nya. */
+/**
+ * Foto satu sisi ban.
+ *
+ * Sumber gambar AppSheet proxy (`gettablefileurl`) dikenal lambat — kadang
+ * butuh beberapa detik sebelum Google Drive mengembalikan filenya. Prop
+ * unoptimized memakai URL apa adanya tanpa pipeline optimizer, supaya
+ * refresh foto modal tidak ikut antre di serve. Loader spinner dikombinasikan
+ * dengan fallback placeholder bila proxy gagal.
+ */
 function TyrePhoto({ src, alt }: { src: string | null; alt: string }) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const isNextImage = !!src && /^https:\/\/www\.appsheet\.com\//i.test(src);
+
   if (!src || failed) {
     return (
       <div className="flex min-h-24 flex-1 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border/60 bg-muted/30 p-4 text-center">
@@ -323,13 +407,39 @@ function TyrePhoto({ src, alt }: { src: string | null; alt: string }) {
       </div>
     );
   }
-  return (
+
+  // next-image diberi remote appsheet hanya jika URL itu — atribut lain
+  // (Dataatu lama Storage) tidak lulus whitelist remotePatterns.
+  const image = isNextImage ? (
+    <Image
+      src={src}
+      alt={alt}
+      fill
+      sizes="(max-width: 640px) 90vw, 45vw"
+      unoptimized
+      className="rounded-lg object-contain"
+      onError={() => setFailed(true)}
+      onLoad={() => setLoaded(true)}
+    />
+  ) : (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={alt}
       className="min-h-0 flex-1 rounded-lg border border-border/60 object-contain"
       onError={() => setFailed(true)}
     />
+  );
+
+  return (
+    <div className="relative min-h-0 flex-1">
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center rounded-lg border border-border/60 bg-muted/30">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary" />
+        </div>
+      )}
+      {image}
+    </div>
   );
 }
 
@@ -340,9 +450,11 @@ interface WheelDotProps {
   active: boolean;
   onToggle: () => void;
   zIndexClass: string;
+  /** Level kesehatan dari lib/tire-health — mewarnai titik status ban. */
+  health?: TireHealthLevel;
 }
 
-function WheelDot({ info, x, y, active, onToggle, zIndexClass }: WheelDotProps) {
+function WheelDot({ info, x, y, active, onToggle, zIndexClass, health }: WheelDotProps) {
   return (
     <button
       type="button"
@@ -362,7 +474,13 @@ function WheelDot({ info, x, y, active, onToggle, zIndexClass }: WheelDotProps) 
           "block h-4 w-4 rounded-full border-2 shadow-sm transition-all duration-150",
           active
             ? "border-primary bg-primary ring-2 ring-primary/40"
-            : "border-primary/70 bg-background/90 group-hover:border-primary group-hover:bg-primary/20",
+            : health === "action"
+              ? "border-red-500 bg-red-500/25 group-hover:border-red-500 group-hover:bg-red-500/40"
+              : health === "warning"
+                ? "border-amber-500 bg-amber-500/20 group-hover:border-amber-500 group-hover:bg-amber-500/40"
+                : health === "ok"
+                  ? "border-emerald-500 bg-emerald-500/20 group-hover:border-emerald-500 group-hover:bg-emerald-500/40"
+                  : "border-primary/70 bg-background/90 group-hover:border-primary group-hover:bg-primary/20",
         )}
       />
       <span
@@ -383,12 +501,21 @@ export interface HinoTyreMapProps {
   equipments?: any[];
   /** Foto aktual per posisi ban (dari database nantinya) — override konvensi file. */
   tyrePhotos?: Partial<Record<string, TyrePhotos>>;
-  /** Data pemeriksaan ban harian: plat (ternormalisasi) → posisi → hasil cek. */
+  /** Data pemeriksaan ban harian: plat (ternormalisasi) → posisi → hasil cek terbaru. */
   tireChecks?: Record<string, Record<string, TireCheckInfo>>;
+  /** Riwayat semua pemeriksaan: plat (ternormalisasi) → posisi → entri terbaru dulu. */
+  tireHistory?: Record<string, Record<string, TireCheckHistoryEntry[]>>;
+  /**
+   * Nopol terpilih dari luar — panel "Ban perlu tindakan" menyendek unit ini.
+   * Bila ada (non-null), komponen jadi kontrol penuh pemanggil.
+   */
+  selectedPlate?: string | null;
+  /** Dipanggil saat nopol diganti (dropdown/pet tool dari luar) agar tetap selaras. */
+  onSelectPlate?: (plate: string) => void;
   className?: string;
 }
 
-function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: HinoTyreMapProps) {
+function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, selectedPlate, onSelectPlate, className }: HinoTyreMapProps) {
   const [activeSlot, setActiveSlot] = useState<string | null>(null);
   /** Posisi ban yang modalnya terbuka (foto aktual sidewall & tread). */
   const [photoSlot, setPhotoSlot] = useState<string | null>(null);
@@ -407,15 +534,33 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
   }, [equipments]);
 
   /**
-   * Dropdown hanya memuat nopol dari tabel equipment; unit pertama langsung
-   * terpilih supaya peta hidup tanpa klik tambahan.
+   * Nopol dikelompokkan per type_vehicle — plat unik (dedup), urutan dalam
+   * grup mengikuti tabel equipment, grup tanpa anggota tidak ditampilkan.
+   */
+  const plateGroups = useMemo(() => {
+    const acc = new Map<PlateGroupKey, string[]>();
+    for (const eq of equipments ?? []) {
+      const plate = String(eq?.license_plate ?? "").trim();
+      if (!plate) continue;
+      const key = plateGroupKey(eq?.type_vehicle);
+      const list = acc.get(key) ?? [];
+      if (!list.includes(plate)) list.push(plate);
+      acc.set(key, list);
+    }
+    return GROUP_ORDER.filter((k) => acc.has(k)).map((key) => ({
+      key,
+      label: plateGroupLabel(key),
+      plates: acc.get(key)!,
+    }));
+  }, [equipments]);
+
+  /**
+   * Daftar datar untuk inisialisasi pilihan pertama & penjagaan pilihan tetap
+   * valid — urutan sama persis dengan grup di dropdown.
    */
   const plateOptions = useMemo(
-    () =>
-      (equipments ?? [])
-        .map((eq) => String(eq?.license_plate ?? "").trim())
-        .filter((p) => p.length > 0),
-    [equipments],
+    () => plateGroups.flatMap((g) => g.plates),
+    [plateGroups],
   );
   const [selectedKey, setSelectedKey] = useState<string>("");
   // Unit pertama terpilih otomatis sekali saja di awal (bukan tiap render),
@@ -435,11 +580,28 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
     }
   }, [plateOptions, selectedKey]);
 
+  /**
+   * Nopol aktif: bila `selectedPlate` diberikan (non-null), komponen jadi
+   * kontrol penuh pemanggil (panel "Ban perlu tindakan"); kalau tidak,
+   * state internal seperti sebelumnya — auto-pilih unit pertama tetap jalan.
+   */
+  const controlled = selectedPlate != null;
+  const effectivePlate = controlled ? selectedPlate : selectedKey;
+
   /** Hasil pemeriksaan ban untuk unit terpilih (plat dinormalisasi). */
   const checksForUnit = useMemo(
-    () => tireChecks?.[normKey(selectedKey)] ?? {},
-    [tireChecks, selectedKey],
+    () => tireChecks?.[normKey(effectivePlate)] ?? {},
+    [tireChecks, effectivePlate],
   );
+
+  /** Level kesehatan per slot untuk unit aktif — mewarnai dot & panel. */
+  const healthBySlot = useMemo(() => {
+    const out: Record<string, TireHealthLevel> = {};
+    for (const [slot, check] of Object.entries(checksForUnit)) {
+      out[slot] = tireHealthLevel(check);
+    }
+    return out;
+  }, [checksForUnit]);
 
   const isTypeValue = (v: string): v is VehicleType =>
     v === "6R" || v === "6D" || v === "4R" || v === "4D";
@@ -448,11 +610,11 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
    *  selectedKey adalah plat mentah dari dropdown — key typeByPlate ternormalisasi,
    *  jadi lookup-nya harus dinormalisasi dengan cara yang sama. */
   const selectedType = useMemo<VehicleType>(() => {
-    if (isTypeValue(selectedKey)) return selectedKey;
-    const normalized = selectedKey.replace(/\s+/g, "").toUpperCase();
+    if (isTypeValue(effectivePlate)) return effectivePlate;
+    const normalized = effectivePlate.replace(/\s+/g, "").toUpperCase();
     const type = typeByPlate.get(normalized) ?? "";
     return isTypeValue(type) ? type : "6R";
-  }, [selectedKey, typeByPlate]);
+  }, [effectivePlate, typeByPlate]);
 
   /** Nopol yang type_vehicle-nya tidak dikenal (mis. selain 4R/4D/6R/6D). */
   const unknownTypePlates = useMemo(() => {
@@ -524,6 +686,15 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
   /** Data pemeriksaan (bila ada) untuk posisi yang modal fotonya terbuka. */
   const activeCheck = photoSlot != null ? checksForUnit[photoSlot] : undefined;
 
+  /** Riwayat posisi yang modal fotonya terbuka — entri terbaru dulu. */
+  const activeHistory = useMemo(
+    () =>
+      (photoSlot != null
+        ? tireHistory?.[normKey(effectivePlate)]?.[photoSlot] ?? []
+        : []),
+    [tireHistory, effectivePlate, photoSlot],
+  );
+
   const renderBox = (slot: string, side: "left" | "right") => (
     <TyreDetailBox
       key={slot}
@@ -532,6 +703,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
       onToggle={() => toggle(slot)}
       onOpenPhotos={() => setPhotoSlot(slot)}
       check={checksForUnit[slot]}
+      health={healthBySlot[slot]}
       className="absolute -translate-y-1/2"
       style={{
         left: `${side === "left" ? BOX_X_LEFT : BOX_X_RIGHT}%`,
@@ -545,16 +717,39 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
     <section className={cn("w-full space-y-4", className)}>
       {/* Dropdown nomor polisi — sumbernya tabel equipment */}
       <div className="flex flex-wrap items-center gap-3">
-        <Select value={selectedKey} onValueChange={(v) => { setSelectedKey(v); setActiveSlot(null); }}>
+        <Select
+          value={effectivePlate}
+          onValueChange={(v) => {
+            if (controlled && onSelectPlate) onSelectPlate(v);
+            else setSelectedKey(v);
+            setActiveSlot(null);
+          }}
+        >
           <SelectTrigger size="sm" className="min-w-[13rem] sm:w-64" aria-label="Pilih nomor polisi unit">
             <SelectValue placeholder="Pilih nomor polisi" />
           </SelectTrigger>
-          <SelectContent>
-            {plateOptions.map((plate) => (
-              <SelectItem key={plate} value={plate}>
-                {plate}
-              </SelectItem>
-            ))}
+          <SelectContent className="max-h-80">
+            {plateGroups.length === 0 ? (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                Belum ada unit di tabel equipment
+              </p>
+            ) : (
+              plateGroups.map((group) => (
+                <SelectGroup key={group.key}>
+                  <SelectLabel className="flex items-center justify-between gap-6 pr-8">
+                    <span className="font-medium">{group.label}</span>
+                    <span className="tabular-nums text-[10px] text-muted-foreground/70">
+                      {group.plates.length} unit
+                    </span>
+                  </SelectLabel>
+                  {group.plates.map((plate) => (
+                    <SelectItem key={plate} value={plate}>
+                      {plate}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))
+            )}
           </SelectContent>
         </Select>
 
@@ -621,6 +816,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
                 active={activeSlot === slot}
                 onToggle={() => toggle(slot)}
                 zIndexClass={zIndexClass}
+                health={healthBySlot[slot]}
               />
             );
           })}
@@ -636,6 +832,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
             onToggle={() => toggle("SP")}
             onOpenPhotos={() => setPhotoSlot("SP")}
             check={checksForUnit["SP"]}
+            health={healthBySlot["SP"]}
             className="absolute -translate-x-1/2 -translate-y-1/2 shadow-lg"
             style={{
               left: "50%",
@@ -668,6 +865,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
                   active={activeSlot === slot}
                   onToggle={() => toggle(slot)}
                   zIndexClass={zIndexClass}
+                  health={healthBySlot[slot]}
                 />
               );
             })}
@@ -681,6 +879,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
                 onToggle={() => toggle(slot)}
                 onOpenPhotos={() => setPhotoSlot(slot)}
                 check={checksForUnit[slot]}
+                health={healthBySlot[slot]}
               />
             ))}
           </div>
@@ -692,6 +891,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
             onToggle={() => toggle("SP")}
             onOpenPhotos={() => setPhotoSlot("SP")}
             check={checksForUnit["SP"]}
+            health={healthBySlot["SP"]}
           />
         </div>
 
@@ -704,6 +904,14 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded-full border-2 border-primary bg-primary/20" aria-hidden />
             {wheelSlots.length} panel roda + 1 ban serap
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-emerald-500 bg-emerald-500/20" aria-hidden />
+            aman
+            <span className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-amber-500 bg-amber-500/20" aria-hidden />
+            waspada
+            <span className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-red-500 bg-red-500/25" aria-hidden />
+            perlu tindakan
           </span>
           {unknownTypePlates.size > 0 && (
             <span>
@@ -738,6 +946,53 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
                   {activeCheck?.notes && <span>Catatan: {activeCheck.notes}</span>}
                 </p>
               )}
+              {activeHistory.length > 1 && (
+                <div className="mx-auto w-full max-w-2xl rounded-xl border border-border/40 bg-background/40 px-3 py-2">
+                  <p className="flex items-center justify-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <History className="h-3 w-3" aria-hidden />
+                    Riwayat pemeriksaan — {activeHistory.length}× posisi ini
+                  </p>
+                  <div className="mt-1.5 max-h-28 overflow-y-auto">
+                    {activeHistory.slice(0, 10).map((entry, i) => (
+                      <div
+                        key={`${entry.createdAt}-${i}`}
+                        className="flex items-center justify-between gap-2 rounded px-1 py-0.5 text-xs"
+                      >
+                        <span className="w-24 shrink-0 tabular-nums text-muted-foreground">
+                          {entry.info.inspectionDate ?? entry.createdAt.slice(0, 10)}
+                        </span>
+                        <span className="flex-1 text-center tabular-nums">
+                          {entry.info.pressurePsi != null ? `${fmtPsi(entry.info.pressurePsi)} psi` : "—"}
+                          <span className={cn("ml-1.5 inline-block w-14 text-left text-[10px]", deltaClass(entry.deltaPsi))}>
+                            {fmtDelta(entry.deltaPsi, "psi")}
+                          </span>
+                        </span>
+                        <span className="flex-1 text-center tabular-nums">
+                          {entry.info.treadDepthMm != null ? fmtThickness(entry.info.treadDepthMm) : "—"}
+                          <span className={cn("ml-1.5 inline-block w-12 text-left text-[10px]", deltaClass(entry.deltaMm))}>
+                            {fmtDelta(entry.deltaMm, "mm")}
+                          </span>
+                        </span>
+                        {entry.info.condition ? (
+                          <span
+                            className={cn(
+                              "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                              conditionClass(entry.info.condition),
+                            )}
+                          >
+                            {entry.info.condition}
+                          </span>
+                        ) : (
+                          <span className="w-2 shrink-0" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-center text-[10px] text-muted-foreground">
+                    angka kecil = selisih dibanding pengukuran sebelumnya (merah = turun) · ditampilkan maks 10 terakhir
+                  </p>
+                </div>
+              )}
               <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
                 {(["sidewall", "tread"] as const).map((side) => (
                   <figure key={side} className="flex min-h-0 flex-col gap-1.5">
@@ -745,10 +1000,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, className }: Hino
                       {side === "sidewall" ? "Sidewall — sisi pinggir ban" : "Tread — tapak ban"}
                     </figcaption>
                     <TyrePhoto
-                      src={
-                        activeCheck?.photos?.[side] ??
-                        tyrePhotoUrl(photoSlot, side, tyrePhotos?.[photoSlot])
-                      }
+                      src={activeCheck?.photos?.[side] ?? tyrePhotoUrl(photoSlot, side, tyrePhotos?.[photoSlot])}
                       alt={`Foto ${side === "sidewall" ? "sidewall" : "tread"} ban ${data[photoSlot].name} (${data[photoSlot].code})`}
                     />
                   </figure>

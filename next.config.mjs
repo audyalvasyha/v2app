@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Whitelist domain proxy gambar AppSheet (Drive korporat) untuk next/image.
+  // Format wajib: /template/gettablefileurl?appName=...&tableName=...&fileName=...
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'www.appsheet.com', pathname: '/template/**' },
+    ],
+  },
   // Type checking tetap ON saat build. Sebelumnya di-ignore karena sisa
   // template bawaan; sekarang codebase bersih (tsc --noEmit hijau), jadi
   // error type harus menggagalkan build daripada lolos diam-diam ke produksi.
