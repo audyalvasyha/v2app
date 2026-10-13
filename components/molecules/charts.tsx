@@ -9,6 +9,7 @@
 export { default as CostChart } from "@/components/organisms/cost-chart"
 export { default as UnitCostRankingChart } from "@/components/organisms/unit-cost-ranking-chart"
 export { SkrMonthChart } from "@/components/molecules/skr-month-chart"
+export { SkrReasonPie } from "@/components/molecules/skr-reason-pie"
 export { BanMonthChart } from "@/components/molecules/ban-month-chart"
 export { WeatherChart } from "@/components/organisms/weather-chart"
 export { HistoryChart } from "@/components/organisms/traffic-history-chart"

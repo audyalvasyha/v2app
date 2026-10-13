@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { Bar, CartesianGrid, ComposedChart, Line, XAxis, YAxis } from "recharts"
 import {
     ChartContainer,
     ChartLegend,
@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/chart"
 import { formatNumber } from "@/lib/format"
 import { formatNilai } from "@/lib/skr-status"
-import { daysInMonth, skrDailySeries, type SkrMetric } from "@/lib/skr-analytics"
+import { daysInMonth, skrDailySeries } from "@/lib/skr-analytics"
 
 interface SkrMonthChartProps {
     /** Baris bulan berjalan (atau seluruh data bila filter mencakup dua bulan) */
@@ -22,7 +22,6 @@ interface SkrMonthChartProps {
     /** Batas ISO bulan berjalan & sebelumnya untuk pemotongan baris */
     currentIso: { from: string; to: string }
     previousIso: { from: string; to: string }
-    metric: SkrMetric
     /** Nama bulan siap tampil, mis. "Sep 2026" */
     currentLabel: string
     previousLabel: string
@@ -36,21 +35,30 @@ function tickCompact(v: number): string {
     return formatNumber(v)
 }
 
-//_Warna literal (bukan rantai CSS var) supaya fill kolom SVG selalu
-//ter-render di tema gelap maupun terang. Oranye = warna brand aplikasi.
-const CURRENT_COLOR = "#FF3C00"
-const PREVIOUS_COLOR = "#2aa084"
+//_Warna literal (bukan rantai CSS var) supaya fill SVG selalu
+//ter-render di tema gelap maupun terang.
+//Kontras tinggi agar data per bulan langsung terbedah:
+//  bulan berjalan = oranye (qty) / teal (nilai),
+//  bulan sebelumnya = biru (qty) / ungu (nilai).
+const QTY_CURRENT = "#FF3C00"
+const QTY_PREVIOUS = "#2563EB"
+const NILAI_CURRENT = "#2aa084"
+const NILAI_PREVIOUS = "#8B5CF6"
 
 /**
- * Grafik kolom berkelompok perbandingan harian: bulan berjalan vs bulan
- * sebelumnya berdampingan pada tiap tanggal (1..31).
+ * Grafik komposisi harian dalam SATU panel:
+ *   - metrik qty → kolom (bar) pada sumbu kiri;
+ *   - metrik nilai → polyline pada sumbu kanan.
+ * Bulan berjalan & sebelumnya tampil bersamaan: kolom bulan lalu lebih
+ * redup (fillOpacity), garis nilai bulan lalu putus-putus. Sumber data
+ * satu deret yang sama (skrDailySeries), hari tanpa data tidak ditarik
+ * ke nol — garisnya terputus.
  */
 export function SkrMonthChart({
     currentRows,
     previousRows,
     currentIso,
     previousIso,
-    metric,
     currentLabel,
     previousLabel,
 }: SkrMonthChartProps) {
@@ -70,19 +78,27 @@ export function SkrMonthChart({
         const prev = previousRows.filter(
             (r) => r.pod_d && r.pod_d >= previousIso.from && r.pod_d <= previousIso.to,
         )
-        return skrDailySeries(cur, prev, metric, maxDay)
-    }, [currentRows, previousRows, currentIso, previousIso, metric, maxDay])
+        return skrDailySeries(cur, prev, maxDay)
+    }, [currentRows, previousRows, currentIso, previousIso, maxDay])
 
     const chartConfig = {
-        current: { label: currentLabel, color: CURRENT_COLOR },
-        previous: { label: previousLabel, color: PREVIOUS_COLOR },
+        currentQty: { label: `${currentLabel} · Qty`, color: QTY_CURRENT },
+        previousQty: { label: `${previousLabel} · Qty`, color: QTY_PREVIOUS },
+        currentNilai: { label: `${currentLabel} · Nilai`, color: NILAI_CURRENT },
+        previousNilai: { label: `${previousLabel} · Nilai`, color: NILAI_PREVIOUS },
     } satisfies ChartConfig
 
-    const hasAnyData = data.some((d) => d.current != null || d.previous != null)
+    const hasAnyData = data.some(
+        (d) =>
+            d.currentQty != null ||
+            d.previousQty != null ||
+            d.currentNilai != null ||
+            d.previousNilai != null,
+    )
 
     if (!hasAnyData) {
         return (
-            <div className="flex h-[280px] items-center justify-center">
+            <div className="flex h-[300px] items-center justify-center">
                 <p className="text-xs text-muted-foreground">
                     Tidak ada data bertanggal pada kedua bulan ini.
                 </p>
@@ -91,8 +107,8 @@ export function SkrMonthChart({
     }
 
     return (
-        <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full">
-            <BarChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 0 }} barGap={2}>
+        <ChartContainer config={chartConfig} className="aspect-auto h-[300px] w-full">
+            <ComposedChart data={data} margin={{ left: 4, right: 4, top: 8, bottom: 0 }} barGap={2}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />
                 <XAxis
                     dataKey="day"
@@ -102,31 +118,25 @@ export function SkrMonthChart({
                     minTickGap={4}
                     tickFormatter={(v: number) => (v % 5 === 0 || v === 1 ? String(v) : "")}
                 />
+                {/* Sumbu kiri = qty (kolom) */}
+                <YAxis yAxisId="qty" width={56} tickLine={false} axisLine={false} tickFormatter={(v: number) => tickCompact(v)} />
+                {/* Sumbu kanan = nilai (garis), tanpa garis sumbu supaya bersih */}
                 <YAxis
-                    width={56}
+                    yAxisId="nilai"
+                    orientation="right"
+                    width={64}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(v: number) => tickCompact(v)}
+                    tickFormatter={(v: number) => `Rp ${tickCompact(v).replace(/^Rp /, "")}`}
                 />
                 <ChartTooltip
-                    cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+                    cursor={{ fill: "var(--muted)", opacity: 0.35 }}
                     content={
                         <ChartTooltipContent
                             indicator="line"
                             labelFormatter={(_, payload) => {
-                                const items = (payload ?? []) as {
-                                    name?: string
-                                    value?: unknown
-                                    payload?: { day?: number }
-                                }[]
-                                //_prioritaskan seri bulan berjalan, fallback ke seri mana pun yang punya nilai
-                                const hit =
-                                    items.find((p) => p.name === "current" && p.value != null) ??
-                                    items.find((p) => p.value != null)
-                                const day = hit?.payload?.day ?? items[0]?.payload?.day
-                                if (!day) return ""
-                                const label = hit?.name === "previous" ? previousLabel : currentLabel
-                                return `Tanggal ${day} ${label}`
+                                const day = (payload?.[0]?.payload as { day?: number } | undefined)?.day
+                                return day ? `Tanggal ${day}` : ""
                             }}
                             formatter={(value, name) => (
                                 <div className="flex w-full items-center justify-between gap-4">
@@ -135,21 +145,26 @@ export function SkrMonthChart({
                                             className="h-2 w-2 shrink-0 rounded-sm"
                                             style={{
                                                 background:
-                                                name === "current"
-                                                    ? CURRENT_COLOR
-                                                    : PREVIOUS_COLOR,
-                                            }}
+                                                    name === "currentQty" || name === "previousQty"
+                                                        ? QTY_CURRENT                                                        : name === "currentNilai"
+                                                            ? NILAI_CURRENT
+                                                            : name === "previousNilai"
+                                                                ? NILAI_PREVIOUS
+                                                                : name === "previousQty"
+                                                                    ? QTY_PREVIOUS
+                                                                    : QTY_CURRENT,
+                                        }}
                                         />
                                         <span className="text-muted-foreground">
-                                            {name === "current" ? currentLabel : previousLabel}
+                                            {chartConfig[name as keyof typeof chartConfig]?.label ?? name}
                                         </span>
                                     </span>
                                     <span className="font-mono font-medium tabular-nums">
                                         {value == null
                                             ? "—"
-                                            : metric === "nilai"
-                                              ? formatNilai(Number(value))
-                                              : `${formatNumber(Number(value))} qty`}
+                                            : name === "currentQty" || name === "previousQty"
+                                              ? `${formatNumber(Number(value))} qty`
+                                              : formatNilai(Number(value))}
                                     </span>
                                 </div>
                             )}
@@ -157,9 +172,47 @@ export function SkrMonthChart({
                     }
                 />
                 <ChartLegend content={<ChartLegendContent />} />
-                <Bar dataKey="current" fill={CURRENT_COLOR} radius={[3, 3, 0, 0]} maxBarSize={14} />
-                <Bar dataKey="previous" fill={PREVIOUS_COLOR} radius={[3, 3, 0, 0]} maxBarSize={14} />
-            </BarChart>
+                {/* Qty: kolom berdampingan per tanggal; bulan lalu lebih redup */}
+                <Bar
+                    yAxisId="qty"
+                    dataKey="currentQty"
+                    fill={QTY_CURRENT}
+                    radius={[3, 3, 0, 0]}
+                    maxBarSize={14}
+                />
+                <Bar
+                    yAxisId="qty"
+                    dataKey="previousQty"
+                    fill={QTY_PREVIOUS}
+                    fillOpacity={0.55}
+                    radius={[3, 3, 0, 0]}
+                    maxBarSize={14}
+                />
+                {/* Nilai: polyline pada sumbu kanan, TIDAK TERPUTUS meski
+                    ada hari tanpa data (connectNulls) — batas antar bulan
+                    tetap terbedakan lewat warna + garis putus-putus. */}
+                <Line
+                    yAxisId="nilai"
+                    type="monotone"
+                    dataKey="currentNilai"
+                    stroke={NILAI_CURRENT}
+                    strokeWidth={2.5}
+                    dot={{ r: 2.5, fill: NILAI_CURRENT, strokeWidth: 0 }}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                    connectNulls
+                />
+                <Line
+                    yAxisId="nilai"
+                    type="monotone"
+                    dataKey="previousNilai"
+                    stroke={NILAI_PREVIOUS}
+                    strokeWidth={2}
+                    strokeDasharray="5 4"
+                    dot={{ r: 2.5, fill: NILAI_PREVIOUS, strokeWidth: 0 }}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                    connectNulls
+                />
+            </ComposedChart>
         </ChartContainer>
     )
 }

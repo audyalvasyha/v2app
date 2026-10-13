@@ -209,15 +209,22 @@ export function skrReasonBreakdown(
 /**
  * Deret harian sisa kiriman untuk grafik perbandingan dua bulan.
  * X-axis digabung (1..maxDay) supaya dua bulan bisa ditumpuk dalam satu
- * grafik: satu garis bulan ini, satu garis bulan lalu. Hari yang tidak ada
- * datanya bernilai null sehingga garisnya terputus — bukan ditarik ke nol.
+ * grafik. DUA METRIK selalu ikut (qty & nilai) supaya grafik komposinya
+ * bisa menampilkan kolom qty dan garis nilai pada panel yang sama.
+ * Hari yang tidak ada datanya bernilai null sehingga garisnya terputus —
+ * bukan ditarik ke nol.
  */
 export function skrDailySeries(
     currentRows: any[],
     previousRows: any[],
-    metric: SkrMetric = "qty",
     maxDay = 31,
-): { day: number; current: number | null; previous: number | null }[] {
+): {
+    day: number
+    currentQty: number | null
+    previousQty: number | null
+    currentNilai: number | null
+    previousNilai: number | null
+}[] {
     const currentBuckets = new Map<number, { qty: number; nilai: number }>()
     const previousBuckets = new Map<number, { qty: number; nilai: number }>()
 
@@ -249,14 +256,22 @@ export function skrDailySeries(
         addTo(previousBuckets, day, m.qty, m.nilai)
     }
 
-    const out: { day: number; current: number | null; previous: number | null }[] = []
+    const out: {
+        day: number
+        currentQty: number | null
+        previousQty: number | null
+        currentNilai: number | null
+        previousNilai: number | null
+    }[] = []
     for (let day = 1; day <= maxDay; day++) {
         const cur = currentBuckets.get(day)
         const prev = previousBuckets.get(day)
         out.push({
             day,
-            current: cur ? Math.round(metric === "qty" ? cur.qty : cur.nilai) : null,
-            previous: prev ? Math.round(metric === "qty" ? prev.qty : prev.nilai) : null,
+            currentQty: cur ? Math.round(cur.qty) : null,
+            previousQty: prev ? Math.round(prev.qty) : null,
+            currentNilai: cur ? Math.round(cur.nilai) : null,
+            previousNilai: prev ? Math.round(prev.nilai) : null,
         })
     }
     return out

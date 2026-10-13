@@ -11,7 +11,6 @@ import {
     Truck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatTile } from "@/components/molecules/stat-tile"
 import dynamic from "next/dynamic"
@@ -20,6 +19,10 @@ import dynamic from "next/dynamic"
 const SkrMonthChart = dynamic(() =>
     import("@/components/molecules/charts").then((m) => m.SkrMonthChart),
     { loading: () => <Skeleton className="h-[220px] w-full" /> },
+)
+const SkrReasonPie = dynamic(() =>
+    import("@/components/molecules/charts").then((m) => m.SkrReasonPie),
+    { loading: () => <Skeleton className="h-[300px] w-full" /> },
 )
 import { FilterToolbar } from "@/components/molecules/filter-toolbar"
 import { cn } from "@/lib/utils"
@@ -234,8 +237,9 @@ function SkrViewImpl({
         () => skrCustomerSummary(filtered, customerById),
         [filtered, customerById],
     )
-    //_5 toko dengan sisa kiriman terbesar — urutan mengikuti metrik aktif
-    //(qty atau nilai), tie-break pakai metrik satunya.
+    //_5 customer dengan SKR terbesar — urutan mengikuti metrik aktif (qty
+    //atau nilai), tie-break pakai metrik satunya. Judul "Bottom" hanya
+    //istilah kartu; datanya tetap SKR tertinggi.
     const topCustomers = useMemo(
         () =>
             [...customers]
@@ -556,10 +560,10 @@ function SkrViewImpl({
                 )}
             </div>
 
-            {/* GRAFIK: dua bulan terakhir yang punya data. Metrik aktif
-                (qty/nilai) berlaku untuk grafik sekaligus peringkat di
-                bawahnya — satu kontrol, dua panel, biar tidak ada angka yang
-                dianggap bertentangan. */}
+            {/* GRAFIK: dua bulan terakhir yang punya data. Metrik qty tampil
+                sebagai kolom dan nilai sebagai polyline di SATU panel yang
+                sama; toggle metrik di header tetap dipakai untuk total,
+                selisih, dan peringkat di bawahnya. */}
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
                     <div className="flex items-center gap-2">
@@ -568,7 +572,7 @@ function SkrViewImpl({
                             {monthWindow.current.label} vs {monthWindow.previous.label}
                         </span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-1">
                         <span className="mr-1 text-xs text-muted-foreground">Metrik</span>
                         <Button
                             variant={metric === "qty" ? "secondary" : "ghost"}
@@ -586,6 +590,9 @@ function SkrViewImpl({
                         >
                             Nilai
                         </Button>
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                            qty kolom · nilai garis
+                        </span>
                     </div>
                 </div>
 
@@ -635,7 +642,6 @@ function SkrViewImpl({
                         previousRows={chartRows}
                         currentIso={{ from: monthWindow.current.from, to: monthWindow.current.to }}
                         previousIso={{ from: monthWindow.previous.from, to: monthWindow.previous.to }}
-                        metric={metric}
                         currentLabel={monthWindow.current.label}
                         previousLabel={monthWindow.previous.label}
                     />
@@ -704,57 +710,24 @@ function SkrViewImpl({
                 </div>
             </div>
 
-            {/* SEBARAN ALASAN SKR PER KATEGORI — semua kategori POD,
-                tiap kategori menampilkan 3 alasan dengan nilai terbesar.
-                Tinggi baris tetap pendek supaya padat. */}
+            {/* SEBARAN ALASAN SKR PER KATEGORI — pie chart: porsi nilai
+                sisa kiriman dari tiap kategori POD. Angka rinci (baris &
+                nilai) tetap tersedia pada legenda di bawah grafik. */}
             {reasonsByCategory.length > 0 && (
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                     <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2">
-                        <h3 className="text-sm font-semibold">Alasan SKR Terbanyak per Kategori</h3>
-                        <p className="text-[11px] text-muted-foreground">3 teratas per kategori · nilai terbesar</p>
+                        <h3 className="text-sm font-semibold">Sebaran Alasan SKR per Kategori</h3>
+                        <p className="text-[11px] text-muted-foreground">porsi nilai per kategori POD</p>
                     </div>
-                    <div className="divide-y">
-                        {reasonsByCategory.map((group) => (
-                            <div key={group.category}>
-                                {/* Kepala kategori: badge + total baris & nilai */}
-                                <div className="flex items-center gap-2 bg-muted/30 px-3 py-1.5">
-                                    <Badge
-                                        variant="outline"
-                                        className={cn("h-5 shrink-0 px-1.5 text-[10px]", group.className)}
-                                    >
-                                        {group.label}
-                                    </Badge>
-                                    <span className="text-[11px] tabular-nums text-muted-foreground">
-                                        {group.rows.toLocaleString("id-ID")} baris ·{" "}
-                                        {compactNilai(group.nilai)}
-                                    </span>
-                                </div>
-                                <ul className="divide-y">
-                                    {group.reasons.map((r, i) => (
-                                        <li
-                                            key={r.reason}
-                                            className="flex items-center gap-2.5 px-3 py-1.5 transition-colors hover:bg-muted/40"
-                                        >
-                                            <span className="w-4 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
-                                                {i + 1}
-                                            </span>
-                                            <span className="min-w-0 flex-1 truncate text-sm" title={r.reason}>
-                                                {r.reason}
-                                            </span>
-                                            <span className="w-14 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
-                                                {r.rows.toLocaleString("id-ID")} b
-                                            </span>
-                                            <span
-                                                className="shrink-0 whitespace-nowrap text-right font-mono text-sm font-medium tabular-nums"
-                                                title={formatNilai(r.nilai)}
-                                            >
-                                                {compactNilai(r.nilai)}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        ))}
+                    <div className="px-3 pb-3 pt-2">
+                        <SkrReasonPie
+                            data={reasonsByCategory.map((g) => ({
+                                category: g.category,
+                                label: g.label,
+                                rows: g.rows,
+                                nilai: g.nilai,
+                            }))}
+                        />
                     </div>
                 </div>
             )}
@@ -787,8 +760,9 @@ interface CustomerDetailCardProps {
 }
 
 /**
- * Kartu "Sisa Kiriman per Toko": 5 toko dengan SKR terbanyak, satu baris
- * per toko (id + nama), kolom jumlah dokumen, qty, dan nilai. Klik baris
+ * Kartu "5 Bottom SKR by Customer": 5 customer dengan SKR terbesar —
+ * peringkat, bar porsi metrik aktif, jumlah dokumen, qty,
+ * nilai, armada, dan tanggal POD terakhir dalam baris padat. Klik baris
  * untuk membuka rincian dokumen SKR-nya.
  */
 function CustomerDetailCard({
@@ -799,35 +773,62 @@ function CustomerDetailCard({
     expandedKey,
     onToggle,
 }: CustomerDetailCardProps) {
+    // Skala bar porsi + total ringkas 5 customer ini.
+    const maxNilai = Math.max(...items.map((c) => c.nilai), 1)
+    const maxQty = Math.max(...items.map((c) => c.qty), 1)
+    const totalDocs = items.reduce((s, c) => s + c.docs, 0)
+    const totalQty = items.reduce((s, c) => s + c.qty, 0)
+    const totalNilai = items.reduce((s, c) => s + c.nilai, 0)
+
+    // Tanggal POD terakhir per customer — dari baris terfilter, ditampilkan
+    // langsung di baris (tanpa harus membuka panel rincian).
+    const lastPodByKey = useMemo(() => {
+        const map = new Map<string, string>()
+        for (const row of details) {
+            const key = row.customer_id == null ? "" : String(row.customer_id).trim()
+            if (!key) continue
+            const d = row.pod_d
+            if (d && d > (map.get(key) ?? "")) map.set(key, d)
+        }
+        return map
+    }, [details])
+
     if (items.length === 0) return null
 
     return (
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                    <Store className="h-3.5 w-3.5 text-primary" />
-                    <h3 className="text-sm font-semibold">5 Toko dengan SKR Terbesar</h3>
-                    <span className="text-xs text-muted-foreground">
-                        dari {totalCount.toLocaleString("id-ID")} customer · klik baris untuk detail dokumen
+            <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
+                <div className="flex min-w-0 items-center gap-1.5">
+                    <Store className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    <h3 className="text-xs font-semibold">5 Bottom SKR by Customer</h3>
+                    <span className="hidden truncate text-[10px] text-muted-foreground sm:inline">
+                        dari {totalCount.toLocaleString("id-ID")} customer · klik baris untuk rincian dokumen
                     </span>
                 </div>
-                <p className="hidden text-xs text-muted-foreground sm:block">
-                    Diurutkan {metric === "qty" ? "qty" : "nilai"} terbesar · Qty = unit · Nilai = rupiah
+                <p className="shrink-0 text-[10px] text-muted-foreground">
+                    Diurutkan {metric === "qty" ? "Qty" : "Nilai"} terbesar
                 </p>
             </div>
 
             {/* Header kolom */}
-            <div className="flex items-center gap-3 border-b px-4 py-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-                <span className="min-w-0 flex-1">Customer</span>
-                <span className="w-16 shrink-0 text-right">Dokumen</span>
-                <span className="w-16 shrink-0 text-right">Qty</span>
-                <span className="w-24 shrink-0 text-right">Nilai</span>
-                <span className="w-5 shrink-0" />
+            <div className="flex items-center gap-2 border-b px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground">
+                <span className="min-w-0 flex-[3]">Customer</span>
+                <span
+                    className="hidden w-16 shrink-0 text-center md:block"
+                    title={`Porsi ${metric === "qty" ? "qty" : "nilai"} dibanding customer terbesar dalam 5 ini`}
+                >
+                    Porsi
+                </span>
+                <span className="w-10 shrink-0 text-right">Dok</span>
+                <span className="w-14 shrink-0 text-right">Qty</span>
+                <span className="w-20 shrink-0 text-right">Nilai</span>
+                <span className="w-4 shrink-0" />
             </div>
 
             <ul className="divide-y">
-                {items.map((c) => {
+                {items.map((c, rank) => {
                     const open = expandedKey === c.key
+                    const lastPod = lastPodByKey.get(c.key)
                     const docRows = open
                         ? details
                             .filter(
@@ -837,45 +838,71 @@ function CustomerDetailCard({
                             .sort((a, b) => (b.pod_d ?? "").localeCompare(a.pod_d ?? ""))
                         : []
                     return (
-                        <li key={c.key} className={cn(open && "bg-muted/30")}>
+                        <li key={c.key} className={cn(open && "bg-muted/40")}>
                             <button
                                 type="button"
                                 onClick={() => onToggle(c.key)}
-                                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/40"
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-muted/40"
                                 aria-expanded={open}
                             >
-                                <span className="min-w-0 flex-1">
-                                    <span className="flex items-center gap-1.5">
-                                        <span className="truncate text-sm font-medium" title={c.nama}>
+                                <span className="min-w-0 flex-[3]">
+                                    <span className="flex items-center gap-1">
+                                        <span
+                                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[9px] font-semibold text-primary"
+                                            title={`Ranking ke-${rank + 1} dari 5 customer dengan SKR terbesar`}
+                                        >
+                                            {rank + 1}
+                                        </span>
+                                        <span className="truncate text-xs font-medium" title={c.nama}>
                                             {c.nama}
                                         </span>
                                         {c.known ? (
-                                            <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-primary/70" />
+                                            <BadgeCheck className="h-3 w-3 shrink-0 text-primary/70" />
                                         ) : null}
                                     </span>
-                                    <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">
+                                    <span className="block truncate font-mono text-[10px] leading-tight text-muted-foreground">
                                         {c.known ? `ID ${c.key}` : "ID tidak terdaftar di tabel customers"}
+                                        {" · "}
+                                        {c.armada} armada
+                                        {lastPod ? ` · ${isoToTanggal(lastPod)}` : ""}
                                     </span>
                                 </span>
-                                <span className="w-16 shrink-0 text-right font-mono text-sm tabular-nums">
+                                <span
+                                    className="hidden w-16 shrink-0 items-center md:flex"
+                                    title={metric === "qty" ? formatQty(c.qty) : formatNilai(c.nilai)}
+                                >
+                                    <span className="h-1 w-full overflow-hidden rounded-full bg-muted/60">
+                                        <span
+                                            className="block h-full rounded-full bg-primary/70"
+                                            style={{
+                                                width: `${Math.round(
+                                                    ((metric === "qty" ? c.qty : c.nilai) /
+                                                        (metric === "qty" ? maxQty : maxNilai)) *
+                                                        100,
+                                                )}%`,
+                                            }}
+                                        />
+                                    </span>
+                                </span>
+                                <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums">
                                     {c.docs.toLocaleString("id-ID")}
                                 </span>
-                                <span className="w-16 shrink-0 text-right font-mono text-sm tabular-nums">
+                                <span className="w-14 shrink-0 text-right font-mono text-xs tabular-nums">
                                     {formatQty(c.qty)}
                                 </span>
-                                <span className="w-24 shrink-0 text-right font-mono text-sm font-medium tabular-nums">
+                                <span className="w-20 shrink-0 text-right font-mono text-xs font-medium tabular-nums">
                                     {compactNilai(c.nilai)}
                                 </span>
                                 <ChevronDown
                                     className={cn(
-                                        "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                                        "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
                                         open && "rotate-180",
                                     )}
                                 />
                             </button>
 
                             {open && (
-                                <div className="border-t bg-muted/20 px-4 py-2">
+                                <div className="border-t bg-muted/20 px-3 py-1.5">
                                     {docRows.length === 0 ? (
                                         <p className="py-3 text-center text-xs text-muted-foreground">
                                             Tidak ada dokumen pada filter ini.
@@ -885,7 +912,7 @@ function CustomerDetailCard({
                                             {docRows.filter((row) => row.salesman !== "-1" && row.salesman !== -1).map((row, i) => (
                                                 <li
                                                     key={`${row.pod_d ?? "x"}-${row.delivery_number ?? "no-num"}-${i}`}
-                                                    className="flex items-center gap-3 py-1.5 text-xs"
+                                                    className="flex items-center gap-3 py-1 text-xs"
                                                 >
                                                     <span
                                                         className="w-32 shrink-0 truncate font-mono font-medium"
@@ -942,6 +969,16 @@ function CustomerDetailCard({
                     )
                 })}
             </ul>
+
+            {/* Total ringkas 5 customer ini */}
+            <div className="flex items-center justify-between gap-2 border-t bg-muted/20 px-3 py-1 text-[10px] text-muted-foreground">
+                <span>Total 5 customer ini</span>
+                <span className="flex shrink-0 items-center gap-3 font-mono tabular-nums">
+                    <span>{totalDocs.toLocaleString("id-ID")} dok</span>
+                    <span>{formatQty(totalQty)}</span>
+                    <span className="font-medium">{compactNilai(totalNilai)}</span>
+                </span>
+            </div>
         </div>
     )
 }
