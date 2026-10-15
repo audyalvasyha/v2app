@@ -32,6 +32,14 @@ export function currentWibHourBucket(at: Date = new Date()): string {
     return `${y}-${m}-${d}T${h}`
 }
 
+/**
+ * Bucket jam yang sudah ditulis proses ini — lihat guard di
+ * saveHistorySnapshots. Tumbuh maksimal 24 entri per hari per proses,
+ * dan bucket lama dibuang bila melewati 48 supaya tidak tumbuh tanpa batas
+ * pada proses long-running.
+ */
+const savedBuckets = new Set<string>()
+
 export interface HistorySnapshot {
     locationId: string
     level: TrafficLevel
@@ -54,6 +62,17 @@ export async function saveHistorySnapshots(
     if (!client || snapshots.length === 0) return
 
     const hour = currentWibHourBucket(at)
+
+    // Guard anti-churn: `/api/traffic` dipanggil publik, dan tanpa ini
+    // setiap pengunjung memicu upsert baris-baris yang IDENTIK untuk
+    // bucket jam yang sama (PK per jam memang idempotent, tapi hanya
+    // memboros round-trip DB service-role). Sekali per bucket per proses
+    // sudah benar secara semantik — data jam itu memang berhenti berubah.
+    // Instance baru (cold start) tetap menulis sendiri, jadi tidak ada
+    // data yang hilang lintas instance.
+    if (savedBuckets.has(hour)) return
+    if (savedBuckets.size > 48) savedBuckets.clear()
+
     const rows = snapshots
         .filter((s) => s.freeFlowSpeed > 0)
         .map((s) => ({
@@ -73,7 +92,14 @@ export async function saveHistorySnapshots(
 
     if (error && !/does not exist|schema cache/i.test(error.message)) {
         console.error("[traffic-history] gagal menyimpan snapshot:", error.message)
+        // Gagal sementara (jaringan dsb.) → jangan tandai bucket ini;
+        // request berikutnya di jam yang sama akan mencoba ulang.
+        return
     }
+    // Sukses — atau tabel memang belum dibuat (permanen, bukan sementara):
+    // dua-duanya ditandai supaya proses ini tidak mengulang upsert percuma
+    // untuk jam yang sama.
+    savedBuckets.add(hour)
 }
 
 export interface HourlyPattern {

@@ -391,7 +391,7 @@ function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, health, cl
  * refresh foto modal tidak ikut antre di serve. Loader spinner dikombinasikan
  * dengan fallback placeholder bila proxy gagal.
  */
-function TyrePhoto({ src, alt }: { src: string | null; alt: string }) {
+function TyrePhoto({ src, alt, className }: { src: string | null; alt: string; className?: string }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const isNextImage = !!src && /^https:\/\/www\.appsheet\.com\//i.test(src);
@@ -925,7 +925,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
       {/* Modal foto aktual ban: fullscreen, sidewall & tread berdampingan */}
       <Dialog open={photoSlot != null} onOpenChange={(open) => !open && setPhotoSlot(null)}>
         {photoSlot != null && data[photoSlot] && (
-          <DialogContent className="h-screen w-screen max-w-none rounded-none border-none bg-black/95 p-4 sm:p-6 [&>button]:top-3 [&>button]:right-3 [&>button]:z-10">
+          <DialogContent className="h-screen w-screen max-w-none rounded-none border-none bg-black/98 p-3 sm:p-4 [&>button]:top-3 [&>button]:right-3 [&>button]:z-10 [&>button]:translate-y-1/2 [&>button]:-translate-y-1/2 [&>button]:translate-x-1/2 [&>button]:-translate-x-1/2">
             <DialogHeader className="sr-only">
               <DialogTitle>
                 Foto ban {data[photoSlot].name} ({data[photoSlot].code})
@@ -995,13 +995,14 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
               )}
               <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
                 {(["sidewall", "tread"] as const).map((side) => (
-                  <figure key={side} className="flex min-h-0 flex-col gap-1.5">
+                  <figure key={side} className="flex min-h-0 flex-1 flex-col gap-1.5">
                     <figcaption className="text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       {side === "sidewall" ? "Sidewall — sisi pinggir ban" : "Tread — tapak ban"}
                     </figcaption>
                     <TyrePhoto
                       src={activeCheck?.photos?.[side] ?? tyrePhotoUrl(photoSlot, side, tyrePhotos?.[photoSlot])}
                       alt={`Foto ${side === "sidewall" ? "sidewall" : "tread"} ban ${data[photoSlot].name} (${data[photoSlot].code})`}
+                      className="min-h-[35vh] sm:min-h-[45vh]"
                     />
                   </figure>
                 ))}

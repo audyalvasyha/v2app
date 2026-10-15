@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, type LucideIcon } from "lucide-react"
+import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, Gauge, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/utils/supabase"
 import type { View } from "@/components/templates/dashboard-layout"
@@ -147,6 +147,14 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
         />
 
         <SidebarSectionLabel label="Ekspedisi" collapsed={collapsed} />
+
+        <SidebarButton
+          icon={Gauge}
+          label="Analisa"
+          active={activeView === 'analisa'}
+          collapsed={collapsed}
+          onClick={() => onViewChange('analisa')}
+        />
 
         <SidebarButton
           icon={Boxes}

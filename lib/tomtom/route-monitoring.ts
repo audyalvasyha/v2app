@@ -135,8 +135,24 @@ export function statusFromDetails(d: RouteDetails): RouteLiveStatus {
         pathPoints: shape.length >= 2 ? shape : (d.routePathPoints ?? []).map((p) => ({ latitude: num(p.latitude), longitude: num(p.longitude) })),
     }    }
 
+/**
+ * Cache status route 60 detik per proses.
+ *
+ * `/api/traffic` adalah endpoint PUBLIK (tanpa login), dan tanpa cache
+ * setiap hit = 1 panggilan `list` + N panggilan `details` ke TomTom
+ * dengan kuota berbayar — satu script sederhana sudah cukup menghabiskan
+ * jatah free tier dalam hitungan menit. Data traffic memang berubah
+ * cepat, tapi 60 detik tidak mengubah keputusan operasional apa pun;
+ * dengan cache ini kuota upstream tetap kecil SEBERAPA PUN banyaknya
+ * pengunjung, dan latensi halaman peta jadi jauh lebih stabil.
+ */
+const STATUS_CACHE_TTL_MS = 60_000
+let statusCache: { value: RouteLiveStatus[]; expiresAt: number } | null = null
+
 /** Semua route + status live-nya (dipakai endpoint /api/traffic). */
 export async function getAllRouteStatuses(): Promise<RouteLiveStatus[]> {
+    if (statusCache && statusCache.expiresAt > Date.now()) return statusCache.value
+
     const routes = await listRegisteredRoutes()
     // Paralel — free tier TomTom dirata-rata 5 req/detik, jumlah registered
     // route biasanya maksimal 2, jadi para per batch aman dan latensinya
@@ -144,7 +160,7 @@ export async function getAllRouteStatuses(): Promise<RouteLiveStatus[]> {
     const details = await Promise.allSettled(
         routes.map((r) => getRouteDetails(r.routeId)),
     )
-    return details.map((res, i) => {
+    const statuses = details.map((res, i) => {
         const r = routes[i]
         if (res.status === "fulfilled") return statusFromDetails(res.value)
         return {
@@ -159,6 +175,9 @@ export async function getAllRouteStatuses(): Promise<RouteLiveStatus[]> {
             pathPoints: [],
         }
     })
+
+    statusCache = { value: statuses, expiresAt: Date.now() + STATUS_CACHE_TTL_MS }
+    return statuses
 }
 
 /** Sampling titik representatif dari geometri rute untuk traffic flow sampling. */

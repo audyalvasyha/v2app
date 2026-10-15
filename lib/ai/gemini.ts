@@ -210,6 +210,7 @@ async function callGeminiOnce(
   model: string,
   maxOutputTokens: number,
   temperature: number,
+  signal?: AbortSignal,
 ): Promise<string> {
   const key = getApiKey()
 
@@ -222,8 +223,14 @@ async function callGeminiOnce(
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: { temperature, maxOutputTokens },
       }),
+      // Opsional — dipakai pemanggil yang butuh batas waktu ketat (mis.
+      // fallback analisa supaya request tidak menggantung tanpa akhir).
+      signal,
     })
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      throw new AiError("Layanan AI terlalu lama merespons.", "rate")
+    }
     throw new AiError("Tidak bisa menghubungi layanan AI. Coba lagi sebentar.", "unknown")
   }
 
@@ -287,11 +294,17 @@ async function callGeminiOnce(
  * karena "high demand" bersifat sementara dan model lain sering tetap
  * sehat. Dengan begitu fitur tidak mati total hanya karena satu endpoint
  * sedang padat.
+ *
+ * Diekspor supaya route /api/analisa/summary bisa memakainya sebagai
+ * fallback provider: kredensialnya sama-sama server-side, dan analisa
+ * tidak mati hanya karena kredit OpenKey habis.
  */
-async function callGemini(
+export async function callGemini(
   prompt: string,
   maxOutputTokens: number,
   temperature: number,
+  /** Batas waktu opsional per pemanggilan (semua model kandidat). */
+  signal?: AbortSignal,
 ): Promise<string> {
   const candidates = Array.from(
     new Set([MODEL, ...FALLBACK_MODELS].filter(Boolean)),
@@ -301,7 +314,7 @@ async function callGemini(
 
   for (const model of candidates) {
     try {
-      return await callGeminiOnce(prompt, model, maxOutputTokens, temperature)
+      return await callGeminiOnce(prompt, model, maxOutputTokens, temperature, signal)
     } catch (error) {
       // Hanya kondisi sementara yang layak dicoba ke model lain.
       // Key ditolak akan gagal di semua percobaan, jadi langsung dilempar

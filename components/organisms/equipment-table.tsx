@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/pagination"
 import { StatTile } from "@/components/molecules/stat-tile"
 // Format & warna status kini dari lib bersama — konsisten dengan menu Dashboard
-import { compactRupiah, formatDateMedium, formatKm, formatRupiah } from "@/lib/format"
+import { compactRupiah, formatDateMedium, formatKm, formatRupiah, relativeDayLabel } from "@/lib/format"
 import { unitStatusTone as statusTone } from "@/lib/unit-status"
 import {
     AlertTriangle,
@@ -74,6 +74,100 @@ interface EquipmentRow {
     item: any
     stat?: UnitStat
     history: any[]
+}
+
+/**
+ * Sel "Riwayat & Biaya" di tabel equipment.
+ *
+ * Sebelumnya berisi bar progres (relatif ke unit termahal) — sulit dibaca dan
+ * perbandingannya tidak langsung bermakna bagi end user. Sekarang diganti
+ * komponen Badge + teks supaya status unit terbaca dalam satu tatapan:
+ *
+ *  1. Total biaya (angka utama, font mono tabular).
+ *  2. Badge frekuensi: "N× perbaikan" — amber bila termasuk yang paling sering
+ *     masuk bengkel, netral untuk lainnya.
+ *  3. Badge waktu relatif servis terakhir ("Kemarin", "14 hari lalu").
+ *  4. Kondisional: badge "Aktif 30 hari" bila masih ada pengeluaran bulan ini,
+ *     atau badge "Biaya tinggi" bila biayanya ≥ 50% unit termahal.
+ *
+ * Semua angka tetap agregasi asli dari maintenance_histories.
+ */
+function CostHistoryCell({
+    stat,
+    history,
+    maxCount,
+    maxCost,
+}: {
+    stat: UnitStat
+    history: any[]
+    maxCount: number
+    maxCost: number
+}) {
+    const monthMs = 30 * 86_400_000
+    const now = Date.now()
+
+    const recentTotal = history.reduce(
+        (sum, h) =>
+            h.tanggal && now - new Date(h.tanggal).getTime() <= monthMs
+                ? sum + (Number(h.jumlah_harga) || 0)
+                : sum,
+        0,
+    )
+    const costHigh = maxCost > 0 && stat.total >= maxCost * 0.5
+    const countHigh = maxCount > 0 && stat.count >= Math.max(2, maxCount * 0.7)
+    const recentActive = recentTotal > 0
+
+    return (
+        <div className="flex flex-col items-start gap-1.5" onClick={(e) => e.stopPropagation()}>
+            {/* UTAMA: total biaya */}
+            <span className="font-mono text-sm font-semibold tabular-nums leading-none">
+                {formatRupiah(stat.total)}
+            </span>
+
+            {/* BADGE: frekuensi + waktu relatif + status biaya */}
+            <div className="flex flex-wrap items-center gap-1">
+                <Badge
+                    variant="outline"
+                    className={[
+                        "h-5 border px-1.5 text-[10px] font-medium",
+                        countHigh
+                            ? "border-amber-300/50 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                            : "border-border bg-muted/30 text-muted-foreground",
+                    ].join(" ")}
+                >
+                    {stat.count}× perbaikan
+                </Badge>
+                {stat.last && (
+                    <Badge
+                        variant="outline"
+                        className="h-5 border-border bg-muted/30 px-1.5 text-[10px] font-medium text-muted-foreground"
+                    >
+                        {relativeDayLabel(stat.last)}
+                    </Badge>
+                )}
+                {recentActive && (
+                    <Badge
+                        variant="outline"
+                        title={`Biaya 30 hari terakhir: ${formatRupiah(recentTotal)}`}
+                        className="h-5 gap-1 border-primary/30 bg-primary/10 px-1.5 text-[10px] font-medium text-primary"
+                    >
+                        <Clock3 className="h-2.5 w-2.5" />
+                        <span className="tabular-nums">{compactRupiah(recentTotal)}</span>
+                        <span className="opacity-70">30 hr</span>
+                    </Badge>
+                )}
+                {costHigh && !recentActive && (
+                    <Badge
+                        variant="outline"
+                        title={`Pengeluaran terbesar di armada (≥${Math.round((stat.total / maxCost) * 100)}% dari unit termahal)`}
+                        className="h-5 border-amber-300/50 bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                    >
+                        Biaya tinggi
+                    </Badge>
+                )}
+            </div>
+        </div>
+    )
 }
 
 function EquipmentTableImpl({
@@ -139,6 +233,11 @@ function EquipmentTableImpl({
 
     const maxUnitCost = useMemo(
         () => rows.reduce((m, r) => Math.max(m, r.stat?.total ?? 0), 0),
+        [rows],
+    )
+
+    const maxEntryCount = useMemo(
+        () => rows.reduce((m, r) => Math.max(m, r.stat?.count ?? 0), 0),
         [rows],
     )
 
@@ -311,7 +410,7 @@ function EquipmentTableImpl({
                             <TableHead className="whitespace-nowrap">Unit</TableHead>
                             <TableHead className="whitespace-nowrap">Perusahaan</TableHead>
                             <TableHead className="whitespace-nowrap text-right">Odometer</TableHead>
-                            <TableHead className="min-w-[190px]">Riwayat &amp; biaya</TableHead>
+                            <TableHead className="min-w-[230px]">Riwayat &amp; biaya</TableHead>
                             <TableHead className="whitespace-nowrap">Status</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -320,8 +419,6 @@ function EquipmentTableImpl({
                             pageRows.map(({ item, stat, history }) => {
                                 const isExpanded = expandedId === String(item.id)
                                 const tone = statusTone(item.status)
-                                const unitCost = stat?.total ?? 0
-                                const share = maxUnitCost > 0 ? Math.max(2, (unitCost / maxUnitCost) * 100) : 0
 
                                 return (
                                     <Fragment key={String(item.id)}>
@@ -374,23 +471,13 @@ function EquipmentTableImpl({
                                                 </div>
                                             </TableCell>
                                             <TableCell className="py-2.5">
-                                                {stat ? (
-                                                    <div className="space-y-1.5">
-                                                        <div className="flex items-baseline justify-between gap-3">
-                                                            <span className="text-xs text-muted-foreground">
-                                                                {stat.count} entri
-                                                            </span>
-                                                            <span className="font-mono text-sm font-medium tabular-nums">
-                                                                {formatRupiah(unitCost)}
-                                                            </span>
-                                                        </div>
-                                                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                                            <div
-                                                                className="h-full rounded-full bg-primary/70"
-                                                                style={{ width: `${Math.min(100, share)}%` }}
-                                                            />
-                                                        </div>
-                                                    </div>
+                                                {stat && stat.count > 0 ? (
+                                                    <CostHistoryCell
+                                                        stat={stat}
+                                                        history={history}
+                                                        maxCount={maxEntryCount}
+                                                        maxCost={maxUnitCost}
+                                                    />
                                                 ) : (
                                                     <span className="text-xs text-muted-foreground">
                                                         Belum ada riwayat perbaikan

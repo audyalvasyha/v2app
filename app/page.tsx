@@ -67,6 +67,10 @@ const TrafficView = dynamic(
   () => import("@/components/organisms/traffic-view").then((m) => m.TrafficView),
   { ssr: false, loading: ViewFallback },
 )
+const AnalisaView = dynamic(
+  () => import("@/components/organisms/analisa-view").then((m) => m.AnalisaView),
+  { ssr: false, loading: ViewFallback },
+)
 import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
 import { daysInMonth } from "@/lib/skr-analytics"
 import { startOfZonedDayMonthsAgo, zonedParts } from "@/lib/format"
@@ -619,6 +623,7 @@ function DashboardContent() {
     ban: { title: 'Analisa Ban', desc: 'Rincian pengeluaran ban per unit: tren bulanan, unit termahal, catatan setiap penggantian, dan peta ban yang bisa diklik per nopol.' },
     weather: { title: 'Perkiraan Cuaca', desc: 'Kondisi terkini, peluang hujan 24 jam, dan prakiraan 7 hari untuk pool Bagan Batu, Bagansiapiapi, dan 18 kecamatan Rokan Hilir — dengan penilaian risiko perjalanan per daerah.' },
     traffic: { title: 'Monitoring Lalu Lintas', desc: 'Pantau kondisi lalu lintas rute pengiriman armada: status per rute, flag kemacetan, dan peta kondisi jalan.' },
+    analisa: { title: 'Analisa', desc: 'Ringkasan bergaya Head of Transport dari KPI otomatis: biaya transport, redelivery, sisa kiriman, dan ritase — dihitung dari data asli, bukan perkiraan.' },
   }
 
   // Title tab browser mengikuti menu aktif — rapi di riwayat tab & bookmark.
@@ -666,7 +671,7 @@ function DashboardContent() {
 
             {/* Sembunyikan SearchBar di mode Dashboard & menu Ekspedisi yang belum ada datanya.
                 Analisa Ban punya kotak pencarian sendiri di dalam halamannya. */}
-            {activeView !== 'dashboard' && activeView !== 'skr' && activeView !== 'pengiriman' && activeView !== 'ban' && activeView !== 'weather' && activeView !== 'traffic' && (
+            {activeView !== 'dashboard' && activeView !== 'skr' && activeView !== 'pengiriman' && activeView !== 'ban' && activeView !== 'weather' && activeView !== 'traffic' && activeView !== 'analisa' && (
               <SearchBar
                 filters={{ ...filters, search: debouncedSearch }}
                 onFiltersChange={handleSearchFilterChange}
@@ -783,6 +788,20 @@ function DashboardContent() {
           // Lalu lintas di-fetch langsung oleh komponen (server-side) —
           // tidak membebani query Supabase mana pun.
           <TrafficView />
+        )}
+
+        {activeView === 'analisa' && (
+          // Analisa membaca data yang SUDAH dimuat dashboard (histories,
+          // skr, outbound) — tanpa fetch tambahan, tanpa beban query baru.
+          <AnalisaView
+            equipments={equipments}
+            histories={histories}
+            skrRows={skrDetails}
+            skrPrevRows={skrPrevMonth.length > 0 ? skrPrevMonth : skrDetails}
+            outbounds={outbounds}
+            isLoading={isLoading}
+            error={error}
+          />
         )}
 
         {activeView === 'about' && (

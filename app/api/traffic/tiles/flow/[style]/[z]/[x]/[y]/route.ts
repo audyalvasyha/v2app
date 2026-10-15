@@ -37,6 +37,16 @@ export async function GET(_req: Request, ctx: TileParams) {
     if (!/^\d+$/.test(z) || !/^\d+$/.test(x) || !/^\d+$/.test(yFile)) {
         return new NextResponse("Not found", { status: 404 })
     }
+    // Batas koordinat tile Web Mercator yang valid. Tanpa ini, angka
+    // sampah (mis. z=999) lolos regex lalu tetap memicu satu panggilan
+    // upstream TomTom hanya untuk dibalas 404 — jalur kecil untuk
+    // membakar kuota dengan request yang tahu pasti tidak valid.
+    const zi = Number(z)
+    const xi = Number(x)
+    const yi = Number(yFile)
+    if (zi > 22 || xi >= 2 ** zi || yi >= 2 ** zi) {
+        return new NextResponse("Not found", { status: 404 })
+    }
 
     const key = process.env.TOMTOM_API_KEY ?? ""
     const url = `https://api.tomtom.com/traffic/map/4/tile/flow/${style}/${z}/${x}/${yFile}.png?key=${encodeURIComponent(key)}`

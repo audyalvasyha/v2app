@@ -560,91 +560,121 @@ function SkrViewImpl({
                 )}
             </div>
 
-            {/* GRAFIK: dua bulan terakhir yang punya data. Metrik qty tampil
-                sebagai kolom dan nilai sebagai polyline di SATU panel yang
-                sama; toggle metrik di header tetap dipakai untuk total,
-                selisih, dan peringkat di bawahnya. */}
+            {/* GRAFIK & SEBARAN ALASAN SKR PER KATEGORI — satu kartu berisi dua panel:
+                grafik tren harian (left) di sebelah kiri, pie chart sebaran alasan (right)
+                di sebelah kanan. */}
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold">Tren Harian</h3>
-                        <span className="text-xs text-muted-foreground">
-                            {monthWindow.current.label} vs {monthWindow.previous.label}
-                        </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1">
-                        <span className="mr-1 text-xs text-muted-foreground">Metrik</span>
-                        <Button
-                            variant={metric === "qty" ? "secondary" : "ghost"}
-                            size="sm"
-                            className="h-7"
-                            onClick={() => setMetric("qty")}
-                        >
-                            Qty
-                        </Button>
-                        <Button
-                            variant={metric === "nilai" ? "secondary" : "ghost"}
-                            size="sm"
-                            className="h-7"
-                            onClick={() => setMetric("nilai")}
-                        >
-                            Nilai
-                        </Button>
-                        <span className="ml-1.5 text-xs text-muted-foreground">
-                            qty kolom · nilai garis
-                        </span>
-                    </div>
-                </div>
-
-                {/* Total per bulan + delta — pembaca langsung tahu hasilnya
-                    tanpa harus menelusuri garis. */}
-                <div className="grid gap-px bg-border sm:grid-cols-3">
-                    <div className="bg-card px-4 py-3">
-                        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                            {monthWindow.current.label}
-                        </p>
-                        <p className="mt-1 text-lg font-semibold leading-none tabular-nums text-primary">
-                            {fmtChart(chartTotals.current)}
-                        </p>
-                    </div>
-                    <div className="bg-card px-4 py-3">
-                        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                            {monthWindow.previous.label}
-                        </p>
-                        <p className="mt-1 text-lg font-semibold leading-none tabular-nums">
-                            {chartTotals.previous > 0 ? fmtChart(chartTotals.previous) : "—"}
-                        </p>
-                    </div>
-                    <div className="bg-card px-4 py-3">
-                        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                            Selisih
-                        </p>
-                        <p
-                            className={cn(
-                                "mt-1 flex items-center gap-1.5 text-lg font-semibold leading-none tabular-nums",
-                                chartDelta == null
-                                    ? "text-muted-foreground"
-                                    : chartDelta >= 0
-                                        ? "text-emerald-600 dark:text-emerald-400"
-                                        : "text-primary",
-                            )}
-                        >
-                            {chartDelta == null
-                                ? "—"
-                                : `${chartDelta >= 0 ? "+" : "−"}${Math.abs(chartDelta).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`}
-                        </p>
+                <div className="border-b bg-muted/40 px-4 py-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-semibold">Tren Harian</h3>
+                            <span className="text-xs text-muted-foreground">
+                                {monthWindow.current.label} vs {monthWindow.previous.label}
+                            </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                            <span className="mr-1 text-xs text-muted-foreground">Metrik</span>
+                            <Button
+                                variant={metric === "qty" ? "secondary" : "ghost"}
+                                size="sm"
+                                className="h-7"
+                                onClick={() => setMetric("qty")}
+                            >
+                                Qty
+                            </Button>
+                            <Button
+                                variant={metric === "nilai" ? "secondary" : "ghost"}
+                                size="sm"
+                                className="h-7"
+                                onClick={() => setMetric("nilai")}
+                            >
+                                Nilai
+                            </Button>
+                            <span className="ml-1.5 text-xs text-muted-foreground">
+                                qty kolom · nilai garis
+                            </span>
+                        </div>
                     </div>
                 </div>
 
-                <div className="p-4 pt-2">
-                    <SkrMonthChart
-                        currentRows={chartRows}
-                        previousRows={chartRows}
-                        currentIso={{ from: monthWindow.current.from, to: monthWindow.current.to }}
-                        previousIso={{ from: monthWindow.previous.from, to: monthWindow.previous.to }}
-                        currentLabel={monthWindow.current.label}
-                        previousLabel={monthWindow.previous.label}
-                    />
+                <div className="grid lg:grid-cols-2">
+                    {/* Grafik: dua bulan terakhir yang punya data */}
+                    <div className="p-4">
+                        {/* Total per bulan + delta — pembaca langsung tahu hasilnya
+                            tanpa harus menelusuri garis. */}
+                        <div className="grid gap-px bg-border sm:grid-cols-3">
+                            <div className="bg-card px-4 py-3">
+                                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                                    {monthWindow.current.label}
+                                </p>
+                                <p className="mt-1 text-lg font-semibold leading-none tabular-nums text-primary">
+                                    {fmtChart(chartTotals.current)}
+                                </p>
+                            </div>
+                            <div className="bg-card px-4 py-3">
+                                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                                    {monthWindow.previous.label}
+                                </p>
+                                <p className="mt-1 text-lg font-semibold leading-none tabular-nums">
+                                    {chartTotals.previous > 0 ? fmtChart(chartTotals.previous) : "—"}
+                                </p>
+                            </div>
+                            <div className="bg-card px-4 py-3">
+                                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                                    Selisih
+                                </p>
+                                <p
+                                    className={cn(
+                                        "mt-1 flex items-center gap-1.5 text-lg font-semibold leading-none tabular-nums",
+                                        chartDelta == null
+                                            ? "text-muted-foreground"
+                                            : chartDelta >= 0
+                                                ? "text-emerald-600 dark:text-emerald-400"
+                                                : "text-primary",
+                                    )}
+                                >
+                                    {chartDelta == null
+                                        ? "—"
+                                        : `${chartDelta >= 0 ? "+" : "−"}${Math.abs(chartDelta).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="-mx-2 mt-2 ring-1 ring-border">
+                            <SkrMonthChart
+                                currentRows={chartRows}
+                                previousRows={chartRows}
+                                currentIso={{ from: monthWindow.current.from, to: monthWindow.current.to }}
+                                previousIso={{ from: monthWindow.previous.from, to: monthWindow.previous.to }}
+                                currentLabel={monthWindow.current.label}
+                                previousLabel={monthWindow.previous.label}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Sebaran alasan SKR per kategori — pie chart */}
+                    {reasonsByCategory.length > 0 ? (
+                        <div className="p-4">
+                            <div className="mb-3 flex items-center justify-between border-b border-border/50 pb-2">
+                                <h3 className="text-sm font-semibold">Sebaran Alasan SKR per Kategori</h3>
+                                <p className="text-[11px] text-muted-foreground">porsi nilai per kategori POD</p>
+                            </div>
+                            <div className="-mx-2 ring-1 ring-border">
+                                <SkrReasonPie
+                                    data={reasonsByCategory.map((g) => ({
+                                        category: g.category,
+                                        label: g.label,
+                                        rows: g.rows,
+                                        nilai: g.nilai,
+                                    }))}
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        /* placeholder minimal saat kategori kosong — biar
+                        layout card tetap terbagi dua, bukan tiba-tiba runtuh */
+                        <div className="hidden lg:block p-4" />
+                    )}
                 </div>
             </div>
 
@@ -660,7 +690,7 @@ function SkrViewImpl({
                 onToggle={(key) => setExpandedCustomer((cur) => (cur === key ? null : key))}
             />
 
-            {/* PERINGKAT: grup armada/sales/customer, mengikuti metrik aktif */}
+            {/* PERINGKAT: armada / sales */}
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
                     <div className="flex items-center gap-1">
@@ -710,28 +740,6 @@ function SkrViewImpl({
                 </div>
             </div>
 
-            {/* SEBARAN ALASAN SKR PER KATEGORI — pie chart: porsi nilai
-                sisa kiriman dari tiap kategori POD. Angka rinci (baris &
-                nilai) tetap tersedia pada legenda di bawah grafik. */}
-            {reasonsByCategory.length > 0 && (
-                <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                    <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2">
-                        <h3 className="text-sm font-semibold">Sebaran Alasan SKR per Kategori</h3>
-                        <p className="text-[11px] text-muted-foreground">porsi nilai per kategori POD</p>
-                    </div>
-                    <div className="px-3 pb-3 pt-2">
-                        <SkrReasonPie
-                            data={reasonsByCategory.map((g) => ({
-                                category: g.category,
-                                label: g.label,
-                                rows: g.rows,
-                                nilai: g.nilai,
-                            }))}
-                        />
-                    </div>
-                </div>
-            )}
-
             {/* FOOTER FILTER */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs tabular-nums text-muted-foreground">
@@ -774,8 +782,6 @@ function CustomerDetailCard({
     onToggle,
 }: CustomerDetailCardProps) {
     // Skala bar porsi + total ringkas 5 customer ini.
-    const maxNilai = Math.max(...items.map((c) => c.nilai), 1)
-    const maxQty = Math.max(...items.map((c) => c.qty), 1)
     const totalDocs = items.reduce((s, c) => s + c.docs, 0)
     const totalQty = items.reduce((s, c) => s + c.qty, 0)
     const totalNilai = items.reduce((s, c) => s + c.nilai, 0)
@@ -813,16 +819,9 @@ function CustomerDetailCard({
             {/* Header kolom */}
             <div className="flex items-center gap-2 border-b px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground">
                 <span className="min-w-0 flex-[3]">Customer</span>
-                <span
-                    className="hidden w-16 shrink-0 text-center md:block"
-                    title={`Porsi ${metric === "qty" ? "qty" : "nilai"} dibanding customer terbesar dalam 5 ini`}
-                >
-                    Porsi
-                </span>
                 <span className="w-10 shrink-0 text-right">Dok</span>
                 <span className="w-14 shrink-0 text-right">Qty</span>
                 <span className="w-20 shrink-0 text-right">Nilai</span>
-                <span className="w-4 shrink-0" />
             </div>
 
             <ul className="divide-y">
@@ -865,23 +864,6 @@ function CustomerDetailCard({
                                         {" · "}
                                         {c.armada} armada
                                         {lastPod ? ` · ${isoToTanggal(lastPod)}` : ""}
-                                    </span>
-                                </span>
-                                <span
-                                    className="hidden w-16 shrink-0 items-center md:flex"
-                                    title={metric === "qty" ? formatQty(c.qty) : formatNilai(c.nilai)}
-                                >
-                                    <span className="h-1 w-full overflow-hidden rounded-full bg-muted/60">
-                                        <span
-                                            className="block h-full rounded-full bg-primary/70"
-                                            style={{
-                                                width: `${Math.round(
-                                                    ((metric === "qty" ? c.qty : c.nilai) /
-                                                        (metric === "qty" ? maxQty : maxNilai)) *
-                                                        100,
-                                                )}%`,
-                                            }}
-                                        />
                                     </span>
                                 </span>
                                 <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums">
