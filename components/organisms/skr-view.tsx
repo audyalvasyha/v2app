@@ -164,8 +164,6 @@ function SkrViewImpl({
             const custName = custId ? customerById.get(custId) ?? "" : ""
             return (
                 String(row.license_no ?? "").toLowerCase().includes(searchLower) ||
-                // Nama salesman ikut dicari, bukan hanya NIK-nya — orang
-                // lebih sering mengetik "ROY" daripada "90091477".
                 String(row.salesman_nama ?? "").toLowerCase().includes(searchLower) ||
                 String(row.salesman ?? "").toLowerCase().includes(searchLower) ||
                 String(row.pod_reason ?? "").toLowerCase().includes(searchLower) ||
@@ -188,9 +186,6 @@ function SkrViewImpl({
     )
     const reasons = useMemo(() => skrReasonBreakdown(filtered, 200), [filtered])
 
-    //_5 Teratas Redelivery: peringkat & alasan difokuskan ke kategori
-    // redelivery, menggantikan "5 Terbawah" dan "Alasan POD Terbanyak"
-    //(semua alasan) yang sebelumnya menempati dua kartu tersebut.
     const redeliveryRows = useMemo(
         () => filtered.filter((row) => skrCategory(row.pod_reason).category === "redelivery"),
         [filtered],
@@ -199,9 +194,7 @@ function SkrViewImpl({
         () => skrRanking(redeliveryRows, rankGroup, metric, 5, rankingOptions),
         [redeliveryRows, rankGroup, metric, rankingOptions],
     )
-    //_Alasan SKR terbanyak per kategori: seluruh alasan POD dikelompokkan
-    //ke kategorinya masing-masing (internal/operasional/pelanggan/redelivery/
-    //lainnya), lalu tiap kategori menampilkan 3 alasan dengan nilai terbesar.
+
     const reasonsByCategory = useMemo(() => {
         type ReasonRow = (typeof reasons)[number]
         const groups = new Map<
@@ -230,16 +223,14 @@ function SkrViewImpl({
         for (const g of list) {
             g.reasons = g.reasons.sort((a, b) => b.nilai - a.nilai).slice(0, 3)
         }
-        // Kategori dengan total nilai terbesar tampil lebih dulu.
         return list.sort((a, b) => b.nilai - a.nilai)
     }, [reasons])
+
     const customers = useMemo(
         () => skrCustomerSummary(filtered, customerById),
         [filtered, customerById],
     )
-    //_5 customer dengan SKR terbesar — urutan mengikuti metrik aktif (qty
-    //atau nilai), tie-break pakai metrik satunya. Judul "Bottom" hanya
-    //istilah kartu; datanya tetap SKR tertinggi.
+
     const topCustomers = useMemo(
         () =>
             [...customers]
@@ -254,28 +245,17 @@ function SkrViewImpl({
 
     const hasActiveFilter = searchLower !== "" || categoryFilter !== "all"
 
-    // 3. Grafik dua bulan: sumber data = fetch khusus bila ada, selain itu
-    //    details sudah mencakup kedua bulan (rentang "Semua" dsb).
+    // 3. Grafik dua bulan: sumber data = fetch khusus bila ada, selain itu details
     const chartRows = prevMonthRows.length > 0 ? prevMonthRows : details
 
-    //    Awal bulan berjalan sering belum ada data sama sekali (upload POD
-    //    selalu tertinggal beberapa hari), sehingga kolom "bulan ini" kosong.
-    //    Kalau begitu, jendela grafik digeser otomatis ke dua bulan terakhir
-    //    yang benar-benar punya data, dan labelnya ikut disesuaikan.
     const rawWindow = useMemo(() => monthWindows(), [])
     const monthWindow = useMemo(() => {
         const has = (w: MonthWindow) =>
             chartRows.some((r) => r.pod_d && r.pod_d >= w.from && r.pod_d <= w.to)
         if (has(rawWindow.current) || !has(rawWindow.previous)) return rawWindow
-        //_Bulan berjalan kosong → mundur satu bulan: "current" = bulan lalu,
-        //"previous" = dua bulan yang lalu.
         return monthWindowsShifted(rawWindow, 1)
     }, [chartRows, rawWindow])
 
-    // 3b. Total per bulan untuk header grafik — mengikuti metrik aktif.
-    // Dua jendela bulan dipangkas dari baris yang sama, lalu disatukan
-    // sebelum masuk skrDailySeries agar current & previous tidak saling
-    // menghitung baris yang sama dua kali.
     const chartTotals = useMemo(() => {
         const slice = (iso: { from: string; to: string }) =>
             chartRows
@@ -286,10 +266,7 @@ function SkrViewImpl({
             previous: slice(monthWindow.previous),
         }
     }, [chartRows, metric, monthWindow])
-    // Indikator selisih dibaca dari sisi perbaikan: sisa kiriman (SKR) yang
-    // LEBIH RENDAH dari bulan sebelumnya = bagus → tampil +X% hijau.
-    // Sebaliknya, naik dari bulan lalu = makin banyak kiriman tersisa
-    // → tampil −X% dengan warna primer (perlu perhatian).
+
     const chartDelta =
         chartTotals.previous > 0
             ? ((chartTotals.previous - chartTotals.current) / chartTotals.previous) * 100
@@ -297,8 +274,6 @@ function SkrViewImpl({
     const fmtChart = (v: number) =>
         metric === "nilai" ? compactNilai(v) : formatQty(v)
 
-    // Filter yang tidak membuahkan hasil TIDAK menggeser ke menu lain dan tidak
-    // mengganti tampilan — dashboard tetap di tempat, hanya muncul peringatan.
     const noRange = !dateFrom && !dateTo
     const emptyByFilter = hasActiveFilter && filtered.length === 0
     const activeCategoryLabel = SKR_CATEGORIES.find((c) => c.id === categoryFilter)?.label
@@ -310,8 +285,6 @@ function SkrViewImpl({
         ? "pada seluruh data yang dimuat."
         : `pada rentang ${isoToTanggal(dateFrom)} – ${isoToTanggal(dateTo)}.`
 
-    // Toast muncul satu kali saat status berubah dari ada data → tidak ada
-    // data, bukan setiap render.
     const wasEmpty = useRef(false)
     useEffect(() => {
         if (emptyByFilter && !wasEmpty.current) {
@@ -353,8 +326,6 @@ function SkrViewImpl({
         )
     }
 
-    // Layar kosong total (tidak ada baris sama sekali pada rentang aktif).
-    // Hasil filter kosong TIDAK masuk ke sini — itu hanya memunculkan peringatan.
     if (filtered.length === 0 && !hasActiveFilter) {
         const rangeLabel = noRange
             ? "tanpa batas tanggal"
@@ -418,7 +389,6 @@ function SkrViewImpl({
 
     return (
         <div className="space-y-4">
-            {/* PERINGATAN FILTER KOSONG — tampilan tetap di tempat */}
             {emptyByFilter && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-2.5 text-sm">
                     <p className="leading-snug">
@@ -441,7 +411,6 @@ function SkrViewImpl({
                 </div>
             )}
 
-            {/* PERINGATAN MODE CADANGAN */}
             {!usingView && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-2.5 text-xs leading-relaxed">
                     <span className="font-medium text-amber-700 dark:text-amber-400">
@@ -490,7 +459,7 @@ function SkrViewImpl({
                 />
             </div>
 
-            {/* KONTROL: rentang tanggal + pencarian (susunan sama dengan Pengiriman) */}
+            {/* KONTROL */}
             <FilterToolbar
                 date={{
                     idPrefix: "skr",
@@ -508,9 +477,7 @@ function SkrViewImpl({
                 }}
             />
 
-            {/* CHIP KATEGORI POD dengan hitungan — sekaligus filter. Kategori
-                tanpa data tetap bisa diklik: tampilan tidak berganti, hanya
-                muncul peringatan. */}
+            {/* CHIP KATEGORI POD */}
             <div className="flex flex-wrap items-center gap-1.5">
                 {SKR_CATEGORIES.map((opt) => {
                     const active = categoryFilter === opt.id
@@ -560,9 +527,7 @@ function SkrViewImpl({
                 )}
             </div>
 
-            {/* GRAFIK & SEBARAN ALASAN SKR PER KATEGORI — satu kartu berisi dua panel:
-                grafik tren harian (left) di sebelah kiri, pie chart sebaran alasan (right)
-                di sebelah kanan. */}
+            {/* GRAFIK & SEBARAN ALASAN SKR PER KATEGORI */}
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <div className="border-b bg-muted/40 px-4 py-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -598,10 +563,7 @@ function SkrViewImpl({
                 </div>
 
                 <div className="grid lg:grid-cols-2">
-                    {/* Grafik: dua bulan terakhir yang punya data */}
                     <div className="p-4">
-                        {/* Total per bulan + delta — pembaca langsung tahu hasilnya
-                            tanpa harus menelusuri garis. */}
                         <div className="grid gap-px bg-border sm:grid-cols-3">
                             <div className="bg-card px-4 py-3">
                                 <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
@@ -652,7 +614,6 @@ function SkrViewImpl({
                         </div>
                     </div>
 
-                    {/* Sebaran alasan SKR per kategori — pie chart */}
                     {reasonsByCategory.length > 0 ? (
                         <div className="p-4">
                             <div className="mb-3 flex items-center justify-between border-b border-border/50 pb-2">
@@ -671,16 +632,12 @@ function SkrViewImpl({
                             </div>
                         </div>
                     ) : (
-                        /* placeholder minimal saat kategori kosong — biar
-                        layout card tetap terbagi dua, bukan tiba-tiba runtuh */
                         <div className="hidden lg:block p-4" />
                     )}
                 </div>
             </div>
 
-            {/* DETAIL PER CUSTOMER — inti pertanyaan "sisa kiriman ini atas
-                customer id berapa, nama tokonya siapa, berapa dokumen, qty,
-                dan nilainya". Baris bisa dibuka untuk melihat dokumennya. */}
+            {/* DETAIL PER CUSTOMER */}
             <CustomerDetailCard
                 items={topCustomers}
                 totalCount={customers.length}
@@ -690,7 +647,7 @@ function SkrViewImpl({
                 onToggle={(key) => setExpandedCustomer((cur) => (cur === key ? null : key))}
             />
 
-            {/* PERINGKAT: armada / sales */}
+            {/* PERINGKAT */}
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
                     <div className="flex items-center gap-1">
@@ -758,21 +715,13 @@ function SkrViewImpl({
 
 interface CustomerDetailCardProps {
     items: SkrCustomerSummary[]
-    /** Jumlah customer seluruhnya, untuk keterangan "5 dari N" */
     totalCount: number
-    /** Baris terfilter — sumber detail dokumen saat baris dibuka */
     details: any[]
     metric: SkrMetric
     expandedKey: string | null
     onToggle: (key: string) => void
 }
 
-/**
- * Kartu "5 Bottom SKR by Customer": 5 customer dengan SKR terbesar —
- * peringkat, bar porsi metrik aktif, jumlah dokumen, qty,
- * nilai, armada, dan tanggal POD terakhir dalam baris padat. Klik baris
- * untuk membuka rincian dokumen SKR-nya.
- */
 function CustomerDetailCard({
     items,
     totalCount,
@@ -781,13 +730,21 @@ function CustomerDetailCard({
     expandedKey,
     onToggle,
 }: CustomerDetailCardProps) {
-    // Skala bar porsi + total ringkas 5 customer ini.
     const totalDocs = items.reduce((s, c) => s + c.docs, 0)
     const totalQty = items.reduce((s, c) => s + c.qty, 0)
     const totalNilai = items.reduce((s, c) => s + c.nilai, 0)
 
-    // Tanggal POD terakhir per customer — dari baris terfilter, ditampilkan
-    // langsung di baris (tanpa harus membuka panel rincian).
+    // Hitung batas nilai maksimum agar progress bar persentase berjalan dengan benar
+    const maxQty = useMemo(() => {
+        if (!items || items.length === 0) return 1
+        return Math.max(...items.map((c) => c.qty ?? 0), 1)
+    }, [items])
+
+    const maxNilai = useMemo(() => {
+        if (!items || items.length === 0) return 1
+        return Math.max(...items.map((c) => c.nilai ?? 0), 1)
+    }, [items])
+
     const lastPodByKey = useMemo(() => {
         const map = new Map<string, string>()
         for (const row of details) {
@@ -816,7 +773,6 @@ function CustomerDetailCard({
                 </p>
             </div>
 
-            {/* Header kolom */}
             <div className="flex items-center gap-2 border-b px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground">
                 <span className="min-w-0 flex-[3]">Customer</span>
                 <span className="w-10 shrink-0 text-right">Dok</span>
@@ -876,7 +832,7 @@ function CustomerDetailCard({
                                             style={{
                                                 width: `${Math.round(
                                                     ((metric === "qty" ? c.qty : c.nilai) /
-                                                        (metric === "qty" ? maxQty : maxNilai)) *
+                                                        ((metric === "qty" ? maxQty : maxNilai) || 1)) *
                                                     100,
                                                 )}%`,
                                             }}
@@ -969,7 +925,6 @@ function CustomerDetailCard({
                 })}
             </ul>
 
-            {/* Total ringkas 5 customer ini */}
             <div className="flex items-center justify-between gap-2 border-t bg-muted/20 px-3 py-1 text-[10px] text-muted-foreground">
                 <span>Total 5 customer ini</span>
                 <span className="flex shrink-0 items-center gap-3 font-mono tabular-nums">
@@ -991,11 +946,9 @@ interface RankingTableProps {
     rankGroup: RankGroup
     equipmentByPlate: Map<string, { equipment_id?: string; description?: string }>
     highlight?: boolean
-    /** Pesan khusus saat daftar kosong (default: pesan umum). */
     emptyHint?: string
 }
 
-/** Setengah kartu peringkat: daftar peringkat di dalam satu kartu. */
 function RankingTable({
     title,
     items,
@@ -1005,8 +958,6 @@ function RankingTable({
     highlight,
     emptyHint,
 }: RankingTableProps) {
-    // Kartu bernama "5 Teratas*" (termasuk Redelivery) memakai ikon utama
-    // supaya sejajar; hanya sisanya yang memakai ikon amber.
     const leadingIcon = title.startsWith("5 Teratas")
 
     if (items.length === 0) {
