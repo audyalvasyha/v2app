@@ -157,11 +157,6 @@ function MaintenanceTableImpl({ histories, isLoading }: MaintenanceTableProps) {
         }
     }, [rows])
 
-    const maxCost = useMemo(
-        () => rows.reduce((m, h) => Math.max(m, Number(h.jumlah_harga) || 0), 0),
-        [rows],
-    )
-
     // 4. Subtotal per bulan (dihitung dari seluruh rentang, bukan hanya halaman aktif)
     const monthTotals = useMemo(() => {
         const m = new Map<string, { label: string; count: number; total: number }>()
@@ -387,7 +382,6 @@ function MaintenanceTableImpl({ histories, isLoading }: MaintenanceTableProps) {
 
                                 const h = item.hist
                                 const cost = Number(h.jumlah_harga) || 0
-                                const share = maxCost > 0 ? Math.max(2, (cost / maxCost) * 100) : 0
                                 const isOutlier = stats.average > 0 && cost >= stats.average * 2
 
                                 return (
@@ -429,12 +423,6 @@ function MaintenanceTableImpl({ histories, isLoading }: MaintenanceTableProps) {
                                                     <span className="font-mono text-sm font-medium tabular-nums">
                                                         {formatRupiah(cost)}
                                                     </span>
-                                                </div>
-                                                <div className="h-1 w-[110px] overflow-hidden rounded-full bg-muted">
-                                                    <div
-                                                        className="h-full rounded-full bg-primary/70"
-                                                        style={{ width: `${Math.min(100, share)}%` }}
-                                                    />
                                                 </div>
                                             </div>
                                         </TableCell>
