@@ -925,94 +925,100 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
       {/* Modal foto aktual ban: fullscreen, sidewall & tread berdampingan */}
       <Dialog open={photoSlot != null} onOpenChange={(open) => !open && setPhotoSlot(null)}>
         {photoSlot != null && data[photoSlot] && (
+<<<<<<< HEAD
           <DialogContent className="h-screen w-screen max-w-none rounded-none border-none bg-black/98 p-3 sm:p-4 [&>button]:top-3 [&>button]:right-3 [&>button]:z-10 [&>button]:translate-y-1/2 [&>button]:-translate-y-1/2 [&>button]:translate-x-1/2 [&>button]:-translate-x-1/2">
-            <DialogHeader className="sr-only">
-              <DialogTitle>
-                Foto ban {data[photoSlot].name} ({data[photoSlot].code})
-              </DialogTitle>
-              <DialogDescription>Pasangan foto aktual sidewall dan tread ban posisi ini.</DialogDescription>
-            </DialogHeader>
-            <div className="flex min-h-0 flex-1 flex-col gap-3 pt-8">
-              <div className="flex items-center justify-center gap-2">
-                <span className="rounded bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
-                  {data[photoSlot].code}
-                </span>
-                <span className="text-sm font-semibold text-foreground">{data[photoSlot].name}</span>
-              </div>
-              {(activeCheck?.inspectionDate || activeCheck?.condition || activeCheck?.notes) && (
-                <p className="text-center text-xs text-muted-foreground">
-                  {activeCheck?.inspectionDate && <span>Pemeriksaan {activeCheck.inspectionDate} · </span>}
-                  {activeCheck?.condition && <span>Kondisi: {activeCheck.condition} · </span>}
-                  {activeCheck?.notes && <span>Catatan: {activeCheck.notes}</span>}
-                </p>
-              )}
-              {activeHistory.length > 1 && (
-                <div className="mx-auto w-full max-w-2xl rounded-xl border border-border/40 bg-background/40 px-3 py-2">
-                  <p className="flex items-center justify-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    <History className="h-3 w-3" aria-hidden />
-                    Riwayat pemeriksaan — {activeHistory.length}× posisi ini
-                  </p>
-                  <div className="mt-1.5 max-h-28 overflow-y-auto">
-                    {activeHistory.slice(0, 10).map((entry, i) => (
-                      <div
-                        key={`${entry.createdAt}-${i}`}
-                        className="flex items-center justify-between gap-2 rounded px-1 py-0.5 text-xs"
-                      >
-                        <span className="w-24 shrink-0 tabular-nums text-muted-foreground">
-                          {entry.info.inspectionDate ?? entry.createdAt.slice(0, 10)}
-                        </span>
-                        <span className="flex-1 text-center tabular-nums">
-                          {entry.info.pressurePsi != null ? `${fmtPsi(entry.info.pressurePsi)} psi` : "—"}
-                          <span className={cn("ml-1.5 inline-block w-14 text-left text-[10px]", deltaClass(entry.deltaPsi))}>
-                            {fmtDelta(entry.deltaPsi, "psi")}
-                          </span>
-                        </span>
-                        <span className="flex-1 text-center tabular-nums">
-                          {entry.info.treadDepthMm != null ? fmtThickness(entry.info.treadDepthMm) : "—"}
-                          <span className={cn("ml-1.5 inline-block w-12 text-left text-[10px]", deltaClass(entry.deltaMm))}>
-                            {fmtDelta(entry.deltaMm, "mm")}
-                          </span>
-                        </span>
-                        {entry.info.condition ? (
-                          <span
-                            className={cn(
-                              "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-                              conditionClass(entry.info.condition),
-                            )}
+=======
+          // <DialogContent className="h-screen w-screen max-w-none rounded-none border-none bg-black/95 p-4 sm:p-6 [&>button]:top-3 [&>button]:right-3 [&>button]:z-10">
+              <DialogContent className="!max-w-6xl w-[90vw] max-h-[92vh] h-auto flex flex-col rounded-2xl border border-border/40 bg-background/95 backdrop-blur-md p-6 shadow-2xl overflow-hidden [&>button]:top-4 [&>button]:right-4 [&>button]:z-10">
+>>>>>>> 6b9a326 (merubah ukuran view photo di menu analisa)
+                <DialogHeader className="sr-only">
+                  <DialogTitle>
+                    Foto ban {data[photoSlot].name} ({data[photoSlot].code})
+                  </DialogTitle>
+                  <DialogDescription>Pasangan foto aktual sidewall dan tread ban posisi ini.</DialogDescription>
+                </DialogHeader>
+                <div className="flex min-h-0 flex-1 flex-col gap-3 pt-8">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="rounded bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
+                      {data[photoSlot].code}
+                    </span>
+                    <span className="text-sm font-semibold text-foreground">{data[photoSlot].name}</span>
+                  </div>
+                  {(activeCheck?.inspectionDate || activeCheck?.condition || activeCheck?.notes) && (
+                    <p className="text-center text-xs text-muted-foreground">
+                      {activeCheck?.inspectionDate && <span>Pemeriksaan {activeCheck.inspectionDate} · </span>}
+                      {activeCheck?.condition && <span>Kondisi: {activeCheck.condition} · </span>}
+                      {activeCheck?.notes && <span>Catatan: {activeCheck.notes}</span>}
+                    </p>
+                  )}
+                  {activeHistory.length > 1 && (
+                    <div className="mx-auto w-full max-w-2xl rounded-xl border border-border/40 bg-background/40 px-3 py-2">
+                      <p className="flex items-center justify-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        <History className="h-3 w-3" aria-hidden />
+                        Riwayat pemeriksaan — {activeHistory.length}× posisi ini
+                      </p>
+                      <div className="mt-1.5 max-h-28 overflow-y-auto">
+                        {activeHistory.slice(0, 10).map((entry, i) => (
+                          <div
+                            key={`${entry.createdAt}-${i}`}
+                            className="flex items-center justify-between gap-2 rounded px-1 py-0.5 text-xs"
                           >
-                            {entry.info.condition}
-                          </span>
-                        ) : (
-                          <span className="w-2 shrink-0" />
-                        )}
+                            <span className="w-24 shrink-0 tabular-nums text-muted-foreground">
+                              {entry.info.inspectionDate ?? entry.createdAt.slice(0, 10)}
+                            </span>
+                            <span className="flex-1 text-center tabular-nums">
+                              {entry.info.pressurePsi != null ? `${fmtPsi(entry.info.pressurePsi)} psi` : "—"}
+                              <span className={cn("ml-1.5 inline-block w-14 text-left text-[10px]", deltaClass(entry.deltaPsi))}>
+                                {fmtDelta(entry.deltaPsi, "psi")}
+                              </span>
+                            </span>
+                            <span className="flex-1 text-center tabular-nums">
+                              {entry.info.treadDepthMm != null ? fmtThickness(entry.info.treadDepthMm) : "—"}
+                              <span className={cn("ml-1.5 inline-block w-12 text-left text-[10px]", deltaClass(entry.deltaMm))}>
+                                {fmtDelta(entry.deltaMm, "mm")}
+                              </span>
+                            </span>
+                            {entry.info.condition ? (
+                              <span
+                                className={cn(
+                                  "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                                  conditionClass(entry.info.condition),
+                                )}
+                              >
+                                {entry.info.condition}
+                              </span>
+                            ) : (
+                              <span className="w-2 shrink-0" />
+                            )}
+                          </div>
+                        ))}
                       </div>
+                      <p className="mt-1 text-center text-[10px] text-muted-foreground">
+                        angka kecil = selisih dibanding pengukuran sebelumnya (merah = turun) · ditampilkan maks 10 terakhir
+                      </p>
+                    </div>
+                  )}
+                  <div className="grid min-h-[450px] h-[50vh] flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
+                    {(["sidewall", "tread"] as const).map((side) => (
+                      <figure key={side} className="flex h-full min-h-0 flex-col gap-2 rounded-xl border border-border/50 bg-muted/10 p-3">
+                        <figcaption className="text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {side === "sidewall" ? "Sidewall — sisi pinggir ban" : "Tread — tapak ban"}
+                        </figcaption>
+                        <div className="relative flex-1 w-full h-full min-h-0">
+                          <TyrePhoto
+                            src={activeCheck?.photos?.[side] ?? tyrePhotoUrl(photoSlot, side, tyrePhotos?.[photoSlot])}
+                            alt={`Foto ${side === "sidewall" ? "sidewall" : "tread"} ban ${data[photoSlot].name} (${data[photoSlot].code})`}
+                          />
+                        </div>
+                      </figure>
                     ))}
                   </div>
-                  <p className="mt-1 text-center text-[10px] text-muted-foreground">
-                    angka kecil = selisih dibanding pengukuran sebelumnya (merah = turun) · ditampilkan maks 10 terakhir
-                  </p>
                 </div>
-              )}
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
-                {(["sidewall", "tread"] as const).map((side) => (
-                  <figure key={side} className="flex min-h-0 flex-1 flex-col gap-1.5">
-                    <figcaption className="text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      {side === "sidewall" ? "Sidewall — sisi pinggir ban" : "Tread — tapak ban"}
-                    </figcaption>
-                    <TyrePhoto
-                      src={activeCheck?.photos?.[side] ?? tyrePhotoUrl(photoSlot, side, tyrePhotos?.[photoSlot])}
-                      alt={`Foto ${side === "sidewall" ? "sidewall" : "tread"} ban ${data[photoSlot].name} (${data[photoSlot].code})`}
-                      className="min-h-[35vh] sm:min-h-[45vh]"
-                    />
-                  </figure>
-                ))}
-              </div>
-            </div>
-          </DialogContent>
+              </DialogContent>
         )}
-      </Dialog>
-    </section>
-  );
+            </Dialog>
+          </section>
+        );
 }
 
-export const HinoTyreMap = memo(HinoTyreMapImpl);
+        export const HinoTyreMap = memo(HinoTyreMapImpl);

@@ -722,7 +722,7 @@ function SkrViewImpl({
 
                 <div className="grid xl:grid-cols-2 xl:divide-x">
                     <RankingTable
-                        title="5 Teratas"
+                        title="5 Bottom by"
                         items={ranking.top}
                         metric={metric}
                         rankGroup={rankGroup}
@@ -730,7 +730,7 @@ function SkrViewImpl({
                         highlight
                     />
                     <RankingTable
-                        title="5 Teratas Redelivery"
+                        title="5 Bottom Redelivery"
                         items={redeliveryRanking.top}
                         metric={metric}
                         rankGroup={rankGroup}
@@ -864,6 +864,23 @@ function CustomerDetailCard({
                                         {" · "}
                                         {c.armada} armada
                                         {lastPod ? ` · ${isoToTanggal(lastPod)}` : ""}
+                                    </span>
+                                </span>
+                                <span
+                                    className="hidden w-16 shrink-0 items-center md:flex"
+                                    title={metric === "qty" ? formatQty(c.qty) : formatNilai(c.nilai)}
+                                >
+                                    <span className="h-1 w-full overflow-hidden rounded-full bg-muted/60">
+                                        <span
+                                            className="block h-full rounded-full bg-primary/70"
+                                            style={{
+                                                width: `${Math.round(
+                                                    ((metric === "qty" ? c.qty : c.nilai) /
+                                                        (metric === "qty" ? maxQty : maxNilai)) *
+                                                    100,
+                                                )}%`,
+                                            }}
+                                        />
                                     </span>
                                 </span>
                                 <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums">
