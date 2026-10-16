@@ -96,6 +96,13 @@ function isMissingTypeVehicleColumn(message: string): boolean {
 const HISTORY_COLS = "id,tanggal,equipment_id,license_plate,nama_barang_atau_jasa,jumlah_harga"
 const SERVICE_LOG_COLS = "equipment_id,service_date,next_service_date,next_service_odometer,odometer_at_service"
 const OUTBOUND_COLS = "freight_order,no_polisi,jam_out,jam_in,created_at"
+/**
+ * Menu yang memakai dataset berat — penentu defer fetch (lihat effect
+ * fetchSkr/fetchOutbounds di DashboardContent). Analisa memakai keduanya:
+ * outbound untuk KPI ritase, SKR untuk KPI sisa kiriman & redelivery.
+ */
+const NEEDS_SKR_DATA: View[] = ["skr", "analisa"]
+const NEEDS_OUTBOUND: View[] = ["pengiriman", "analisa"]
 // View ringkasan hasil parsing di database (lihat README / SQL di bawah).
 // Hanya 5 kolom ini yang dibutuhkan dashboard, sehingga payload jauh lebih kecil.
 const SKR_VIEW = 'skr_ringkasan'
@@ -296,8 +303,14 @@ function DashboardContent() {
   //_Nama toko untuk menu SKR — hanya id + nama yang diambil, lewat view
   //customers_ringkas supaya telephone_number & nik_salesman tidak ikut
   //terekspos ke kunci anon. Kegagalan fetch ini tidak boleh mengganggu
-  //menu lain.
+  //menu lain. Defer: master data ini hanya dipakai menu SKR & Analisa,
+  //jadi di-fetch saat menu itu pertama dibuka — buka awal dashboard
+  //tidak lagi menunggu query ekstra.
+  const customersFetched = useRef(false)
   useEffect(() => {
+    if (!NEEDS_SKR_DATA.includes(activeView)) return
+    if (customersFetched.current) return
+    customersFetched.current = true
     let cancelled = false
     supabase
       .from('customers_ringkas')
@@ -309,7 +322,7 @@ function DashboardContent() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [activeView])
 
   // armada_outbound di-fetch terpisah sesuai rentang tanggal menu Pengiriman
   // — tanpa ini, seluruh tabel besar ikut termuat setiap kali app dibuka.
@@ -369,8 +382,13 @@ function DashboardContent() {
   }, [])
 
   useEffect(() => {
+    //_Defer ke menu yang memakainya (Pengiriman & Analisa) — pembukaan
+    //aplikasi di Dashboard tidak menghabiskan query outbound dulu.
+    //Masuk menu (activeView berubah) selalu memicu fetch → data segar
+    //per kunjungan; keluar-masuk cepat tetap ringan (satu query 30 hari).
+    if (!NEEDS_OUTBOUND.includes(activeView)) return
     fetchOutbounds(outboundRange.from, outboundRange.to)
-  }, [fetchOutbounds, outboundRange.from, outboundRange.to])
+  }, [fetchOutbounds, activeView, outboundRange.from, outboundRange.to])
 
   // Dashboard SKR membaca view `skr_ringkasan` yang mengupah parsing pod_date &
   // skr_value ke database. Bila view belum dibuat, aplikasi otomatis turun ke
@@ -528,14 +546,19 @@ function DashboardContent() {
   //dua query kecil di atas cukup dijalankan sekali.
   const skrBoundsFetched = useRef(false)
   useEffect(() => {
+    //_Defer: pemilih rentang cuma ada di menu SKR.
+    if (activeView !== 'skr') return
     if (skrBoundsFetched.current && skrUsesView) return
     skrBoundsFetched.current = true
     fetchSkrBounds()
-  }, [fetchSkrBounds, skrUsesView])
+  }, [activeView, fetchSkrBounds, skrUsesView])
 
   useEffect(() => {
+    //_Defer ke menu yang memakainya (SKR & Analisa) — jendela 3 bulan ×
+    //20k baris bukan muatan kecil; jangan diunduh sebelum dipakai.
+    if (!NEEDS_SKR_DATA.includes(activeView)) return
     fetchSkr(skrRange.from, skrRange.to)
-  }, [fetchSkr, skrRange.from, skrRange.to])
+  }, [fetchSkr, activeView, skrRange.from, skrRange.to])
   const equipmentByPlate = useMemo(() => {
     const map = new Map<string, { equipment_id?: string; description?: string }>()
     for (const eq of equipments) {

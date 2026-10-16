@@ -426,13 +426,12 @@ function TyrePhoto({ src, alt, className }: { src: string | null; alt: string; c
     <img
       src={src}
       alt={alt}
-      className="min-h-0 flex-1 rounded-lg border border-border/60 object-contain"
+      className="h-full w-full rounded-lg border border-border/60 object-contain"
       onError={() => setFailed(true)}
     />
   );
 
-  return (
-    <div className="relative min-h-0 flex-1">
+  return (      <div className="relative h-full w-full">
       {!loaded && (
         <div className="absolute inset-0 flex items-center justify-center rounded-lg border border-border/60 bg-muted/30">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary" />
@@ -925,7 +924,6 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
       {/* Modal foto aktual ban: fullscreen, sidewall & tread berdampingan */}
       <Dialog open={photoSlot != null} onOpenChange={(open) => !open && setPhotoSlot(null)}>
         {photoSlot != null && data[photoSlot] && (
-          // <DialogContent className="h-screen w-screen max-w-none rounded-none border-none bg-black/95 p-4 sm:p-6 [&>button]:top-3 [&>button]:right-3 [&>button]:z-10">
           <DialogContent className="!max-w-6xl w-[90vw] max-h-[92vh] h-auto flex flex-col rounded-2xl border border-border/40 bg-background/95 backdrop-blur-md p-6 shadow-2xl overflow-hidden [&>button]:top-4 [&>button]:right-4 [&>button]:z-10">
             <DialogHeader className="sr-only">
               <DialogTitle>

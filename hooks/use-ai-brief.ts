@@ -136,6 +136,15 @@ export function useAiBrief(snapshot: unknown) {
         })()
         return () => {
             cancelled = true
+            // Lepas dedupe saat effect dibersihkan. Di React Strict Mode
+            // (dev), setup→cleanup→setup berjalan pada instance yang sama:
+            // tanpa reset ini, eksekusi kedua early-return pada key yang
+            // sama padahal fetch eksekusi pertama sudah dicancel — briefing
+            // tidak pernah muat dan loading gantung. Dengan reset, eksekusi
+            // setelah cancel selalu benar-benar fetch; re-render biasa
+            // tidak terdampak karena dependencies memoized dan cleanup
+            // tidak berjalan di antara render.
+            fetchedKey.current = null
         }
     }, [snapshotKey, regenCount])
 
