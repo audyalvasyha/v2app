@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import {
+  CalendarCheck,
+  CircleCheck,
+  Download,
+  TriangleAlert,
+  Truck,
+} from "lucide-react";
 import {
   HinoTyreMap,
   toFiniteNumber,
@@ -11,12 +17,14 @@ import {
 import { supabase } from "@/utils/supabase";
 import { appsheetFileUrl } from "@/lib/appsheet-image";
 import { Button } from "@/components/ui/button";
+import { StatTile } from "@/components/molecules/stat-tile";
 import { cn } from "@/lib/utils";
 import {
   TIRE_HEALTH_TONE,
   tireChecksCsv,
   tireHealthLevel,
   tireHealthPriority,
+  tireIssueReason,
   type TireHealthLevel,
 } from "@/lib/tire-health";
 import type { TireCheckCsvRow } from "@/lib/tire-health";
@@ -121,16 +129,34 @@ interface TireRecord {
   info: TireCheckInfo;
 }
 
-/** Satu butir panel "Ban perlu tindakan". */
+/**
+ * Satu kartu panel "Ban perlu tindakan" — satu unit (nopol).
+ *
+ * Panel diagregasi PER UNIT, bukan per posisi: kalau 27 mobil semuanya
+ * bermasalah, daftar nodek tetap sejumlah UNIT yang dirutkan terburuk dulu
+ * dan dibatasi jumlahnya — bukan tonjakan seratus kartu posisi ban. Detail
+ * atas mana ban bermasalah tetap ada melalui `issues` + peta di bawah.
+ */
 interface TireActionItem {
   /** Kunci peta (plat ternormalisasi) — dipakai memilih nopol di dropdown. */
   plateKey: string;
   /** Nopol asli untuk tampilan. */
   plate: string;
-  slot: string;
-  level: TireHealthLevel;
-  info: TireCheckInfo;
+  /** Level paling buruk dari seluruh posisi milik unit ini. */
+  worstLevel: TireHealthLevel;
+  /** Posisi bermasalah (terurut terburuk dulu): slot + level + info terbarunya. */
+  issues: Array<{ slot: string; level: TireHealthLevel; info: TireCheckInfo }>;
+  /** Tanggal pemeriksaan terbaru di antara semua posisi. */
+  lastInspected: string | null;
 }
+
+  /** Warna teks level — dipakai pada baris alasan utama tiap butir. */
+const LEVEL_TEXT: Record<TireHealthLevel, string> = {
+  action: "text-red-600 dark:text-red-400",
+  warning: "text-amber-600 dark:text-amber-500",
+  ok: "text-emerald-600 dark:text-emerald-400",
+  none: "text-muted-foreground",
+};
 
 export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnalysisProps) {
   const [inspections, setInspections] = useState<InspectionRow[]>([]);
@@ -284,29 +310,40 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
   }, [plateSlotRecords]);
 
   /**
-   * Daftar "Ban perlu tindakan": posisi ban dengan level action/warning dari
-   * pemeriksaan TERBARU masing-masing posisi, diurutkan: action dulu, lalu
-   * tanggal pemeriksaan terbaru, lalu plat.
+   * Daftar "Ban perlu tindakan" — diagregasi PER UNIT supaya tidak menumpuk
+   * bila banyak unit sekaligus bermasalah. Satu kartu = satu nopol berisi
+   * seluruh posisi bermasalahnya; diurutkan level terburuk dulu, lalu jumlah
+   * posisi bermasalah, lalu tanggal terbaru.
    */
   const actionItems = useMemo<TireActionItem[]>(() => {
-    const items: TireActionItem[] = [];
+    const byPlate = new Map<string, TireActionItem>();
     for (const [plateKey, slots] of Object.entries(checksByPlate)) {
+      const issues: TireActionItem["issues"] = [];
+      let lastInspected: string | null = null;
       for (const [slot, info] of Object.entries(slots)) {
         const level = tireHealthLevel(info);
         if (level === "ok" || level === "none") continue;
-        items.push({
-          plateKey,
-          plate: plateByNorm.get(plateKey) ?? plateKey,
-          slot,
-          level,
-          info,
-        });
+        issues.push({ slot, level, info });
+        if (info.inspectionDate && (!lastInspected || info.inspectionDate > lastInspected)) {
+          lastInspected = info.inspectionDate;
+        }
       }
+      if (issues.length === 0) continue;
+      // Urutan issues: terburuk (action) dulu — elemen pertama = terburuk.
+      issues.sort((a, b) => tireHealthPriority(b.level) - tireHealthPriority(a.level));
+      byPlate.set(plateKey, {
+        plateKey,
+        plate: plateByNorm.get(plateKey) ?? plateKey,
+        worstLevel: issues[0].level,
+        issues,
+        lastInspected,
+      });
     }
-    return items.sort(
+    return [...byPlate.values()].sort(
       (a, b) =>
-        tireHealthPriority(b.level) - tireHealthPriority(a.level) ||
-        String(b.info.inspectionDate ?? "").localeCompare(String(a.info.inspectionDate ?? "")) ||
+        tireHealthPriority(b.worstLevel) - tireHealthPriority(a.worstLevel) ||
+        b.issues.length - a.issues.length ||
+        String(b.lastInspected ?? "").localeCompare(String(a.lastInspected ?? "")) ||
         a.plate.localeCompare(b.plate),
     );
   }, [checksByPlate, plateByNorm]);
@@ -354,105 +391,200 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
     URL.revokeObjectURL(url);
   };
 
-  const actionCount = actionItems.filter((i) => i.level === "action").length;
-  const warningCount = actionItems.length - actionCount;
+  /** Hitungan posisi (semua unit gabung) — untuk tile ringkasan. */
+  const actionCount = actionItems.reduce(
+    (n, u) => n + u.issues.filter((x) => x.level === "action").length,
+    0,
+  );
+  const warningCount =
+    actionItems.reduce((n, u) => n + u.issues.length, 0) - actionCount;
+  /** Hitungan unit — untuk badge panel (satu kartu = satu unit). */
+  const actionUnits = actionItems.filter((u) => u.worstLevel === "action").length;
+  const warningUnits = actionItems.length - actionUnits;
+  /**
+   * Panel menampilkan unit terburuk saja; sisanya jadi ringkasan "+N unit
+   * lainnya" supaya daftar tidak menumpuk saat semua 27 mobil bermasalah.
+   */
+  const MAX_SHOWN_UNITS = 8;
+  const visibleUnits = actionItems.slice(0, MAX_SHOWN_UNITS);
+  const hiddenUnits = actionItems.length - visibleUnits.length;
 
   return (
-    <div className="space-y-3">
-      {/* Ringkasan data pemeriksaan ban harian + tombol export */}
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="text-xs text-muted-foreground">
-          {tireError ? (
-            <span className="text-destructive">Gagal memuat data pemeriksaan ban: {tireError}</span>
-          ) : isLoadingTire && inspections.length === 0 ? (
-            <span>Memuat data pemeriksaan ban…</span>
-          ) : inspections.length === 0 ? (
-            <span>Belum ada pemeriksaan ban harian — hasil cek dari app driver akan muncul di sini.</span>
-          ) : (
-            <span>
-              Pemeriksaan ban harian:{" "}
-              <span className="font-medium text-foreground">{summary.units} unit</span>
-              {" · "}
-              <span className="font-medium text-foreground">{summary.positions} posisi ban</span> terdata
-              {summary.latestDate ? (
-                <>
-                  {" · terakhir "}
-                  <span className="font-medium text-foreground">{summary.latestDate}</span>
-                </>
-              ) : null}
-            </span>
-          )}
+    <div className="space-y-4">
+      {/* Kepala menu + tombol export — selalu tampil apapun status data */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold leading-tight">Analisa Ban Harian</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Hasil pemeriksaan ban dari app driver — tekanan, ketebalan, kondisi, dan foto tiap posisi.
+          </p>
         </div>
-        {inspections.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={exportInspectionsCsv}
-            disabled={isLoadingTire}
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden />
-            Export CSV
-          </Button>
-        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={exportInspectionsCsv}
+          disabled={isLoadingTire || inspections.length === 0}
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden />
+          Export CSV
+        </Button>
       </div>
 
-      {/* Panel "Ban perlu tindakan" — klik butir untuk memilih nopol di peta */}
+      {/* Status data: gagal / memuat / kosong / ringkasan berhitung */}
+      {tireError ? (
+        <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3">
+          <p className="text-sm font-medium text-destructive">Gagal memuat data pemeriksaan ban</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{tireError}</p>
+        </div>
+      ) : isLoadingTire && inspections.length === 0 ? (
+        /* Skeleton dengan tinggi meniru StatTile supaya tidak lompat saat data masuk. */
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl border bg-card px-4 py-3 shadow-sm">
+              <div className="h-3 w-20 animate-pulse rounded bg-muted" />
+              <div className="mt-2 h-5 w-16 animate-pulse rounded bg-muted" />
+            </div>
+          ))}
+        </div>
+      ) : inspections.length === 0 ? (
+        <div className="flex items-center gap-3 rounded-xl border border-dashed border-border/60 bg-muted/30 px-4 py-6">
+          <CircleCheck className="h-5 w-5 shrink-0 text-muted-foreground/60" aria-hidden />
+          <p className="text-sm text-muted-foreground">
+            Belum ada pemeriksaan ban harian — hasil cek dari app driver akan muncul di sini.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <StatTile
+            icon={<Truck className="h-3.5 w-3.5" aria-hidden />}
+            label="Unit terdata"
+            value={String(summary.units)}
+          />
+          <StatTile
+            icon={<CircleCheck className="h-3.5 w-3.5" aria-hidden />}
+            label="Posisi ban"
+            value={String(summary.positions)}
+          />
+          <StatTile
+            icon={<CalendarCheck className="h-3.5 w-3.5" aria-hidden />}
+            label="Terakhir diperiksa"
+            value={summary.latestDate ?? "—"}
+          />
+          <StatTile
+            emphasis={actionItems.length > 0}
+            icon={<TriangleAlert className="h-3.5 w-3.5" aria-hidden />}
+            label="Unit bermasalah"
+            value={String(actionItems.length)}
+            hint={
+              actionCount > 0 && warningCount > 0
+                ? `${actionCount} posisi tindakan · ${warningCount} waspada`
+                : actionCount > 0
+                  ? `${actionCount} posisi perlu tindakan`
+                  : warningCount > 0
+                    ? `${warningCount} posisi waspada`
+                    : "semua ban aman"
+            }
+          />
+        </div>
+      )}
+
+      {/* Panel "Ban perlu tindakan" — klik butir untuk menyorot unit di peta */}
       {actionItems.length > 0 && (
-        <section className="rounded-xl border bg-card/60 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-semibold">Ban perlu tindakan</h2>
-            <span className="text-xs text-muted-foreground">
-              {actionCount > 0 && (
-                <>
-                  <span className="font-medium text-red-600 dark:text-red-400">{actionCount} perlu tindakan</span>
-                  {warningCount > 0 ? " · " : ""}
-                </>
+        <section className="rounded-xl border bg-card/60 p-3 sm:p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold">Ban perlu tindakan</h3>
+              {actionUnits > 0 && (
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                    TIRE_HEALTH_TONE.action.badge,
+                  )}
+                >
+                  {actionUnits} unit tindakan
+                </span>
               )}
-              {warningCount > 0 && (
-                <span className="font-medium text-amber-600 dark:text-amber-400">{warningCount} waspada</span>
+              {warningUnits > 0 && (
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                    TIRE_HEALTH_TONE.warning.badge,
+                  )}
+                >
+                  {warningUnits} unit waspada
+                </span>
               )}
-            </span>
-            <span className="ml-auto text-[11px] text-muted-foreground">
+              <span className="text-[11px] tabular-nums text-muted-foreground">
+                {actionCount + warningCount} posisi ban
+              </span>
+            </div>
+            <span className="text-[11px] text-muted-foreground">
               klik butir untuk menyorot unit di peta
             </span>
           </div>
-          <ul className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-            {actionItems.map((item) => {
-              const tone = TIRE_HEALTH_TONE[item.level];
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {visibleUnits.map((item) => {
+              const tone = TIRE_HEALTH_TONE[item.worstLevel];
+              const selected = selectedPlate === item.plate;
+              const worst = item.issues[0];
+              /* Alasan posisi TERBURUK unit ini — satu kalimat dari lib. */
+              const reason = tireIssueReason(worst.info) ?? tone.label;
+              const slotText = item.issues.map((x) => x.slot).join(" ");
+              const parahCount = item.issues.filter((x) => x.level === "action").length;
+              const meta = [
+                `${item.issues.length} posisi`,
+                item.issues.length > 1 ? `(${parahCount} parah)` : "",
+                item.lastInspected ?? null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
               return (
-                <li key={`${item.plateKey}-${item.slot}`}>
+                <li key={item.plateKey}>
                   <button
                     type="button"
                     onClick={() => setSelectedPlate(item.plate)}
-                    aria-label={`${item.plate} posisi ${item.slot} — ${tone.label}`}
+                    aria-label={`${item.plate} — ${item.issues.length} posisi bermasalah: ${slotText} — ${reason}`}
+                    aria-current={selected ? "true" : undefined}
                     className={cn(
-                      "w-full cursor-pointer rounded-lg border-l-4 border-y border-r border-border px-2.5 py-1.5 text-left transition-colors hover:bg-muted/40",
-                      tone.edge,
+                      "w-full cursor-pointer rounded-lg border bg-card px-3 py-2.5 text-left transition-all duration-150",
+                      "hover:-translate-y-px hover:shadow-md",
+                      selected
+                        ? "border-primary/60 ring-2 ring-primary/40"
+                        : "hover:border-primary/40",
                     )}
                   >
-                    <div className="flex items-center gap-1.5">
-                      <span className={cn("h-2 w-2 shrink-0 rounded-full", tone.dot)} aria-hidden />
-                      <span className="truncate text-xs font-semibold">{item.plate}</span>
-                      <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] font-bold text-primary">
-                        {item.slot}
+                    {/* Baris 1 — status + nopol, daftar slot bermasalah di kanan */}
+                    <div className="flex items-center gap-2">
+                      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", tone.dot)} aria-hidden />
+                      <span className="truncate text-sm font-semibold leading-none">
+                        {item.plate}
                       </span>
-                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground underline-offset-2 group-hover:underline">
-                        {item.info.inspectionDate}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 text-[11px] text-muted-foreground">
-                      <span className="tabular-nums">psi {item.info.pressurePsi ?? "—"}</span>
-                      <span className="tabular-nums">mm {item.info.treadDepthMm ?? "—"}</span>
-                      <span className={cn("font-medium", item.level === "action" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400")}>
-                        {item.info.condition ?? tone.label}
+                      <span
+                        className="ms-auto max-w-[48%] truncate shrink-0 font-mono text-[10px] font-medium leading-none text-muted-foreground"
+                        title={`Posisi bermasalah: ${slotText}`}
+                      >
+                        {slotText}
                       </span>
                     </div>
+                    {/* Baris 2 — alasan posisi terburuk unit ini */}
+                    <p className={cn("mt-2 text-[13px] font-medium leading-none", LEVEL_TEXT[item.worstLevel])}>
+                      {reason}
+                    </p>
+                    {/* Baris 3 — meta kecil: berapa posisi · kapan terakhir dicek */}
+                    <p className="mt-1.5 truncate text-[11px] leading-none text-muted-foreground">
+                      {meta}
+                    </p>
                   </button>
                 </li>
               );
             })}
           </ul>
+          {hiddenUnits > 0 && (
+            <p className="mt-2 text-center text-[11px] leading-none text-muted-foreground">
+              +{hiddenUnits} unit lainnya mengikuti urutan prioritas ini — tindak yang terburuk dulu
+            </p>
+          )}
         </section>
       )}
 

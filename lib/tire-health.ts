@@ -74,6 +74,35 @@ export function tireHealthLevel(
     return level
 }
 
+/**
+ * Alasan utama satu posisi masuk panel "Ban perlu tindakan" — satu kalimat
+ * singkat dengan angka terukurnya. Urutan sama dengan tingkat keparahan
+ * penilaian level: temuan terukur paling buruk dulu (psi < mm), lalu kondisi
+ * verbal driver. "Ok/none" → null (bukan alasan apa pun).
+ */
+export function tireIssueReason(
+    v: TireVitals | null | undefined,
+): string | null {
+    if (!v) return null
+    if (v.pressurePsi != null) {
+        if (v.pressurePsi < ACTION_PSI_LOW) return `Kempes — ${v.pressurePsi} psi`
+        if (v.pressurePsi >= ACTION_PSI_HIGH) return `Angin berlebih — ${v.pressurePsi} psi`
+    }
+    if (v.treadDepthMm != null && v.treadDepthMm <= ACTION_TREAD_MM) {
+        return `Tapak gundul — ${v.treadDepthMm} mm`
+    }
+    if (v.pressurePsi != null) {
+        if (v.pressurePsi < WARNING_PSI_LOW) return `Kurang angin — ${v.pressurePsi} psi`
+        if (v.pressurePsi >= WARNING_PSI_HIGH) return `Angin tinggi — ${v.pressurePsi} psi`
+    }
+    if (v.treadDepthMm != null && v.treadDepthMm <= WARNING_TREAD_MM) {
+        return `Tapak tipis — ${v.treadDepthMm} mm`
+    }
+    if (isBadCondition(v.condition)) return v.condition
+    if (isWarningCondition(v.condition)) return v.condition
+    return null
+}
+
 /** Prioritas urut panel: action(2) > warning(1) > ok/none(0). */
 export function tireHealthPriority(level: TireHealthLevel): number {
     if (level === "action") return 2
