@@ -63,6 +63,13 @@ export async function chatCompletion(opts: {
   maxTokens?: number
   /** Default 0.4: narasi analisa harus konsisten, bukan berimprovisasi. */
   temperature?: number
+  /**
+   * Batas waktu per panggilan; default 90 detik (ukuran khusus briefing).
+   * Chatbot analitik memanggil model 2-3 kali per pertanyaan, jadi dia
+   * memberi angka jauh lebih pendek supaya user tidak menunggu — dan
+   * yang tepat walau OpenKey gagal total tetap aman (maks 3x25s + Gemini).
+   */
+  timeoutMs?: number
 }): Promise<string> {
   const key = getApiKey()
   const max_tokens = opts.maxTokens ?? 800
@@ -98,7 +105,7 @@ export async function chatCompletion(opts: {
         // Gemini flash-lite — briefing yang keluar dangkal. Masih memakai
         // fallback dengan jendela Gemini tersendiri (AbortSignal di route),
         // sehingga user tak pernah ditahan lewat 110-120 detik.
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 90_000),
     })
   } catch (error) {
     if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
@@ -129,4 +136,29 @@ export async function chatCompletion(opts: {
   const text = body?.choices?.[0]?.message?.content?.trim()
   if (!text) throw new OpenKeyError("Layanan AI tidak mengembalikan jawaban.", "no_answer")
   return text
+}
+
+/**
+ * Prompt tunggal, antarmuka IDENTIK dengan `callGemini`.
+ *
+ * `lib/ai/gemini.ts` memakai ini supaya chatbot analitik bisa memilih
+ * provider saat runtime: OpenKey utama, Gemini cadangan. Prompt-nya
+ * sudah berisi semua instruksi (persona / skema / format JSON), jadi
+ * di sini cukup ditempel sebagai pesan user — system hanya pagar supaya
+ * portalnya membaca instruksi itu dengan serius.
+ */
+export async function callOpenKey(
+  prompt: string,
+  maxOutputTokens: number,
+  temperature: number,
+  timeoutMs?: number,
+): Promise<string> {
+  return chatCompletion({
+    system:
+      "Kamu asisten analitik dasbor armada trucking. Ikuti SEMUA instruksi di pesan berikut dengan persis, termasuk format balasannya.",
+    user: prompt,
+    maxTokens: maxOutputTokens,
+    temperature,
+    timeoutMs,
+  })
 }

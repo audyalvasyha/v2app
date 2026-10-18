@@ -1,4 +1,5 @@
 import { AI_SCHEMA_DOC } from "./schema"
+import { callOpenKey, OpenKeyError } from "./openkey"
 import {
   AI_PERSONA,
   buildHistoryBlock,
@@ -63,6 +64,71 @@ const FALLBACK_MODELS = [
   "gemini-flash-lite-latest",
   "gemini-3.7-flash",
 ]
+
+/**
+ * Batas waktu per panggilan OpenKey dari chatbot analitik.
+ *
+ * Satu pertanyaan bisa memanggil model 2-3 kali (SQL, percobaan ulang,
+ * narasi). Dengan 25 detik per panggilan, worst-case tetap jauh di
+ * bawah batas 90 detik yang dipakai briefing — dipilih khusus model
+ * reasoning lama, bukan untuk percakapan interaktif.
+ */
+const CHAT_TIMEOUT_OPENKEY_MS = 25_000
+
+/**
+ * Rantai prompt yang dipakai seluruh tahap chatbot: OpenKey UTAMA
+ * (kunci OPENKEY_API_KEY — berbayar, kuota jelas, tidak ikut paket
+ * gratis Google yang mudah habis), dengan Gemini sebagai cadangan
+ * otomatis.
+ *
+ * Pola ini sama dengan route /api/analisa/summary: provider utama
+ * gagal (kuota, rate limit, key ditolak, gantung/timeout) → tangan ke
+ * provider kedua dengan prompt identik. Hanya `no_answer` yang TIDAK
+ * di-switch: menyuru model lain menulis ulang jawaban yang sengaja
+ * dikosongkan hanya membuang kredit.
+ *
+ * Kalau OPENKEY_API_KEY belum diisi (mis. preview tanpa kunci), fungsi
+ * ini otomatis memakai Gemini persis seperti sebelumnya — degradasi
+ * aman, tidak ada jalur yang mati.
+ */
+export async function callAi(
+  prompt: string,
+  maxOutputTokens: number,
+  temperature: number,
+  /** Batas waktu yang disarankan untuk kaki OpenKey. */
+  timeoutMs?: number,
+): Promise<string> {
+  if (process.env.OPENKEY_API_KEY) {
+    try {
+      return await callOpenKey(prompt, maxOutputTokens, temperature, timeoutMs ?? CHAT_TIMEOUT_OPENKEY_MS)
+    } catch (error) {
+      const switchable = error instanceof OpenKeyError && error.kind !== "no_answer"
+      if (!switchable) throw asAiError(error)
+      console.error("[ai] OpenKey gagal, beralih ke Gemini:", error.message)
+    }
+  }
+  return callGemini(prompt, maxOutputTokens, temperature)
+}
+
+/**
+ * OpenKeyError ke AiError supaya klasifikasi status HTTP di route
+ * handler (config/auth/rate/no_answer) tetap konsisten di kedua
+ * provider. error bukan keduanya diperlakukan "unknown".
+ */
+function asAiError(error: unknown): AiError {
+  if (error instanceof AiError) return error
+  if (error instanceof OpenKeyError) {
+    const kind: AiError["kind"] =
+      error.kind === "config" ||
+      error.kind === "auth" ||
+      error.kind === "rate" ||
+      error.kind === "no_answer"
+        ? error.kind
+        : "unknown"
+    return new AiError(error.message, kind)
+  }
+  return new AiError("Tidak bisa menghubungi layanan AI. Coba lagi sebentar.", "unknown")
+}
 
 /** Error yang layak dicoba ulang: rate limit, kuota habis, atau model sibuk. */
 function isRetryableStatus(status: number, message: string): boolean {
@@ -432,7 +498,7 @@ async function answerChatQuestion(
   question: string,
   memories: string[],
 ): Promise<{ answer: string; remembered: string[] }> {
-  const raw = await callGemini(
+  const raw = await callAi(
     [
       AI_PERSONA,
       "",
@@ -524,10 +590,11 @@ export async function answerQuestion(
   let rows: Array<Record<string, unknown>> = []
 
   for (let attempt = 1; attempt <= MAX_SQL_ATTEMPTS; attempt++) {
-    const sqlResponse = await callGemini(
+    const sqlResponse = await callAi(
       buildSqlPrompt(question, historyBlock, failures),
       MAX_TOKENS_SQL,
       TEMPERATURE_SQL,
+      CHAT_TIMEOUT_OPENKEY_MS,
     )
 
     const parsed = extractJson<{ sql?: unknown; ringkasan?: unknown }>(sqlResponse)
@@ -618,7 +685,7 @@ export async function answerQuestion(
   // Prompt dirakit dengan array + join, bukan template literal: teksnya
   // panjang dan penuh kutip, jadi bentuknya lebih mudah diawasi dan tidak
   // ada backtick yang bisa menutup literal lebih awal.
-  const raw = await callGemini(
+  const raw = await callAi(
     [
       AI_PERSONA,
       "",
