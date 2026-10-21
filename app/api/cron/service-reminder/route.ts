@@ -35,7 +35,7 @@ const EQUIPMENT_COLS = "equipment_id,license_plate,last_odometer,status"
 const SERVICE_LOG_COLS =
     "equipment_id,service_date,next_service_date,next_service_odometer,odometer_at_service"
 
-const RECIPIENT_FALLBACK = "audialfasha@gmail.com"
+const RECIPIENT_FALLBACK = "audyal.vasyah@pekanbaru-dr.com"
 // Pengirim dari domain terverifikasi (transportbaganbatu.com) — bebas kirim
 // ke siapa pun. Pengirim test onboarding@resend.dev hanya boleh ke email
 // pemilik akun Resend dan menolak CC.
