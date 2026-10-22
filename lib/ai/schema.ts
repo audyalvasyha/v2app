@@ -56,9 +56,11 @@ Kamu menjawab pertanyaan user dalam BAHASA INDONESIA dengan angka dari database.
    lebih dari 24 jam memang bisa mengembalikan 0 baris — itu jawaban yang
    benar, bukan tanda query-nya salah.
 11. Kalau pertanyaannya bukan tentang data (sapaan, "siapa kamu", permintaan
-   perkenalan, atau fakta umum di luar armada/SKR), JANGAN membuat query
+   perkenalan, opini, atau fakta umum di luar armada), JANGAN membuat query
    sama sekali. Balas dengan "sql": "" dan jawaban singkatnya di "ringkasan".
-   Memaksakan query yang tidak nyambung hanya membuang kuota.
+   Jawaban itu TETAP disampaikan ke user — pertanyaan umum tidak ditolak,
+   hanya tidak dipusingkan dengan database. Memaksakan query yang tidak
+   nyambung justru membuang kuota.
 
 ## View ringkasan (WAJIB dipakai untuk agregasi — ini cara yang benar)
 
@@ -149,6 +151,27 @@ Jadwal servis.
   equipment_id | service_date (date) | next_service_date (date) |
   next_service_odometer | odometer_at_service
 
+### daily_tire_inspections
+Pemeriksaan ban harian dari app driver — satu baris per unit per tanggal.
+  id | equipment_id | inspection_date (date) | created_at (timestamptz)
+  equipment_id bisa berisi UUID id unit ATAU kode equipment_id — aplikasi
+  dashboard menerima keduanya, jadi join ke equipment pakai e.id dulu.
+
+### tire_check_details
+Detail per ban dalam satu pemeriksaan.
+  tire_position (text, format "FR - (Depan Kanan)" — kode slot di depan:
+  FL/FR/RL/RR/RLI/RLO/RRI/RRO/SP) | pressure_psi (numeric) |
+  tread_depth_mm (numeric) | condition (text verbal: "Bagus", "Tipis",
+  "Gundul") | driver_notes (text) | created_at (timestamptz)
+  BATAS SEHAT (pakai untuk menilai): tekanan normal 77–110 psi; < 68 kempes
+  (bahaya), < 77 kurang angin, >= 120 angin berlebih; tapak <= 2.0 mm gundul
+  (batas legal 1.6 mm), <= 4.0 mm tipis. Kata "gundul"/"aus"/"bocor" pada
+  condition tetap bahaya walau angkanya aman.
+  PENTING: kolom FK antara tire_check_details dan daily_tire_inspections
+  tidak terdokumentasi — JANGAN join kedua tabel itu. Pertanyaan per-posisi
+  ban cukup dijawab dari tire_check_details saja; pertanyaan "unit mana"
+  dijawab dari daily_tire_inspections + equipment.
+
 ### armada_outbound
 Pengiriman harian.
   freight_order | no_polisi | jam_out (TEXT) | jam_in (TEXT) | created_at (timestamptz)  PERINGATAN: jam_out dan jam_in bertipe TEXT, bukan timestamptz. Jangan
@@ -206,6 +229,20 @@ Pengiriman harian.
 → select e.license_plate, e.last_odometer, s.next_service_date
   from equipment e join service_logs s on s.equipment_id = e.equipment_id
   where s.next_service_date < current_date limit 20
+
+"ban mana yang perlu tindakan?"
+→ select tire_position, pressure_psi, tread_depth_mm, condition, created_at
+  from tire_check_details
+  where pressure_psi < 68 or tread_depth_mm <= 2
+     or condition ilike '%gundul%' or condition ilike '%aus%'
+  order by created_at desc limit 20
+
+"kapan terakhir unit ini diperiksa ban?"
+→ select i.inspection_date, e.license_plate
+  from daily_tire_inspections i join equipment e on e.id = i.equipment_id
+  order by i.inspection_date desc limit 20
+  (kalau join ini gagal karena tipe kolom, tulis ulang dengan
+   e.equipment_id = i.equipment_id — percobaan ulang diperbolehkan)
 `.trim()
 
 // Saran pertanyaan untuk UI ada di `schema-client.ts` supaya berkas

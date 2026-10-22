@@ -17,7 +17,7 @@
  */
 
 /** Nama + ID AppSheet app-nya (env publik: tersedia di browser client). */
-const APP_NAME = process.env.NEXT_PUBLIC_APPSHEET_APP_NAME ?? ""
+const APP_NAME = process.env.NEXT_PUBLIC_APPSHEET_APP_NAME ?? "";
 
 /**
  * Supabase menyimpan salah satu dari:
@@ -30,22 +30,27 @@ const APP_NAME = process.env.NEXT_PUBLIC_APPSHEET_APP_NAME ?? ""
  * Path di luar pola "_Images/" memakai fallback param `defaultTable`.
  */
 export function appsheetFileUrl(
-    path: unknown,
-    defaultTable = "tire_check_details",
+  path: unknown,
+  defaultTable = "tire_check_details",
 ): string | null {
-    const p = String(path ?? "").trim()
-    if (!p) return null
-    if (/^https?:\/\//i.test(p)) return p
-    if (!APP_NAME) return null // konfigurasi belum diisi → UI pakai placeholder
+  const p = String(path ?? "").trim();
+  if (!p) return null;
+  // Pass-through URL dibatasi https://: nilainya ditulis oleh sesi
+  // authenticated (app driver) dan dirender sebagai <img src>, jadi jangan
+  // menerima scheme lain apa pun bentuknya (data:/javascript:/blob:) —    //  bukan vektor XSS aktif pada <img>, tapi permukaan serangnya dipersempit ke nol.
+  // http:// di-upgrade ke https://: halaman berjalan di https sehingga
+  // http justru diblokir browser sebagai mixed content, tidak pernah tampil.
+  if (/^https?:\/\//i.test(p)) return p.replace(/^http:/i, "https:");
+  if (!APP_NAME) return null; // konfigurasi belum diisi → UI pakai placeholder
 
-    const match = /^([A-Za-z0-9_]+)_Images\//i.exec(p)
-    const tableName = match ? match[1] : defaultTable
-    const fileName = encodeURIComponent(p)
+  const match = /^([A-Za-z0-9_]+)_Images\//i.exec(p);
+  const tableName = match ? match[1] : defaultTable;
+  const fileName = encodeURIComponent(p);
 
-    return (
-        "https://www.appsheet.com/template/gettablefileurl" +
-        `?appName=${encodeURIComponent(APP_NAME)}` +
-        `&tableName=${encodeURIComponent(tableName)}` +
-        `&fileName=${fileName}`
-    )
+  return (
+    "https://www.appsheet.com/template/gettablefileurl" +
+    `?appName=${encodeURIComponent(APP_NAME)}` +
+    `&tableName=${encodeURIComponent(tableName)}` +
+    `&fileName=${fileName}`
+  );
 }

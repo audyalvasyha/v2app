@@ -13,6 +13,7 @@ import { AuthGate } from "@/components/auth-gate"
 import { AIChat } from "@/components/molecules/ai-chat"
 // Banner cuaca ringan (tanpa recharts) — statis supaya langsung tampil
 // sebagai elemen pertama dashboard tanpa menunggu chunk chart.
+// sebagai elemen pertama dashboard tanpa menunggu chunk chart.
 import { WeatherBanner } from "@/components/organisms/weather-banner"
 
 // Tiap menu dimuat sebagai chunk terpisah: chart (recharts ≈ 100 KB+) dan tabel
@@ -822,6 +823,7 @@ function DashboardContent() {
             skrRows={skrDetails}
             skrPrevRows={skrPrevMonth.length > 0 ? skrPrevMonth : skrDetails}
             outbounds={outbounds}
+            outboundWindow={outboundRange}
             isLoading={isLoading}
             error={error}
           />
@@ -835,7 +837,7 @@ function DashboardContent() {
 
       {/* Tanya data — hanya muncul setelah sesi terverifikasi lewat AuthGate,
           jadi tidak pernah bisa diakses pengunjung yang belum login. */}
-      <AIChat />
+      <AIChat activeView={activeView} />
     </DashboardLayout>
   )
 }

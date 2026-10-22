@@ -91,7 +91,9 @@ function RankBar({
             </ol>
 
             <div className="mt-4">
-                <ChartContainer config={config} className="h-[264px] w-full">
+                {/* Tinggi dikecilkan: kartu ini hanya konteks sekunder di bawah
+                    daftar peringkat bernomor — bukan papan utama */}
+                <ChartContainer config={config} className="h-[150px] w-full">
                     <BarChart
                         data={chartData}
                         layout="vertical"
@@ -126,7 +128,7 @@ function RankBar({
                                 />
                             }
                         />
-                        <Bar dataKey="cost" radius={[0, 6, 6, 0]} barSize={26}>
+                        <Bar dataKey="cost" radius={[0, 4, 4, 0]} barSize={16}>
                             {chartData.map((_, i) => (
                                 <Cell key={`cell-${i}`} fill={fillForIndex(i)} />
                             ))}

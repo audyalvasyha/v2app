@@ -1,32 +1,32 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 
-import { DateRangeField } from "@/components/molecules/date-range-field"
-import { SearchField } from "@/components/molecules/search-field"
-import { cn } from "@/lib/utils"
+import { DateRangeField } from "@/components/molecules/date-range-field";
+import { SearchField } from "@/components/molecules/search-field";
+import { cn } from "@/lib/utils";
 
 export interface FilterToolbarDate {
-    idPrefix: string
-    from: string
-    to: string
-    onApply: (from: string, to: string) => void
-    isFetching?: boolean
+  idPrefix: string;
+  from: string;
+  to: string;
+  onApply: (from: string, to: string) => void;
+  isFetching?: boolean;
 }
 
 export interface FilterToolbarSearch {
-    value: string
-    onChange: (value: string) => void
-    placeholder: string
-    hint?: React.ReactNode
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  hint?: React.ReactNode;
 }
 
 interface FilterToolbarProps {
-    date: FilterToolbarDate
-    search: FilterToolbarSearch
-    /** Tombol tambahan di kanan (mis. export CSV, select urutan) */
-    actions?: React.ReactNode
-    className?: string
+  date: FilterToolbarDate;
+  search: FilterToolbarSearch;
+  /** Tombol tambahan di kanan (mis. export CSV, select urutan) */
+  actions?: React.ReactNode;
+  className?: string;
 }
 
 /**
@@ -35,17 +35,37 @@ interface FilterToolbarProps {
  * lalu grup aksi di kanan. Dipakai SKR dan Pengiriman supaya susunannya
  * identik di kedua menu.
  */
-export function FilterToolbar({ date, search, actions, className }: FilterToolbarProps) {
-    return (
-        <div className={cn("flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between", className)}>
-            <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
-                <DateRangeField {...date} />
-                <SearchField {...search} className="lg:max-w-sm lg:flex-1" />
-            </div>
+export function FilterToolbar({
+  date,
+  search,
+  actions,
+  className,
+}: FilterToolbarProps) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between",
+        className,
+      )}
+    >
+      <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
+        <DateRangeField {...date} />
+        {/* Search boleh melebar (max-w-lg, bukan sm): kolom tengah
+                    biasanya punya banyak sisa ruang, dan kotak 24rem yang
+                    dipatok sempit memaksakan placeholder "Cari toko, plat,
+                    sales..." terpotong. Greedy-flex + batas atas lg supaya
+                    di layar lebar tidak melar melewati area aksi. */}
+        <SearchField
+          {...search}
+          className="lg:min-w-64 lg:max-w-lg lg:flex-1"
+        />
+      </div>
 
-            {actions ? (
-                <div className="flex flex-wrap items-center gap-2 xl:justify-end">{actions}</div>
-            ) : null}
+      {actions ? (
+        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+          {actions}
         </div>
-    )
+      ) : null}
+    </div>
+  );
 }

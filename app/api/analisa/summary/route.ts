@@ -98,6 +98,9 @@ interface SnapshotInput {
         trips: number
         perHari: number
         cakupanHari: number
+        spanHari: number
+        units: number
+        perUnitHari: number
     }
 }
 
@@ -160,6 +163,9 @@ function sanitize(snapshot: unknown): SnapshotInput | null {
             trips: num(s?.ritase?.trips) ?? 0,
             perHari: num(s?.ritase?.perHari) ?? 0,
             cakupanHari: num(s?.ritase?.cakupanHari) ?? 0,
+            spanHari: num(s?.ritase?.spanHari) ?? 0,
+            units: num(s?.ritase?.units) ?? 0,
+            perUnitHari: num(s?.ritase?.perUnitHari) ?? 0,
         },
     }
 }
@@ -189,9 +195,9 @@ function composeSummary(s: SnapshotInput): string {
             : `Sisa kiriman ${formatQty(s.skr.qty)} unit (Rp ${compactNilai(s.skr.nilai)}) — ${pct(s.skr.delta)} vs sebelumnya.`,
     )
     if (s.ritase.trips > 0) {
-        parts.push(`Ritase ${s.ritase.trips} trip dalam 30 hari (±${s.ritase.perHari.toFixed(1)}/hari, hari aktif ${s.ritase.cakupanHari.toFixed(0)}%).`)
+        parts.push(`Ritase ${s.ritase.trips} trip dalam jendela ${s.ritase.spanHari} hari (±${s.ritase.perHari.toFixed(1)}/hari, hari berkeberangkatan ${s.ritase.cakupanHari.toFixed(0)}%).`)
     } else {
-        parts.push("Tidak ada trip outbound terekam pada 30 hari terakhir.")
+        parts.push("Tidak ada trip outbound terekam pada jendela data yang dimuat.")
     }
     return parts.join(" ")
 }
@@ -222,7 +228,7 @@ function buildTabel(s: SnapshotInput, telaah: Partial<Record<string, string>>): 
     const rows: KpiRow[] = []
 
     rows.push({
-        kpi: "DC Cost Transport (proxy perbaikan)",
+        kpi: "Biaya Perbaikan Armada (servis)",
         nilai: `Rp ${compactNilai(s.biaya.cur)}`,
         pembanding: s.biaya.delta == null ? "—" : `Rp ${compactNilai(s.biaya.prev)}`,
         perubahan: s.biaya.delta == null ? "—" : pct(s.biaya.delta),
@@ -230,7 +236,7 @@ function buildTabel(s: SnapshotInput, telaah: Partial<Record<string, string>>): 
     })
     rows.push({
         kpi: "% Redelivery Qty",
-        nilai: s.redelivery.share == null ? "—" : `${s.redelivery.share.toFixed(1)}%`,
+        nilai: s.redelivery.share == null ? "—" : `${s.redelivery.share.toFixed(2)}%`,
         pembanding:
             s.redelivery.sharePrev == null ? "—" : `${s.redelivery.sharePrev.toFixed(1)}%`,
         perubahan:
@@ -248,8 +254,8 @@ function buildTabel(s: SnapshotInput, telaah: Partial<Record<string, string>>): 
     })
     rows.push({
         kpi: "Ritase",
-        nilai: `${s.ritase.trips} trip · ±${s.ritase.perHari.toFixed(1)}/hari`,
-        pembanding: `hari aktif ${s.ritase.cakupanHari.toFixed(0)}%`,
+        nilai: `${s.ritase.perUnitHari.toFixed(2)} trip/unit/hari · ${s.ritase.trips} trip, ${s.ritase.units} unit`,
+        pembanding: `target ≥ 1,1 · hari berkeberangkatan ${s.ritase.cakupanHari.toFixed(0)}% dari ${s.ritase.spanHari} hari`,
         perubahan: "—",
         status: status.ritase,            telaah: telaah.ritase?.trim() || "—",
     })
@@ -258,9 +264,23 @@ function buildTabel(s: SnapshotInput, telaah: Partial<Record<string, string>>): 
 
 const SYSTEM_PROMPT = [
     "Kamu adalah Head of Transport di Wings, perusahaan FMCG besar Indonesia.",
-    "Kamu bertanggung jawab atas kesiapan armada DC, keandalan pengiriman outbound,",
-    "biaya transport, dan sisa kiriman (SKR). Kamu menulis briefing pagi ke tim",
-    "transport & distribution — bukan laporan untuk bank dan bukan pidato resmi.",
+    "Kamu bertanggung jawab atas kesiapan armada, keandalan pengiriman outbound",
+    "(SLA/redelivery), biaya pemeliharaan armada, ritase, dan sisa kiriman (SKR).",
+    "Kamu menulis briefing pagi ke tim transport & distribution — bukan laporan",
+    "untuk bank dan bukan pidato resmi.",
+    "",
+    "Matriks KPI RESMI yang kamu ukur (bobot · target · arah baik):",
+    "- %OFR 5% · ≥85% · makin tinggi makin baik (data order fulfilment belum tersedia)",
+    "- Loss DC Outbound Operation 10% · ≤0,90% (belum tersedia)",
+    "- %SKR Qty 5% · ≤0,13% (qty tercatat ada; % perlu total kirim BI)",
+    "- %Redelivery Qty 5% · ≤0,25% (share dari qty SKR tercatat)",
+    "- % OFR TKG Loss Limited · ≥97% (belum tersedia)",
+    "- DT Scan In Toko 20% · ≤1,1 hari (belum tersedia)",
+    "- Ritase 10% · ≥1,1 trip/unit/hari — dihitung dari snapshot",
+    "- M3/Shipment 20% · ≥9,90 (belum tersedia)",
+    "- %VSO · ≥85% (belum tersedia)",
+    "- DC Cost Transport · ≤4% (belum tersedia)",
+    "- % Turnover Mitra Kerja - Delman 10% · ≤25% (belum tersedia)",
     "",
     "Cara bicara:",
     "- Bahasa Indonesia profesional-operasional: tajam, langsung, tegas.",
@@ -268,13 +288,22 @@ const SYSTEM_PROMPT = [
     "- Setiap klaim WAJIB berangkal dari angka di data yang diberikan.",
     "- JANGAN mengarang angka. Jika data bertanda belum ada pembanding atau '—',",
     "  sebut jujur datanya belum memadai — jangan isi dengan perkiraan.",
+    "- KPI resmi yang datanya belum tersedia (%OFR, Loss DC, %SKR persen,",
+    "  DT Scan, M3/Shipment, %VSO, DC Cost %, Turnover) JANGAN dibandingkan",
+    "  dengan targetnya — tinggal diteleah dari sisi yang bisa tanpa angka.",
     "- JANGAN pakai kata 'Berikut', 'Kesimpulan', 'Analisis saya', atau sejenisnya.",
     "",
     "Cara menganalisis (yang membuatmu tajam):",
     "- Bukan mengulang angka, tapi menjelaskan MENGAPA angkanya begitu",
     "  (penyebab operasional yang masuk akal untuk FMCG: redelivery karena alamat/",
-    "  jadwal toko, SKR macet karena settle lambat, biaya naik karena unit boros)",
-    "  dan DAMPAKNYA ke bisnis (biaya per kiriman, uang kerja macet, SLA toko).",
+    "  jadwal toko, SKR macet karena settle lambat, biaya perbaikan naik karena",
+    "  unit boros atau kerusakan berulang) dan DAMPAKNYA ke bisnis (kesiapan",
+    "  armada, uang kerja macet, SLA toko).",
+    "- LARANGAN istilah: data yang tersedia BIAYA PERBAIKAN/servis armada,",
+    "  BUKAN biaya pengiriman. Jangan menyebutnya 'biaya transport' atau",
+    "  'cost per kiriman' — analisisnya ke arah kesehatan armada.",
+    "- Hari tanpa keberangkatan BUKAN bukti armada idle: bisa operasi berhenti,",
+    "  bisa pencatatan yang bolong. Sebutkan kedua kemungkinan itu, jangan pilih satu.",
     "- Kalau penyebab tidak bisa dipastikan dari data, tulis sebagai dugaan",
     "  yang eksplisit ('indikasinya…', 'kemungkinan karena…') — bukan sebagai fakta.",
     "",
@@ -282,7 +311,7 @@ const SYSTEM_PROMPT = [
     "{",
     '  "ringkasan": "<2-3 kalimat pembuka: kondisi umum + arah tren, sebut angka kunci>",',
     '  "telaah": {',
-    '    "biaya": "<1-2 kalimat analisis tajam DC Cost Transport>",',
+    '    "biaya": "<1-2 kalimat analisis tajam biaya perbaikan armada>",',
     '    "redelivery": "<1-2 kalimat analisis tajam %Redelivery Qty>",',
     '    "skr": "<1-2 kalimat analisis tajam sisa kiriman>",',
     '    "ritase": "<1-2 kalimat analisis tajam ritase/hari>"',
@@ -406,18 +435,18 @@ export async function POST(request: Request) {
     const dataLines: string[] = [
         "Data KPI snapshot (sudah dihitung dari database — angka ini FAKTA, jangan ubah):",
         "",
-        "| KPI | 30 hari terakhir | 30 hari sebelumnya | Perubahan |",
+        "| KPI | Jendela data | Periode sebelumnya | Perubahan |",
         "|---|---|---|---|",
         safe.biaya.delta == null
-            ? `| Biaya perbaikan (proxy DC Cost Transport) | Rp ${safe.biaya.cur} | belum ada pembanding | — |`
-            : `| Biaya perbaikan (proxy DC Cost Transport) | Rp ${safe.biaya.cur} | Rp ${safe.biaya.prev} | ${safe.biaya.delta >= 0 ? "+" : ""}${safe.biaya.delta.toFixed(1)}% |`,
+            ? `| Biaya perbaikan armada (servis) | Rp ${safe.biaya.cur} | belum ada pembanding | — |`
+            : `| Biaya perbaikan armada (servis) | Rp ${safe.biaya.cur} | Rp ${safe.biaya.prev} | ${safe.biaya.delta >= 0 ? "+" : ""}${safe.biaya.delta.toFixed(1)}% |`,
         safe.redelivery.share == null
             ? `| %Redelivery Qty | tidak ada data | — | — |`
-            : `| %Redelivery Qty | ${safe.redelivery.share.toFixed(1)}% (${safe.redelivery.qty} dari ${safe.redelivery.totalQty} qty) | ${safe.redelivery.sharePrev != null ? safe.redelivery.sharePrev.toFixed(1) + "%" : "—"} | — |`,
+            : `| %Redelivery Qty | ${safe.redelivery.share.toFixed(2)}% (${safe.redelivery.qty} dari ${safe.redelivery.totalQty} qty) | ${safe.redelivery.sharePrev != null ? safe.redelivery.sharePrev.toFixed(2) + "%" : "—"} | target ≤ 0,25% |`,
         safe.skr.delta == null
-            ? `| Sisa kiriman (SKR Qty) | ${safe.skr.qty} unit, nilai Rp ${safe.skr.nilai} | belum ada pembanding | — |`
-            : `| Sisa kiriman (SKR Qty) | ${safe.skr.qty} unit, nilai Rp ${safe.skr.nilai} | ${safe.skr.qtyPrev} unit | ${safe.skr.delta >= 0 ? "+" : ""}${safe.skr.delta.toFixed(1)}% |`,
-        `| Ritase | ${safe.ritase.trips} trip (±${safe.ritase.perHari.toFixed(1)}/hari), hari aktif ${safe.ritase.cakupanHari.toFixed(0)}% | — | — |`,
+            ? `| Sisa kiriman (SKR Qty) | ${safe.skr.qty} unit, nilai Rp ${safe.skr.nilai} | belum ada pembanding | % resmi perlu total kirim BI |`
+            : `| Sisa kiriman (SKR Qty) | ${safe.skr.qty} unit, nilai Rp ${safe.skr.nilai} | ${safe.skr.qtyPrev} unit | ${safe.skr.delta >= 0 ? "+" : ""}${safe.skr.delta.toFixed(1)}% · % resmi perlu total kirim BI |`,
+        `| Ritase (trip/unit/hari) | ${safe.ritase.perUnitHari.toFixed(2)} · ${safe.ritase.trips} trip, ${safe.ritase.units} unit, hari berkeberangkatan ${safe.ritase.cakupanHari.toFixed(0)}% dari ${safe.ritase.spanHari} hari | target ≥ 1,1 | — |`,
     ]
     if (safe.skr.topReason) {
         dataLines.push(`Catatan: alasan POD qty terbanyak adalah "${safe.skr.topReason[0]}".`)
@@ -427,7 +456,7 @@ export async function POST(request: Request) {
             `Biaya perbaikan terbesar per unit: ${safe.biaya.top.map(([p, v]) => `${p} (Rp ${v})`).join(", ")}.`,
         )
     }
-    dataLines.push("Catatan: biaya memakai catatan perbaikan sebagai proxy DC Cost Transport (belum termasuk BBM & jasa mitra).")
+    dataLines.push("Catatan: yang tersedia adalah biaya perbaikan/servis armada — BUKAN biaya pengiriman (BBM/tol/jasa mitra tidak ada di app).")
     dataLines.push("Catatan: %SKR Qty belum dihitung — total qty kirim belum tersedia di app (menunggu data dari BI), jadi yang tersedia SKR Qty absolut.")
 
     const userPrompt = dataLines.join("\n")

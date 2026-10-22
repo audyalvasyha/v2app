@@ -734,17 +734,6 @@ function CustomerDetailCard({
     const totalQty = items.reduce((s, c) => s + c.qty, 0)
     const totalNilai = items.reduce((s, c) => s + c.nilai, 0)
 
-    // Hitung batas nilai maksimum agar progress bar persentase berjalan dengan benar
-    const maxQty = useMemo(() => {
-        if (!items || items.length === 0) return 1
-        return Math.max(...items.map((c) => c.qty ?? 0), 1)
-    }, [items])
-
-    const maxNilai = useMemo(() => {
-        if (!items || items.length === 0) return 1
-        return Math.max(...items.map((c) => c.nilai ?? 0), 1)
-    }, [items])
-
     const lastPodByKey = useMemo(() => {
         const map = new Map<string, string>()
         for (const row of details) {
@@ -820,23 +809,6 @@ function CustomerDetailCard({
                                         {" · "}
                                         {c.armada} armada
                                         {lastPod ? ` · ${isoToTanggal(lastPod)}` : ""}
-                                    </span>
-                                </span>
-                                <span
-                                    className="hidden w-16 shrink-0 items-center md:flex"
-                                    title={metric === "qty" ? formatQty(c.qty) : formatNilai(c.nilai)}
-                                >
-                                    <span className="h-1 w-full overflow-hidden rounded-full bg-muted/60">
-                                        <span
-                                            className="block h-full rounded-full bg-primary/70"
-                                            style={{
-                                                width: `${Math.round(
-                                                    ((metric === "qty" ? c.qty : c.nilai) /
-                                                        ((metric === "qty" ? maxQty : maxNilai) || 1)) *
-                                                    100,
-                                                )}%`,
-                                            }}
-                                        />
                                     </span>
                                 </span>
                                 <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums">

@@ -9,75 +9,97 @@
  * Cache 60 detik: data traffic berubah cepat, tapi cukup lama supaya
  * pan/zoom satu halaman tidak membakar kuota (tiap tile = 1 call).
  */
-import { NextResponse } from "next/server"
-import { hasTomTomKey } from "@/lib/tomtom/config"
+import { NextResponse } from "next/server";
+import { hasTomTomKey } from "@/lib/tomtom/config";
+import { clientIpOf, withinIpLimit } from "@/lib/rate-limit";
 
-export const runtime = "nodejs"
+export const runtime = "nodejs";
+
+// Lapisan batas laju per IP — endpoint ini publik dan tiap tile yang
+// lewat cache-nya berarti SATU panggilan TomTom berkuota. Tanpa lapisan
+// ini, satu bot pengunduh tile bisa menguras kuota hari-an dalam menit.
+const TILE_LIMIT = 240; // tile per menit per IP — jauh di atas loncat/zoom satu halaman
 
 const STYLES = new Set([
-    "relative0",
-    "relative0-dark",
-    "relative",
-    "relative-delay",
-    "absolute",
-    "reduced-sensitivity",
-])
+  "relative0",
+  "relative0-dark",
+  "relative",
+  "relative-delay",
+  "absolute",
+  "reduced-sensitivity",
+]);
 
 interface TileParams {
-    params: Promise<{ style: string; z: string; x: string; y: string }>
+  params: Promise<{ style: string; z: string; x: string; y: string }>;
 }
 
-export async function GET(_req: Request, ctx: TileParams) {
-    const { style, z, x, y } = await ctx.params
+export async function GET(req: Request, ctx: TileParams) {
+  if (!withinIpLimit(clientIpOf(req), TILE_LIMIT, 60_000)) {
+    return new NextResponse("Terlalu banyak request", {
+      status: 429,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
 
-    if (!hasTomTomKey() || !STYLES.has(style)) {
-        return new NextResponse("Not found", { status: 404 })
-    }
-    const yFile = y.replace(/\.png$/i, "")
-    if (!/^\d+$/.test(z) || !/^\d+$/.test(x) || !/^\d+$/.test(yFile)) {
-        return new NextResponse("Not found", { status: 404 })
-    }
-    // Batas koordinat tile Web Mercator yang valid. Tanpa ini, angka
-    // sampah (mis. z=999) lolos regex lalu tetap memicu satu panggilan
-    // upstream TomTom hanya untuk dibalas 404 — jalur kecil untuk
-    // membakar kuota dengan request yang tahu pasti tidak valid.
-    const zi = Number(z)
-    const xi = Number(x)
-    const yi = Number(yFile)
-    if (zi > 22 || xi >= 2 ** zi || yi >= 2 ** zi) {
-        return new NextResponse("Not found", { status: 404 })
-    }
+  const { style, z, x, y } = await ctx.params;
 
-    const key = process.env.TOMTOM_API_KEY ?? ""
-    const url = `https://api.tomtom.com/traffic/map/4/tile/flow/${style}/${z}/${x}/${yFile}.png?key=${encodeURIComponent(key)}`
+  if (!hasTomTomKey() || !STYLES.has(style)) {
+    return new NextResponse("Not found", { status: 404 });
+  }
+  const yFile = y.replace(/\.png$/i, "");
+  if (!/^\d+$/.test(z) || !/^\d+$/.test(x) || !/^\d+$/.test(yFile)) {
+    return new NextResponse("Not found", { status: 404 });
+  }
+  // Batas koordinat tile Web Mercator yang valid. Tanpa ini, angka
+  // sampah (mis. z=999) lolos regex lalu tetap memicu satu panggilan
+  // upstream TomTom hanya untuk dibalas 404 — jalur kecil untuk
+  // membakar kuota dengan request yang tahu pasti tidak valid.
+  const zi = Number(z);
+  const xi = Number(x);
+  const yi = Number(yFile);
+  if (zi > 22 || xi >= 2 ** zi || yi >= 2 ** zi) {
+    return new NextResponse("Not found", { status: 404 });
+  }
 
-    try {
-        const upstream = await fetch(url, { signal: AbortSignal.timeout(10_000) })
-        const ctype = upstream.headers.get("content-type") ?? ""
-        if (!upstream.ok || !ctype.includes("image")) {
-            // PENTING: 401/403/429 (key ditolak / kuota habis) TIDAK boleh
-            // dikonversi jadi 502 dengan cache panjang — cukup 503 dengan
-            // no-store supaya browser tidak menyimpan respons ini dan layer
-            // overlay otomatis jadi kosong (transparan), bukan gambar error.
-            const retryable = upstream.status === 401 || upstream.status === 403 || upstream.status === 429
-            return new NextResponse(JSON.stringify({ error: "traffic_tile_unavailable", status: upstream.status }), {
-                status: retryable ? 503 : 502,
-                headers: {
-                    "Content-Type": "application/json",
-                    "Cache-Control": "no-store",
-                },
-            })
-        }
-        const body = await upstream.arrayBuffer()
-        return new NextResponse(body, {
-            status: 200,
-            headers: {
-                "Content-Type": "image/png",
-                // 60 detik: data live, tapi aman untuk pan/zoom dalam satu sesi.
-                "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
-            },
-        })
-    } catch {
-        return new NextResponse("Upstream timeout", { status: 504 })
+  const key = process.env.TOMTOM_API_KEY ?? "";
+  const url = `https://api.tomtom.com/traffic/map/4/tile/flow/${style}/${z}/${x}/${yFile}.png?key=${encodeURIComponent(key)}`;
+
+  try {
+    const upstream = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    const ctype = upstream.headers.get("content-type") ?? "";
+    if (!upstream.ok || !ctype.includes("image")) {
+      // PENTING: 401/403/429 (key ditolak / kuota habis) TIDAK boleh
+      // dikonversi jadi 502 dengan cache panjang — cukup 503 dengan
+      // no-store supaya browser tidak menyimpan respons ini dan layer
+      // overlay otomatis jadi kosong (transparan), bukan gambar error.
+      const retryable =
+        upstream.status === 401 ||
+        upstream.status === 403 ||
+        upstream.status === 429;
+      return new NextResponse(
+        JSON.stringify({
+          error: "traffic_tile_unavailable",
+          status: upstream.status,
+        }),
+        {
+          status: retryable ? 503 : 502,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          },
+        },
+      );
     }
+    const body = await upstream.arrayBuffer();
+    return new NextResponse(body, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        // 60 detik: data live, tapi aman untuk pan/zoom dalam satu sesi.
+        "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+      },
+    });
+  } catch {
+    return new NextResponse("Upstream timeout", { status: 504 });
+  }
 }

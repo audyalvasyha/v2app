@@ -247,29 +247,12 @@ export async function POST(request: Request) {
       ...forced,
     ]);
 
-    // --- TAMBAHKAN LOGIC PEMBERSIHAN DI SINI ---
-    let finalAnswer = result.answer;
-    try {
-      // Menghilangkan backtick ```json dan ``` jika AI menambahkannya
-      const cleanedText = result.answer
-        .replace(/```json/gi, "")
-        .replace(/```/g, "")
-        .trim();
-      const parsed = JSON.parse(cleanedText);
-      // Jika hasil parse punya property "jawaban", gunakan itu
-      if (parsed && parsed.jawaban) {
-        finalAnswer = parsed.jawaban;
-      }
-    } catch {
-      // Abaikan error jika ternyata AI tidak mengirim JSON (biarkan finalAnswer apa adanya)
-    }
-    // -------------------------------------------
-
     return NextResponse.json({
       sql: result.sql,
       rows: result.rows,
-      answer: finalAnswer, // <-- Ubah result.answer menjadi finalAnswer
+      answer: result.answer,
       remembered: saved.map((item) => item.content),
+      saran: result.saran ?? [],
     });
   } catch (error) {
     if (error instanceof AiError) {

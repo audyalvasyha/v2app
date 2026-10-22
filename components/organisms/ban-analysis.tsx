@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { motion, type Variants } from "framer-motion";
 import {
   CalendarCheck,
   CircleCheck,
@@ -60,15 +61,25 @@ import type { TireCheckCsvRow } from "@/lib/tire-health";
  */
 export interface BanAnalysisProps {
   /** Seluruh riwayat perbaikan (sudah termasuk kolom uraian & jumlah_harga). */
-  histories: any[]
+  histories: any[];
   /** Inventaris unit dari tabel `equipment` — sumber dropdown nopol & type_vehicle. */
-  equipments: any[]
-  isLoading: boolean
-  error: string | null
+  equipments: any[];
+  isLoading: boolean;
+  error: string | null;
 }
 
 /** Kode posisi ban yang dikenali peta. */
-const VALID_SLOTS = new Set(["FL", "FR", "RL", "RR", "SP", "RLI", "RLO", "RRI", "RRO"]);
+const VALID_SLOTS = new Set([
+  "FL",
+  "FR",
+  "RL",
+  "RR",
+  "SP",
+  "RLI",
+  "RLO",
+  "RRI",
+  "RRO",
+]);
 
 /** "FR - (Depan Kanan)" → "FR"; null bila kode tidak dikenali peta. */
 function normalizePosition(raw: unknown): string | null {
@@ -94,7 +105,9 @@ function storagePublicUrl(path: unknown): string | null {
 
 /** Plat tanpa spasi + huruf besar, agar cocok dengan kunci peta. */
 function normPlate(p: unknown): string {
-  return String(p ?? "").replace(/\s+/g, "").toUpperCase();
+  return String(p ?? "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
 }
 
 /** Bulatkan ke 1 desimal — Δ psi/mm tidak butuh presisi lebih. */
@@ -150,7 +163,7 @@ interface TireActionItem {
   lastInspected: string | null;
 }
 
-  /** Warna teks level — dipakai pada baris alasan utama tiap butir. */
+/** Warna teks level — dipakai pada baris alasan utama tiap butir. */
 const LEVEL_TEXT: Record<TireHealthLevel, string> = {
   action: "text-red-600 dark:text-red-400",
   warning: "text-amber-600 dark:text-amber-500",
@@ -158,7 +171,40 @@ const LEVEL_TEXT: Record<TireHealthLevel, string> = {
   none: "text-muted-foreground",
 };
 
-export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnalysisProps) {
+/**
+ * Framer Motion — entrance halus untuk Analisa Ban.
+ *
+ * Container: stagger antar anak; item: fade + naik dari bawah. Gaya ini
+ * dipakai bersama oleh deretan StatTile, panel "Ban perlu tindakan", dan
+ * peta supaya halaman terasa sebagai satu gerakan, bukan tiga animasi
+ * yang berbeda pacing.
+ *
+ * PENTING: hanya entrance + fade — tidak ada whileHover/lift karena baris
+ * kartu tindakan sudah punya hover CSS sendiri (translate + shadow), dan
+ * dua sistem transform akan saling menimpa.
+ */
+const panelContainer: Variants = {
+  hidden: {},
+  show: {
+    transition: { staggerChildren: 0.06, delayChildren: 0.05 },
+  },
+};
+
+const riseIn: Variants = {
+  hidden: { opacity: 0, y: 10 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.35, ease: "easeOut" },
+  },
+};
+
+export function BanAnalysis({
+  histories,
+  equipments,
+  isLoading,
+  error,
+}: BanAnalysisProps) {
   const [inspections, setInspections] = useState<InspectionRow[]>([]);
   const [tireError, setTireError] = useState<string | null>(null);
   const [isLoadingTire, setIsLoadingTire] = useState(true);
@@ -200,8 +246,10 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
     for (const eq of equipments ?? []) {
       const plate = String(eq?.license_plate ?? "").trim();
       if (!plate) continue;
-      if (eq?.id != null && !map.has(String(eq.id))) map.set(String(eq.id), plate);
-      if (eq?.equipment_id != null && !map.has(String(eq.equipment_id))) map.set(String(eq.equipment_id), plate);
+      if (eq?.id != null && !map.has(String(eq.id)))
+        map.set(String(eq.id), plate);
+      if (eq?.equipment_id != null && !map.has(String(eq.equipment_id)))
+        map.set(String(eq.equipment_id), plate);
     }
     return map;
   }, [equipments]);
@@ -296,9 +344,13 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
             createdAt: cur.createdAt,
             info: cur.info,
             deltaPsi:
-              prev?.psi != null && cur.psi != null ? round1(cur.psi - prev.psi) : null,
+              prev?.psi != null && cur.psi != null
+                ? round1(cur.psi - prev.psi)
+                : null,
             deltaMm:
-              prev?.mm != null && cur.mm != null ? round1(cur.mm - prev.mm) : null,
+              prev?.mm != null && cur.mm != null
+                ? round1(cur.mm - prev.mm)
+                : null,
           });
         }
         entries.reverse();
@@ -324,13 +376,18 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
         const level = tireHealthLevel(info);
         if (level === "ok" || level === "none") continue;
         issues.push({ slot, level, info });
-        if (info.inspectionDate && (!lastInspected || info.inspectionDate > lastInspected)) {
+        if (
+          info.inspectionDate &&
+          (!lastInspected || info.inspectionDate > lastInspected)
+        ) {
           lastInspected = info.inspectionDate;
         }
       }
       if (issues.length === 0) continue;
       // Urutan issues: terburuk (action) dulu — elemen pertama = terburuk.
-      issues.sort((a, b) => tireHealthPriority(b.level) - tireHealthPriority(a.level));
+      issues.sort(
+        (a, b) => tireHealthPriority(b.level) - tireHealthPriority(a.level),
+      );
       byPlate.set(plateKey, {
         plateKey,
         plate: plateByNorm.get(plateKey) ?? plateKey,
@@ -343,16 +400,22 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
       (a, b) =>
         tireHealthPriority(b.worstLevel) - tireHealthPriority(a.worstLevel) ||
         b.issues.length - a.issues.length ||
-        String(b.lastInspected ?? "").localeCompare(String(a.lastInspected ?? "")) ||
+        String(b.lastInspected ?? "").localeCompare(
+          String(a.lastInspected ?? ""),
+        ) ||
         a.plate.localeCompare(b.plate),
     );
   }, [checksByPlate, plateByNorm]);
 
   const summary = useMemo(() => {
     let positions = 0;
-    for (const slots of Object.values(checksByPlate)) positions += Object.keys(slots).length;
+    for (const slots of Object.values(checksByPlate))
+      positions += Object.keys(slots).length;
     const latestDate = inspections.reduce<string | null>(
-      (acc, i) => (i?.inspection_date && (!acc || i.inspection_date > acc) ? i.inspection_date : acc),
+      (acc, i) =>
+        i?.inspection_date && (!acc || i.inspection_date > acc)
+          ? i.inspection_date
+          : acc,
       null,
     );
     return { units: Object.keys(checksByPlate).length, positions, latestDate };
@@ -362,7 +425,8 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
   const exportInspectionsCsv = () => {
     const rows: TireCheckCsvRow[] = [];
     for (const insp of inspections) {
-      const plate = plateByEquipmentKey.get(String(insp?.equipment_id ?? "")) ?? "";
+      const plate =
+        plateByEquipmentKey.get(String(insp?.equipment_id ?? "")) ?? "";
       for (const tc of insp?.tire_check_details ?? []) {
         const condition = tc?.condition?.trim() || "";
         const pressurePsi = toFiniteNumber(tc?.pressure_psi);
@@ -382,7 +446,9 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
     }
     rows.sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
     // BOM supaya Excel membaca UTF-8 (catatan driver bisa berisi koma/petik).
-    const blob = new Blob(["\uFEFF", tireChecksCsv(rows)], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["\uFEFF", tireChecksCsv(rows)], {
+      type: "text/csv;charset=utf-8",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -399,24 +465,28 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
   const warningCount =
     actionItems.reduce((n, u) => n + u.issues.length, 0) - actionCount;
   /** Hitungan unit — untuk badge panel (satu kartu = satu unit). */
-  const actionUnits = actionItems.filter((u) => u.worstLevel === "action").length;
+  const actionUnits = actionItems.filter(
+    (u) => u.worstLevel === "action",
+  ).length;
   const warningUnits = actionItems.length - actionUnits;
   /**
-   * Panel menampilkan unit terburuk saja; sisanya jadi ringkasan "+N unit
-   * lainnya" supaya daftar tidak menumpuk saat semua 27 mobil bermasalah.
+   * Panel daftar SEMUA unit bermasalah sebagai baris rapat dalam area
+   * scroll — bukan grid kartu yang terpotong. Bila semua 27 mobil
+   * bermasalah, panel tingginya tetap: user scroll, peta tidak tertendang
+   * ke bawah halaman.
    */
-  const MAX_SHOWN_UNITS = 8;
-  const visibleUnits = actionItems.slice(0, MAX_SHOWN_UNITS);
-  const hiddenUnits = actionItems.length - visibleUnits.length;
 
   return (
     <div className="space-y-4">
       {/* Kepala menu + tombol export — selalu tampil apapun status data */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold leading-tight">Analisa Ban Harian</h2>
+          <h2 className="text-base font-semibold leading-tight">
+            Analisa Ban Harian
+          </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Hasil pemeriksaan ban dari app driver — tekanan, ketebalan, kondisi, dan foto tiap posisi.
+            Hasil pemeriksaan ban dari app driver — tekanan, ketebalan, kondisi,
+            dan foto tiap posisi.
           </p>
         </div>
         <Button
@@ -434,64 +504,112 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
       {/* Status data: gagal / memuat / kosong / ringkasan berhitung */}
       {tireError ? (
         <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3">
-          <p className="text-sm font-medium text-destructive">Gagal memuat data pemeriksaan ban</p>
+          <p className="text-sm font-medium text-destructive">
+            Gagal memuat data pemeriksaan ban
+          </p>
           <p className="mt-0.5 text-xs text-muted-foreground">{tireError}</p>
         </div>
       ) : isLoadingTire && inspections.length === 0 ? (
         /* Skeleton dengan tinggi meniru StatTile supaya tidak lompat saat data masuk. */
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div
+          variants={panelContainer}
+          initial="hidden"
+          animate="show"
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        >
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="rounded-xl border bg-card px-4 py-3 shadow-sm">
+            <motion.div
+              key={i}
+              variants={riseIn}
+              className="rounded-xl border bg-card px-4 py-3 shadow-sm"
+            >
               <div className="h-3 w-20 animate-pulse rounded bg-muted" />
               <div className="mt-2 h-5 w-16 animate-pulse rounded bg-muted" />
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       ) : inspections.length === 0 ? (
         <div className="flex items-center gap-3 rounded-xl border border-dashed border-border/60 bg-muted/30 px-4 py-6">
-          <CircleCheck className="h-5 w-5 shrink-0 text-muted-foreground/60" aria-hidden />
+          <CircleCheck
+            className="h-5 w-5 shrink-0 text-muted-foreground/60"
+            aria-hidden
+          />
           <p className="text-sm text-muted-foreground">
-            Belum ada pemeriksaan ban harian — hasil cek dari app driver akan muncul di sini.
+            Belum ada pemeriksaan ban harian — hasil cek dari app driver akan
+            muncul di sini.
           </p>
         </div>
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <StatTile
-            icon={<Truck className="h-3.5 w-3.5" aria-hidden />}
-            label="Unit terdata"
-            value={String(summary.units)}
-          />
-          <StatTile
-            icon={<CircleCheck className="h-3.5 w-3.5" aria-hidden />}
-            label="Posisi ban"
-            value={String(summary.positions)}
-          />
-          <StatTile
-            icon={<CalendarCheck className="h-3.5 w-3.5" aria-hidden />}
-            label="Terakhir diperiksa"
-            value={summary.latestDate ?? "—"}
-          />
-          <StatTile
-            emphasis={actionItems.length > 0}
-            icon={<TriangleAlert className="h-3.5 w-3.5" aria-hidden />}
-            label="Unit bermasalah"
-            value={String(actionItems.length)}
-            hint={
-              actionCount > 0 && warningCount > 0
-                ? `${actionCount} posisi tindakan · ${warningCount} waspada`
-                : actionCount > 0
-                  ? `${actionCount} posisi perlu tindakan`
-                  : warningCount > 0
-                    ? `${warningCount} posisi waspada`
-                    : "semua ban aman"
-            }
-          />
-        </div>
+        <motion.div
+          variants={panelContainer}
+          initial="hidden"
+          animate="show"
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          <motion.div variants={riseIn}>
+            <StatTile
+              icon={<Truck className="h-3.5 w-3.5" aria-hidden />}
+              label="Unit terdata"
+              value={String(summary.units)}
+            />
+          </motion.div>
+          <motion.div variants={riseIn}>
+            <StatTile
+              icon={<CircleCheck className="h-3.5 w-3.5" aria-hidden />}
+              label="Posisi ban"
+              value={String(summary.positions)}
+            />
+          </motion.div>
+          <motion.div variants={riseIn}>
+            <StatTile
+              icon={<CalendarCheck className="h-3.5 w-3.5" aria-hidden />}
+              label="Terakhir diperiksa"
+              value={summary.latestDate ?? "—"}
+            />
+          </motion.div>
+          <motion.div variants={riseIn}>
+            <StatTile
+              className={
+                actionItems.length > 0
+                  ? "border-destructive/25 bg-destructive/[0.03]"
+                  : undefined
+              }
+              emphasis={actionItems.length > 0}
+              icon={
+                <TriangleAlert
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    actionItems.length > 0
+                      ? "text-destructive"
+                      : "text-muted-foreground",
+                  )}
+                  aria-hidden
+                />
+              }
+              label="Unit bermasalah"
+              value={String(actionItems.length)}
+              hint={
+                actionCount > 0 && warningCount > 0
+                  ? `${actionCount} posisi tindakan · ${warningCount} waspada`
+                  : actionCount > 0
+                    ? `${actionCount} posisi perlu tindakan`
+                    : warningCount > 0
+                      ? `${warningCount} posisi waspada`
+                      : "semua ban aman"
+              }
+            />
+          </motion.div>
+        </motion.div>
       )}
 
       {/* Panel "Ban perlu tindakan" — klik butir untuk menyorot unit di peta */}
       {actionItems.length > 0 && (
-        <section className="rounded-xl border bg-card/60 p-3 sm:p-4">
+        <motion.section
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+          className="rounded-xl border bg-card/60 p-3 sm:p-4"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-semibold">Ban perlu tindakan</h3>
@@ -523,78 +641,98 @@ export function BanAnalysis({ histories, equipments, isLoading, error }: BanAnal
               klik butir untuk menyorot unit di peta
             </span>
           </div>
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            {visibleUnits.map((item) => {
+          {/* SATU baris per unit dalam area scroll (max-h terbatas):
+              semua unit bermasalah bisa ditampilkan tanpa menumpuk halaman.
+              Klik baris tetap menyorot unitnya di peta. */}
+          <motion.ul
+            variants={panelContainer}
+            initial="hidden"
+            animate="show"
+            className="mt-3 flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1"
+          >
+            {actionItems.map((item) => {
               const tone = TIRE_HEALTH_TONE[item.worstLevel];
               const selected = selectedPlate === item.plate;
               const worst = item.issues[0];
               /* Alasan posisi TERBURUK unit ini — satu kalimat dari lib. */
               const reason = tireIssueReason(worst.info) ?? tone.label;
               const slotText = item.issues.map((x) => x.slot).join(" ");
-              const parahCount = item.issues.filter((x) => x.level === "action").length;
-              const meta = [
-                `${item.issues.length} posisi`,
-                item.issues.length > 1 ? `(${parahCount} parah)` : "",
-                item.lastInspected ?? null,
-              ]
-                .filter(Boolean)
-                .join(" · ");
               return (
-                <li key={item.plateKey}>
+                <motion.li key={item.plateKey} variants={riseIn}>
                   <button
                     type="button"
                     onClick={() => setSelectedPlate(item.plate)}
                     aria-label={`${item.plate} — ${item.issues.length} posisi bermasalah: ${slotText} — ${reason}`}
                     aria-current={selected ? "true" : undefined}
                     className={cn(
-                      "w-full cursor-pointer rounded-lg border bg-card px-3 py-2.5 text-left transition-all duration-150",
-                      "hover:-translate-y-px hover:shadow-md",
+                      "flex w-full cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-left transition-colors hover:bg-muted/30",
                       selected
-                        ? "border-primary/60 ring-2 ring-primary/40"
-                        : "hover:border-primary/40",
+                        ? "border-primary/60 ring-1 ring-primary/40"
+                        : "",
+                      item.worstLevel === "action"
+                        ? "border-l-2 border-l-red-500"
+                        : item.worstLevel === "warning"
+                          ? "border-l-2 border-l-amber-500"
+                          : "border-l-2 border-l-muted-foreground/40",
                     )}
                   >
-                    {/* Baris 1 — status + nopol, daftar slot bermasalah di kanan */}
-                    <div className="flex items-center gap-2">
-                      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", tone.dot)} aria-hidden />
-                      <span className="truncate text-sm font-semibold leading-none">
-                        {item.plate}
-                      </span>
-                      <span
-                        className="ms-auto max-w-[48%] truncate shrink-0 font-mono text-[10px] font-medium leading-none text-muted-foreground"
-                        title={`Posisi bermasalah: ${slotText}`}
-                      >
-                        {slotText}
-                      </span>
-                    </div>
-                    {/* Baris 2 — alasan posisi terburuk unit ini */}
-                    <p className={cn("mt-2 text-[13px] font-medium leading-none", LEVEL_TEXT[item.worstLevel])}>
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 shrink-0 rounded-full",
+                        tone.dot,
+                      )}
+                      aria-hidden
+                    />
+                    {/* Nopol: lebar tetap supaya semua baris rata kiri */}
+                    <span className="w-40 shrink-0 truncate text-sm font-semibold leading-none max-sm:w-28">
+                      {item.plate}
+                    </span>
+                    {/* Alasan: mengisi sisa lebar, satu baris */}
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate text-xs font-medium leading-none max-sm:hidden",
+                        LEVEL_TEXT[item.worstLevel],
+                      )}
+                    >
                       {reason}
-                    </p>
-                    {/* Baris 3 — meta kecil: berapa posisi · kapan terakhir dicek */}
-                    <p className="mt-1.5 truncate text-[11px] leading-none text-muted-foreground">
-                      {meta}
-                    </p>
+                    </span>
+                    <span
+                      className="shrink-0 font-mono text-[10px] font-medium leading-none text-muted-foreground max-sm:hidden"
+                      title={`Posisi bermasalah: ${slotText}`}
+                    >
+                      {slotText}
+                    </span>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none tabular-nums",
+                        tone.badge,
+                      )}
+                    >
+                      {item.issues.length} ban
+                    </span>
                   </button>
-                </li>
+                </motion.li>
               );
             })}
-          </ul>
-          {hiddenUnits > 0 && (
-            <p className="mt-2 text-center text-[11px] leading-none text-muted-foreground">
-              +{hiddenUnits} unit lainnya mengikuti urutan prioritas ini — tindak yang terburuk dulu
-            </p>
-          )}
-        </section>
+          </motion.ul>
+        </motion.section>
       )}
 
-      <HinoTyreMap
-        equipments={equipments}
-        tireChecks={checksByPlate}
-        tireHistory={historyByPlate}
-        selectedPlate={selectedPlate}
-        onSelectPlate={setSelectedPlate}
-      />
+      {/* Peta masuk paling akhir — deretan kartu & panel selesai menjolong dulu,
+          supaya matanya sudah berada di tengah halaman saat peta fade-in. */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4, delay: 0.15, ease: "easeOut" }}
+      >
+        <HinoTyreMap
+          equipments={equipments}
+          tireChecks={checksByPlate}
+          tireHistory={historyByPlate}
+          selectedPlate={selectedPlate}
+          onSelectPlate={setSelectedPlate}
+        />
+      </motion.div>
     </div>
   );
 }

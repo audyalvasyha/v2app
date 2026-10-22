@@ -16,12 +16,14 @@ import {
     buildKpiSnapshot,
     evalStatus,
     formatPct,
+    KPI_MATRIKS,
     localHeadline,
     priorities,
     verdicts,
     worstKpiStatus,
     type AiBrief,
     type KpiStatus,
+    type AnalisaSnapshot,
 } from "@/lib/analisa-kpi"
 import { useAiBrief } from "@/hooks/use-ai-brief"
 
@@ -41,6 +43,8 @@ interface AnalisaViewProps {
     /** Baris SKR jendela lebih luas (3 bulan) — pembanding 30 hari sebelumnya */
     skrPrevRows: any[]
     outbounds: any[]
+    /** Rentang tanggal outbound yang benar-benar di-fetch — pembagi ritase */
+    outboundWindow: { from: string; to: string }
     isLoading: boolean
     error: string | null
 }
@@ -192,16 +196,79 @@ function BriefingBody({ brief }: { brief: AiBrief }) {
     )
 }
 
+/**
+ * Scorecard KPI resmi Head of Transport — 11 KPI dari matriks resmi.
+ *
+ * Prinsipnya sama dengan briefing: angka yang dihitung dari data ditampilkan,
+ * yang tidak punya datanya ditandai "—" plus keterangan sumber yang dibutuhkan
+ * — TIDAK diangker supaya tabel terlihat penuh.
+ */
+interface ScorecardRow {
+    id: string
+    nama: string
+    bobot: string
+    target: string
+    /** "—" (tidak ada data), teks aktual, atau aktual sebagian (qty tanpa %) */
+    aktual: string
+    /** null = tidak dihitung dari data — titik abu, bukan status penilaian */
+    status: KpiStatus | null
+    sumber: string
+}
+
+function buildScorecard(snapshot: AnalisaSnapshot, status: Record<string, KpiStatus>): ScorecardRow[] {
+    return KPI_MATRIKS.map((row): ScorecardRow => {
+        if (row.id === "redelivery") {
+            return {
+                ...row,
+                aktual: snapshot.redelivery.share == null ? "—" : `${snapshot.redelivery.share.toFixed(2)}%`,
+                status: status.redelivery,
+            }
+        }
+        if (row.id === "ritase") {
+            return {
+                ...row,
+                aktual:
+                    snapshot.ritase.trips === 0
+                        ? "—"
+                        : `${snapshot.ritase.perUnitHari.toFixed(2)} trip/unit/hari`,
+                status: status.ritase,
+            }
+        }
+        if (row.id === "skr") {
+            // Qty absolut tercatat, tapi % resminya butuh total qty kirim (BI).
+            return {
+                ...row,
+                aktual: snapshot.skr.qty > 0 ? `${formatQty(snapshot.skr.qty)} unit · % belum` : "—",
+                status: null,
+            }
+        }
+        return { ...row, aktual: "—", status: null }
+    })
+}
+
+/** Baris scorecard: dot abu untuk yang tanpa data — bukan status aman. */
+function ScorecardStatus({ status }: { status: KpiStatus | null }) {
+    if (status == null) {
+        return (
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                Tanpa data
+            </span>
+        )
+    }
+    return <StatusDot status={status} />
+}
+
 /* ── View utama ──────────────────────────────────────────────────────────── */
 
-function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, isLoading, error }: AnalisaViewProps) {
+function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundWindow, isLoading, error }: AnalisaViewProps) {
     /** Detail angka disembunyikan dulu; ringkasan teks selalu tampil. */
     const [detailOpen, setDetailOpen] = useState(false)
     const [refreshedAt, setRefreshedAt] = useState<string | null>(null)
 
     const snapshot = useMemo(
-        () => buildKpiSnapshot(histories, skrRows, skrPrevRows, outbounds),
-        [histories, skrRows, skrPrevRows, outbounds],
+        () => buildKpiSnapshot(histories, skrRows, skrPrevRows, outbounds, outboundWindow),
+        [histories, skrRows, skrPrevRows, outbounds, outboundWindow],
     )
     const status = useMemo(() => evalStatus(snapshot), [snapshot])
     const text = useMemo(() => verdicts(snapshot, status), [snapshot, status])
@@ -210,6 +277,7 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, isLoading
     const headline = localHeadline(worstStatus)
 
     const { brief: aiBrief, error: aiError, loading: aiLoading, regenerate } = useAiBrief(snapshot)
+    const scorecard = useMemo(() => buildScorecard(snapshot, status), [snapshot, status])
 
     /** Delta per KPI — arah naik/turun + apakah arah itu baik. */
     const deltas = useMemo(() => {
@@ -329,11 +397,48 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, isLoading
                 </div>
             </section>
 
+            {/* Scorecard KPI resmi — 11 KPI matriks atasan; yang tak ada datanya
+                ditandai jujur, bukan diisi angka supaya tabel terlihat penuh */}
+            <section>
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">Scorecard KPI resmi</h2>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Bobot &amp; target sesuai matriks resmi Head of Transport · tanda — = data belum ada di app, bukan nol
+                </p>
+                <div className="mt-3 rounded-lg border bg-card px-5 py-4">
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[720px] text-left text-xs">
+                            <thead>
+                                <tr className="border-b border-border">
+                                    <th className="pb-2 pr-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">KPI</th>
+                                    <th className="pb-2 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Bobot</th>
+                                    <th className="pb-2 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Target</th>
+                                    <th className="pb-2 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Aktual 30 hari</th>
+                                    <th className="pb-2 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</th>
+                                    <th className="pb-2 pl-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Sumber</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/60">
+                                {scorecard.map((row) => (
+                                    <tr key={row.id}>
+                                        <td className="py-2.5 pr-3 font-medium text-foreground">{row.nama}</td>
+                                        <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">{row.bobot || "—"}</td>
+                                        <td className="py-2.5 px-3 text-right tabular-nums text-foreground">{row.target}</td>
+                                        <td className="py-2.5 px-3 text-right tabular-nums text-foreground">{row.aktual}</td>
+                                        <td className="py-2.5 px-3"><ScorecardStatus status={row.status} /></td>
+                                        <td className="py-2.5 pl-3 pr-1 leading-relaxed text-muted-foreground">{row.sumber}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             {/* Statistik KPI — grid gap-px = divider hairline antar sel */}
             <section>
                 <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border xl:grid-cols-4">
                     <KpiCell
-                        label="Biaya Transport DC"
+                        label="Biaya Perbaikan Armada"
                         status={status.biaya}
                         value={`Rp ${compactNilai(snapshot.biaya.cur)}`}
                         delta={deltas.biaya}
@@ -365,7 +470,7 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, isLoading
                         {detailOpen ? (
                             <div className="mt-3 border-t border-border/60 pt-3">
                                 <div className="flex items-center justify-between text-[10px] tabular-nums text-muted-foreground">
-                                    <span>Hari aktif</span>
+                                    <span>Hari berkeberangkatan / {snapshot.ritase.spanHari} hari</span>
                                     <span>{snapshot.ritase.cakupanHari.toFixed(0)}%</span>
                                 </div>
                                 <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
@@ -383,7 +488,7 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, isLoading
             {/* Kaki halaman: catatan metode + toggle detail */}
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Ambang status provisional · biaya memakai catatan perbaikan sebagai proxy (belum termasuk BBM &amp; jasa mitra)
+                    Ambang status provisional · biaya = catatan perbaikan/servis armada (belum termasuk BBM &amp; jasa mitra) · ritase mengikuti rentang data Pengiriman yang dimuat
                 </p>
                 <button
                     type="button"

@@ -2,7 +2,9 @@ import { AI_SCHEMA_DOC } from "./schema"
 import { callOpenKey, OpenKeyError } from "./openkey"
 import {
   AI_PERSONA,
+  AI_USER_CONTEXT,
   buildHistoryBlock,
+  buildKpiBlock,
   buildMemoryBlock,
   type ConversationTurn,
 } from "./persona"
@@ -149,6 +151,8 @@ export interface AiQueryResult {
   rows: Array<Record<string, unknown>>
   /** Jawaban naratif dalam Bahasa Indonesia. */
   answer: string
+  /** Saran tanya-lanjutan (maksimal 3) — opsional, bisa kosong. */
+  saran?: string[]
   /**
    * Butir memori yang layak diingat dari percakapan barusan.
    *
@@ -157,6 +161,16 @@ export interface AiQueryResult {
    * menggabungkan, atau mengabaikan tanpa mengubah lapisan model.
    */
   remembered: string[]
+}
+
+/**
+ * Saran tanya-lanjutan dari model — maksimal 3, non-wajib. Bila model
+ * tidak memberi saran (malah formatnya rusak/ld), daftar kosong dan UI
+ * tidak menampilkan chip apa pun — fitur ini tidak boleh membuat
+ * jawaban jadi gagal.
+ */
+export interface SaranContextual {
+  saran: string[]
 }
 
 export class AiError extends Error {
@@ -459,10 +473,11 @@ function buildSqlPrompt(
     "",
     "PENTING soal sql kosong:",
     "Kalau pertanyaannya TIDAK bisa dijawab dengan SELECT di atas — misalnya",
-    "sapaan, tanya siapa kamu, minta perkenalan, atau menanyakan fakta umum",
-    "di luar data armada/SKR — maka tulis \"sql\": \"\" dan isi ringkasan",
-    "dengan jawaban singkatnya. JANGAN memaksakan query yang tidak nyambung",
-    "hanya supaya terlihat sibuk.",
+    "sapaan, tanya siapa kamu, minta perkenalan, atau opini/fakta umum di luar",
+    "data armada — maka tulis \"sql\": \"\" dan isi ringkasan dengan jawaban",
+    "singkatnya. JANGAN memaksakan query yang tidak nyambung. Pertanyaan umum",
+    "TETAP dijawab (tahap berikutnya yang menuliskannya) — hanya bukan diminta",
+    "lewat query.",
   )
 
   return parts.join("\n")
@@ -487,32 +502,53 @@ function sqlErrorDetail(error: unknown): string {
 }
 
 /**
- * Jawab pertanyaan yang TIDAK butuh query database.
+ * Jawab pertanyaan yang TIDAK jalannya tanpa query database.
  *
- * Dipakai untuk sapaan, "siapa kamu", dan pertanyaan identitas. Yang
- * dibedakan dari tahap narasi: tidak ada data sama sekali, jadi
- * angka tidak boleh muncul. Model boleh memakai persona dan ingatan,
- * tapi tidak boleh mengarang nama, peran, atau kemampuannya sendiri.
+ * Dipakai untuk dua hal yang berbeda, dan penting keduanya tidak
+ * diblokir:
+ *
+ *   1. Sapaan / "siapa kamu" / pertanyaan identitas — dijawab dari
+ *      persona dan ingatan.
+ *   2. Pertanyaan umum DI LUAR data dasbor (apa itu SLA, tips;
+ *      hitungan kecil) — dijawab dari pengetahuan umum model.
+ *      Modelnya general-purpose, jadi tidak ada alasan menolak.
+ *
+ * Yang satu-satunya dilarang: mengarang angka dasbor. Di jalur ini
+ * tidak ada data yang diberikan, jadi angka dasbor yang bukan dari
+ * query TIDAK BOLEH muncul — itu konsequensi utama seluruh ini.
  */
 async function answerChatQuestion(
   question: string,
   memories: string[],
-): Promise<{ answer: string; remembered: string[] }> {
+): Promise<{ answer: string; remembered: string[]; saran: string[] }> {
   const raw = await callAi(
     [
       AI_PERSONA,
+      "",
+      AI_USER_CONTEXT,
+      buildKpiBlock(),
       "",
       buildMemoryBlock(memories),
       "",
       `User bertanya: ${question}`,
       "",
-      "Catatan: pertanyaan ini TIDAK dijawab dari query database, dan",
-      "kamu tidak melihat data apa pun. Jawab singkat dan jujur, boleh",
-      "pakai isi ingatan di atas kalau relevan. Kalau memang tidak tahu,",
-      "bilang tidak tahu.",
+      "Catatan: pertanyaan ini dijawab TANPA data database — kamu tidak",
+      "melihat angka apa pun dari dasbor sekarang. Maka:",
+      "- Pertanyaan umum: jawab langsung dari pengetahuanmu, ringkas,",
+      "  boleh pakai isi ingatan di atas kalau relevan.",
+      "- Yang butuh angka dasbor: jangan mengarang angkanya. Bilang",
+      "  datanya perlu dicek ulang di dasbor, dan tawarkan bentuk",
+      "  pertanyaan yang bisa dijawab dari data (mis. rentang waktunya,",
+      "  plat atau rute yang dicek).",
+      "- Pertanyaan tentang kamu atau user: jawab dari persona + ingatan,",
+      "  jangan mengarang identitas baru.",
       "",
       "Balas HANYA dengan JSON, tanpa penjelasan lain:",
-      '{"jawaban": "<teks jawaban>", "ingat": ["<butir yang layak diingat>"]}',
+      '{"jawaban": "<teks jawaban>", "ingat": ["<butir yang layak diingat>"], "saran": ["<maksimal 3 pertanyaan lanjutan yang relevan>"]}',
+      "",
+      "Aturan untuk field \"saran\": tanya-lanjutan yang menggali ke arah data",
+      "yang bisa dijawab dasbor (mis. kuncinya rentang waktu / plat) — singkat,",
+      "maksimal 3, kosong bila tidak ada yang relevan.",
     ].join("\n"),
     MAX_TOKENS_CHAT,
     TEMPERATURE_NARASI,
@@ -528,9 +564,8 @@ async function answerChatQuestion(
  * Daripada membuang seluruh panggilan, teks mentah dipakai sebagai
  * jawaban — isinya tetap kalimat yang benar, hanya bagian memorinya
  * yang kosong.
- */
-function parseNarration(raw: string): { answer: string; remembered: string[] } {
-  const narration = extractJson<{ jawaban?: unknown; ingat?: unknown }>(raw)
+ */function parseNarration(raw: string): { answer: string; remembered: string[]; saran: string[] } {
+  const narration = extractJson<{ jawaban?: unknown; ingat?: unknown; saran?: unknown }>(raw)
   const answer =
     typeof narration?.jawaban === "string" && narration.jawaban.trim()
       ? narration.jawaban.trim()
@@ -544,7 +579,18 @@ function parseNarration(raw: string): { answer: string; remembered: string[] } {
         .slice(0, MAX_NEW_MEMORIES)
     : []
 
-  return { answer, remembered }
+  // Saran follow-up: divalidasi ketat — hanya kalimat pendek yang bersih.
+  // Format rusak / terlalu panjang dibuang diam-diam, bukan menggagalkan
+  // jawaban yang sudah jadi.
+  const saran = Array.isArray(narration?.saran)
+    ? (narration.saran as unknown[])
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim().slice(0, 120))
+        .filter((item) => item.length >= 5)
+        .slice(0, 3)
+    : []
+
+  return { answer, remembered, saran }
 }
 
 /**
@@ -649,6 +695,7 @@ export async function answerQuestion(
       rows: [],
       answer: chat.answer || ringkasan || "Data untuk pertanyaan itu belum tersedia di dasbor ini.",
       remembered: chat.remembered,
+      saran: chat.saran,
     }
   }
 
@@ -689,16 +736,36 @@ export async function answerQuestion(
     [
       AI_PERSONA,
       "",
+      AI_USER_CONTEXT,
+      buildKpiBlock(),
+      "",
       `User bertanya: ${question}`,
       buildMemoryBlock(context.memories ?? []),
       "",
       "Data hasil query database (JSON):",
       JSON.stringify(rowsForModel),
       "",
-      "Balas HANYA dengan JSON, tanpa penjelasan lain:",
-      '{"jawaban": "<teks jawaban>", "ingat": ["<butir yang layak diingat>"]}',
-      "",
-      "Aturan untuk field \"ingat\":",
+      "Struktur jawaban (WAJIB untuk pertanyaan analitik):",
+      "- Mulai dari angka utama hasil query — persis seperti datanya, tanpa pembulatan sendiri.",
+      "- Lalu artinya: naik/turun/stabil, membanding kalau datanya mendukung",
+      "  (pakai kolom persen atau bulan lalu bila ada di hasil).",
+      "- Tutup dengan SATU insight yang bisa dipakai memutuskan: apa yang paling",
+      "  mencurigakan atau menjanjikan dari angka itu, dan satu langkah lanjutan",
+      "  yang masuk akal untuk Head of Transport (mis. cek plat X, tekan ulang",
+      "  vendor Y, geser ritase rute Z).",
+      "- Penilaian boleh tajam, tapi JANGAN mengarang penyebab yang tidak ada di data.",
+    "",
+    "Balas HANYA dengan JSON, tanpa penjelasan lain:",
+    '{"jawaban": "<teks jawaban>", "ingat": ["<butir yang layak diingat>"], "saran": ["<maksimal 3 pertanyaan lanjutan yang relevan>"]}',
+    "",
+    "Aturan untuk field \"saran\":",
+    "- PERTANYAAN lanjutan yang membantu user menggali lebih dalam dari",
+    "  jawaban barusan — bukan tanya yang sudah terjawab, bukan juga",
+    "  pertanyaan bermakna umum yang sudah jelas tidak akan terjawab di sini.",
+    "- Masing-masing satu kalimat pendek (maks ~80 karakter), tanpa tanda kutip.",
+    "- Maksimal 3; kalau tidak ada yang relevan, kirim array kosong.",
+    "",
+    "Aturan untuk field \"ingat\":",
       "- Ini bukan catatan-opsional: kalau user menyuruhmu ingat sesuatu",
       "  (kata \"ingat\", \"selalu\", \"biasanya\", \"mulai sekarang\", \"jangan lupa\",",
       "  \"preferensiku\"), itu WAJIB masuk. Jangan tunggu dia minta dua kali.",
@@ -717,7 +784,7 @@ export async function answerQuestion(
     TEMPERATURE_NARASI,
   )
 
-  const { answer, remembered } = parseNarration(raw)
+  const { answer, remembered, saran } = parseNarration(raw)
 
-  return { sql, rows, answer, remembered }
+  return { sql, rows, answer, remembered, saran }
 }
