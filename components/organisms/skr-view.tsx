@@ -9,6 +9,7 @@ import {
     Store,
     TrendingUp,
     Truck,
+    X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -73,6 +74,9 @@ interface SkrViewProps {
     bounds: SkrDateBounds
     /** true bila data diambil lewat view (filter tanggal di database) */
     usingView: boolean
+    /** Kata pencarian header aktif → mode fokus: hanya daftar detail baris,
+     *  agregasi (KPI/grafik/peringkat) disembunyikan supaya hasil langsung terlihat */
+    searchActive?: boolean
 }
 
 type FilterKey = SkrCategory | "all"
@@ -142,36 +146,24 @@ function SkrViewImpl({
     totalRows,
     bounds,
     usingView,
+    searchActive,
 }: SkrViewProps) {
-    const [search, setSearch] = useState("")
+    // Pencarian (toko/plat/sales/POD) berada di search header — data detail yang
+    // masuk sudah terfilter dari DashboardContent; internal menu cukup kategori POD.
     const [categoryFilter, setCategoryFilter] = useState<FilterKey>("all")
     const [metric, setMetric] = useState<SkrMetric>("qty")
     const [rankGroup, setRankGroup] = useState<RankGroup>("armada")
     /** customer_id yang baris detailnya sedang dibuka */
     const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null)
 
-    const searchLower = search.trim().toLowerCase()
-
-    // 1. Pencarian (plat, sales, alasan POD, nama toko) + filter kategori POD.
-    //    Hanya kolom yang benar-benar di-fetch view yang dicocokkan.
+    // 1. Filter kategori POD saja — pencarian ke text search header; detail
+    //    yang masuk sudah terfilter (prop `details`, dari DashboardContent).
     const filtered = useMemo(() => {
         return details.filter((row) => {
             const info = skrCategory(row.pod_reason)
-            const matchesCategory = categoryFilter === "all" || info.category === categoryFilter
-            if (!matchesCategory) return false
-            if (!searchLower) return true
-            const custId = row.customer_id == null ? "" : String(row.customer_id).trim()
-            const custName = custId ? customerById.get(custId) ?? "" : ""
-            return (
-                String(row.license_no ?? "").toLowerCase().includes(searchLower) ||
-                String(row.salesman_nama ?? "").toLowerCase().includes(searchLower) ||
-                String(row.salesman ?? "").toLowerCase().includes(searchLower) ||
-                String(row.pod_reason ?? "").toLowerCase().includes(searchLower) ||
-                custId.toLowerCase().includes(searchLower) ||
-                custName.toLowerCase().includes(searchLower)
-            )
+            return categoryFilter === "all" || info.category === categoryFilter
         })
-    }, [details, searchLower, categoryFilter, customerById])
+    }, [details, categoryFilter])
 
     // 2. Ringkasan, peringkat, alasan, per customer — dari data terfilter
     const totals = useMemo(() => skrTotals(filtered), [filtered])
@@ -243,7 +235,7 @@ function SkrViewImpl({
         [customers, metric],
     )
 
-    const hasActiveFilter = searchLower !== "" || categoryFilter !== "all"
+    const hasActiveFilter = categoryFilter !== "all"
 
     // 3. Grafik dua bulan: sumber data = fetch khusus bila ada, selain itu details
     const chartRows = prevMonthRows.length > 0 ? prevMonthRows : details
@@ -277,10 +269,8 @@ function SkrViewImpl({
     const noRange = !dateFrom && !dateTo
     const emptyByFilter = hasActiveFilter && filtered.length === 0
     const activeCategoryLabel = SKR_CATEGORIES.find((c) => c.id === categoryFilter)?.label
-    const filterLabel =
-        categoryFilter !== "all"
-            ? `kategori ${activeCategoryLabel ?? categoryFilter}`
-            : `pencarian "${search.trim()}"`
+    // Kata pencarian sekarang hidup di header; label filter layar mengikuti kategori POD aktif
+    const filterLabel = `kategori ${activeCategoryLabel ?? "Semua"}`
     const filterRangeLabel = noRange
         ? "pada seluruh data yang dimuat."
         : `pada rentang ${isoToTanggal(dateFrom)} – ${isoToTanggal(dateTo)}.`
@@ -326,7 +316,10 @@ function SkrViewImpl({
         )
     }
 
-    if (filtered.length === 0 && !hasActiveFilter) {
+    // Saat pencarian aktif, hasil kosong dibawa ke mode fokus (kartu detail
+    // menampilkan pesan kosong) — JANGAN jatuh ke empty-state rentang tanggal,
+    // karena penyebabnya kata pencarian, bukan rentang.
+    if (filtered.length === 0 && !hasActiveFilter && !searchActive) {
         const rangeLabel = noRange
             ? "tanpa batas tanggal"
             : `${isoToTanggal(dateFrom)} – ${isoToTanggal(dateTo)}`
@@ -387,6 +380,82 @@ function SkrViewImpl({
         )
     }
 
+    // ── Mode fokus: kata pencarian header aktif ──
+    // User sedang mencari baris spesifik (toko/nopol/dokumen), bukan tren —
+    // KPI, grafik, top-5, dan peringkat disembunyikan, yang tampil hanya
+    // detail baris yang cocok. Kontrol tanggal & kategori POD tetap ada.
+    if (searchActive) {
+        return (
+            <div className="space-y-4">
+                {/* KONTROL — kiri: rentang tanggal; kanan: reset kategori saat aktif */}
+                <FilterToolbar
+                    date={{
+                        idPrefix: "skr-focus",
+                        from: dateFrom,
+                        to: dateTo,
+                        onApply: onDateRangeChange,
+                    }}
+                    actions={
+                        hasActiveFilter ? (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 gap-1.5 text-muted-foreground"
+                                onClick={() => setCategoryFilter("all")}
+                            >
+                                <X className="h-3.5 w-3.5" /> Bersihkan filter
+                            </Button>
+                        ) : undefined
+                    }
+                />
+
+                {/* CHIP KATEGORI POD — membantu menyekop jenis dokumen dari hasil */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {SKR_CATEGORIES.map((opt) => {
+                        const active = categoryFilter === opt.id
+                        const count =
+                            opt.id === "all"
+                                ? totals.rows
+                                : totals.categories[opt.id as SkrCategory] ?? 0
+                        return (
+                            <Button
+                                key={opt.id}
+                                variant={active ? "secondary" : "outline"}
+                                size="sm"
+                                onClick={() => setCategoryFilter(opt.id)}
+                                className={
+                                    active
+                                        ? "h-8 border-primary/20 bg-primary text-primary-foreground hover:bg-primary/90"
+                                        : count === 0
+                                            ? "h-8 bg-card text-muted-foreground/60"
+                                            : "h-8 bg-card"
+                                }
+                            >
+                                {opt.label}
+                                <span
+                                    className={
+                                        active
+                                            ? "ml-1.5 font-mono text-xs tabular-nums opacity-80"
+                                            : "ml-1.5 font-mono text-xs tabular-nums text-muted-foreground"
+                                    }
+                                >
+                                    {count.toLocaleString("id-ID")}
+                                </span>
+                            </Button>
+                        )
+                    })}
+                </div>
+
+                {/* Daftar detail baris — inti mode fokus */}
+                <SearchDetailRows details={filtered} customerById={customerById} />
+
+                <p className="text-xs tabular-nums text-muted-foreground">
+                    {filtered.length.toLocaleString("id-ID")} baris hasil · kosongkan kata pencarian di header untuk kembali ke ringkasan lengkap
+                </p>
+            </div>
+        )
+    }
+
     return (
         <div className="space-y-4">
             {emptyByFilter && (
@@ -402,7 +471,6 @@ function SkrViewImpl({
                         size="sm"
                         className="h-7 gap-1.5 bg-card"
                         onClick={() => {
-                            setSearch("")
                             setCategoryFilter("all")
                         }}
                     >
@@ -459,7 +527,7 @@ function SkrViewImpl({
                 />
             </div>
 
-            {/* KONTROL */}
+            {/* KONTROL — kiri: rentang tanggal; kanan: reset filter kategori saat aktif */}
             <FilterToolbar
                 date={{
                     idPrefix: "skr",
@@ -467,14 +535,18 @@ function SkrViewImpl({
                     to: dateTo,
                     onApply: onDateRangeChange,
                 }}
-                search={{
-                    value: search,
-                    onChange: setSearch,
-                    placeholder: "Cari toko, plat, sales, atau alasan POD...",
-                    hint: hasActiveFilter
-                        ? `${filtered.length.toLocaleString("id-ID")} baris cocok`
-                        : "Ctrl + /",
-                }}
+                actions={
+                    hasActiveFilter ? (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 gap-1.5 text-muted-foreground"
+                            onClick={() => setCategoryFilter("all")}
+                        >
+                            <X className="h-3.5 w-3.5" /> Bersihkan filter
+                        </Button>
+                    ) : undefined
+                }
             />
 
             {/* CHIP KATEGORI POD */}
@@ -512,19 +584,6 @@ function SkrViewImpl({
                         </Button>
                     )
                 })}
-                {hasActiveFilter && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 gap-1.5 text-muted-foreground"
-                        onClick={() => {
-                            setSearch("")
-                            setCategoryFilter("all")
-                        }}
-                    >
-                        Bersihkan filter
-                    </Button>
-                )}
             </div>
 
             {/* GRAFIK & SEBARAN ALASAN SKR PER KATEGORI */}
@@ -706,6 +765,96 @@ function SkrViewImpl({
                             ? `${details.length.toLocaleString("id-ID")} baris tanpa batas tanggal`
                             : `${details.length.toLocaleString("id-ID")} baris pada rentang ${isoToTanggal(dateFrom)} – ${isoToTanggal(dateTo)}`}
                 </p>
+            </div>
+        </div>
+    )
+}
+
+/* ── Daftar detail baris — mode fokus pencarian ────────────────────── */
+
+function SearchDetailRows({
+    details,
+    customerById,
+}: {
+    details: any[]
+    customerById: Map<string, string>
+}) {
+    const rows = useMemo(
+        () => details.filter((row) => row.salesman !== "-1" && row.salesman !== -1),
+        [details],
+    )
+
+    return (
+        <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
+                <div className="flex min-w-0 items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    <h3 className="text-xs font-semibold">Detail SKR — hasil pencarian</h3>
+                    <span className="hidden text-[10px] text-muted-foreground sm:inline">
+                        {rows.length.toLocaleString("id-ID")} dokumen · satu baris = satu SKR
+                    </span>
+                </div>
+            </div>
+
+            <div className="max-h-[420px] overflow-y-auto">
+                {rows.length === 0 ? (
+                    <p className="py-8 text-center text-xs text-muted-foreground">
+                        Tidak ada baris SKR yang cocok dengan pencarian.
+                    </p>
+                ) : (
+                    <ul className="divide-y">
+                        {rows.map((row, i) => {
+                            const toko = customerById.get(String(row.customer_id ?? "").trim())
+                            return (
+                                <li
+                                    key={`${row.pod_d ?? "x"}-${row.delivery_number ?? "no-num"}-${i}`}
+                                    className="flex items-center gap-3 px-3 py-2 text-xs transition-colors hover:bg-muted/30"
+                                >
+                                    <span className="w-24 shrink-0 font-mono tabular-nums text-muted-foreground">
+                                        {row.pod_d ? isoToTanggal(row.pod_d) : "—"}
+                                    </span>
+                                    <span
+                                        className="w-32 shrink-0 truncate font-mono font-medium"
+                                        title={row.delivery_number ?? ""}
+                                    >
+                                        {row.delivery_number || "—"}
+                                    </span>
+                                    <span
+                                        className="w-28 shrink-0 truncate font-mono font-medium"
+                                        title={row.license_no ?? ""}
+                                    >
+                                        {row.license_no || "—"}
+                                    </span>
+                                    <span
+                                        className="hidden w-32 shrink-0 truncate text-muted-foreground md:block"
+                                        title={
+                                            row.salesman_nama
+                                                ? `${row.salesman_nama} (${row.salesman})`
+                                                : (row.salesman ?? "")
+                                        }
+                                    >
+                                        {row.salesman_nama || row.salesman || "—"}
+                                    </span>
+                                    <span className="min-w-0 flex-1 truncate" title={toko ?? ""}>
+                                        {toko || "(toko tidak terdaftar)"}
+                                    </span>
+                                    <span
+                                        className="hidden min-w-0 flex-1 truncate text-muted-foreground lg:block"
+                                        title={row.pod_reason ?? ""}
+                                    >
+                                        {row.pod_reason || "(tanpa alasan)"}
+                                    </span>
+                                    <span className="w-14 shrink-0 text-right font-mono tabular-nums">
+                                        {formatQty(row.qty ?? 0)}
+                                    </span>
+                                    <span className="w-20 shrink-0 text-right font-mono font-medium tabular-nums">
+                                        {compactNilai(Number(row.nilai) || 0)}
+                                    </span>
+                                </li>
+                            )
+                        })}
+                    </ul>
+                )}
             </div>
         </div>
     )

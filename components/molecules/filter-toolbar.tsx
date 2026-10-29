@@ -23,7 +23,9 @@ export interface FilterToolbarSearch {
 
 interface FilterToolbarProps {
   date: FilterToolbarDate;
-  search: FilterToolbarSearch;
+  /** Opsional: menu yang pencariannya sudah diangkat ke header kosong
+   *  prop ini — search global lewat header menawarkan hasil yang sama. */
+  search?: FilterToolbarSearch;
   /** Tombol tambahan di kanan (mis. export CSV, select urutan) */
   actions?: React.ReactNode;
   className?: string;
@@ -50,15 +52,17 @@ export function FilterToolbar({
     >
       <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
         <DateRangeField {...date} />
-        {/* Search boleh melebar (max-w-lg, bukan sm): kolom tengah
-                    biasanya punya banyak sisa ruang, dan kotak 24rem yang
-                    dipatok sempit memaksakan placeholder "Cari toko, plat,
-                    sales..." terpotong. Greedy-flex + batas atas lg supaya
-                    di layar lebar tidak melar melewati area aksi. */}
-        <SearchField
-          {...search}
-          className="lg:min-w-64 lg:max-w-lg lg:flex-1"
-        />
+        {search && (
+          /* Search boleh melebar (max-w-lg, bukan sm): kolom tengah
+                      biasanya punya banyak sisa ruang, dan kotak 24rem yang
+                      dipatok sempit memaksakan placeholder "Cari toko, plat,
+                      sales..." terpotong. Greedy-flex + batas atas lg supaya
+                      di layar lebar tidak melar melewati area aksi. */
+          <SearchField
+            {...search}
+            className="lg:min-w-64 lg:max-w-lg lg:flex-1"
+          />
+        )}
       </div>
 
       {actions ? (

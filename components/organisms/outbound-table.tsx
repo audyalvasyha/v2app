@@ -160,28 +160,22 @@ function OutboundTableImpl({
     onDateRangeChange,
     isFetching,
 }: OutboundTableProps) {
-    const [search, setSearch] = useState("")
+    // Pencarian full-text berada di search header (sudah di-filter lewat prop `outbounds`),
+    // internal menu cukup menyimpan filter status & urutan.
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
     const [sortKey, setSortKey] = useState<SortKey>("createdDesc")
     const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0])
     const [page, setPage] = useState(1)
 
-    const searchLower = search.trim().toLowerCase()
-
-    // 1. Pencarian + filter status
+    // 1. Filter status saja — pencarian nopol/FO ditangani search header; kabul
+    //    entri data yang sudah terfilter (prop `outbounds` dari DashboardContent).
     const filtered = useMemo(() => {
-        return outbounds.filter((row) => {
-            const matchesSearch = searchLower
-                ? String(row.no_polisi ?? "").toLowerCase().includes(searchLower) ||
-                  String(row.freight_order ?? "").toLowerCase().includes(searchLower)
-                : true
-            const matchesStatus =
-                statusFilter === "all"
-                    ? true
-                    : outboundStatus(row.jam_out, row.jam_in).status === statusFilter
-            return matchesSearch && matchesStatus
-        })
-    }, [outbounds, searchLower, statusFilter])
+        return outbounds.filter((row) =>
+            statusFilter === "all"
+                ? true
+                : outboundStatus(row.jam_out, row.jam_in).status === statusFilter,
+        )
+    }, [outbounds, statusFilter])
 
     // 2. Urutkan
     const rows = useMemo(() => {
@@ -262,7 +256,7 @@ function OutboundTableImpl({
 
     useEffect(() => {
         setPage(1)
-    }, [rows.length, searchLower, statusFilter, sortKey, pageSize])
+    }, [rows.length, statusFilter, sortKey, pageSize])
 
     // ── EXPORT CSV ────────────────────────────────────────────────────────
     const handleExportCsv = () => {
@@ -357,7 +351,7 @@ function OutboundTableImpl({
                 />
             </div>
 
-            {/* KONTROL: rentang tanggal, pencarian, urutan, export (susunan sama dengan SKR) */}
+            {/* KONTROL — kiri: rentang tanggal; kanan: reset + export + urutan + paginasi */}
             <FilterToolbar
                 date={{
                     idPrefix: "outbound",
@@ -366,14 +360,18 @@ function OutboundTableImpl({
                     onApply: onDateRangeChange,
                     isFetching,
                 }}
-                search={{
-                    value: search,
-                    onChange: setSearch,
-                    placeholder: "Cari nomor polisi atau freight order...",
-                    hint: search ? `${rows.length.toLocaleString("id-ID")} baris cocok` : "Ctrl + /",
-                }}
                 actions={
                     <>
+                        {statusFilter !== "all" && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 gap-1.5 text-muted-foreground"
+                                onClick={() => setStatusFilter("all")}
+                            >
+                                <X className="h-3.5 w-3.5" /> Bersihkan filter
+                            </Button>
+                        )}
                         <Button
                             variant="outline"
                             size="sm"
@@ -514,16 +512,15 @@ function OutboundTableImpl({
                                         </p>
                                         <p className="text-xs leading-relaxed text-muted-foreground">
                                             {outbounds.length === 0
-                                                ? `Tidak ada outbound pada rentang ${tanggalWIB(dateFrom)} – ${tanggalWIB(dateTo)}. Coba lebarkan rentangnya.`
-                                                : "Coba kata kunci lain atau pilih filter status yang berbeda."}
+                                                ? `Tidak ada outbound pada rentang ${tanggalWIB(dateFrom)} – ${tanggalWIB(dateTo)}. Coba lebarkan rentangnya atau ubah kata pencarian di header.`
+                                                : "Hapus filter status untuk melihat semua baris."}
                                         </p>
-                                        {(search || statusFilter !== "all") && (
+                                        {statusFilter !== "all" && (
                                             <Button
                                                 variant="outline"
                                                 size="sm"
                                                 className="gap-1.5"
                                                 onClick={() => {
-                                                    setSearch("")
                                                     setStatusFilter("all")
                                                 }}
                                             >

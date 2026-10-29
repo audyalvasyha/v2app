@@ -5,7 +5,8 @@ import dynamic from "next/dynamic"
 import { ArrowUpRight } from "lucide-react"
 import { useTheme } from "@/hooks/use-theme"
 import { supabase } from "@/utils/supabase"
-import { SearchBar, EquipmentFilters } from "@/components/search-bar"
+import type { EquipmentFilters } from "@/components/search-bar"
+import type { GlobalSearchItem, GlobalSearchGroupCount } from "@/components/molecules/global-search-dropdown"
 import { Skeleton } from "@/components/ui/skeleton"
 
 import { DashboardLayout, type View } from "@/components/templates/dashboard-layout"
@@ -74,7 +75,7 @@ const AnalisaView = dynamic(
 )
 import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
 import { daysInMonth } from "@/lib/skr-analytics"
-import { startOfZonedDayMonthsAgo, zonedParts } from "@/lib/format"
+import { startOfZonedDayMonthsAgo, zonedParts, formatDateMedium } from "@/lib/format"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { usePageTitle } from "@/hooks/use-page-title"
 import { useDebounce } from "@/hooks/use-debounce"
@@ -213,6 +214,9 @@ function DashboardContent() {
 
   const [filters, setFilters] = useState<EquipmentFilters>({})
   const debouncedSearch = useDebounce(filters.search ?? "", 250)
+  // Turunan laban huruf kecil untuk semua filter mémo — didefinisikan awal
+  // supaya memo filteredSkr/filteredOutbounds bisa memakainya tanpa TDZ.
+  const searchLower = debouncedSearch.toLowerCase()
   const [equipments, setEquipments] = useState<any[]>([])
   const [histories, setHistories] = useState<any[]>([])
   const [serviceLogs, setServiceLogs] = useState<any[]>([])
@@ -307,9 +311,12 @@ function DashboardContent() {
   //menu lain. Defer: master data ini hanya dipakai menu SKR & Analisa,
   //jadi di-fetch saat menu itu pertama dibuka — buka awal dashboard
   //tidak lagi menunggu query ekstra.
+  //Global search juga memicu fetch: hasil pencarian nama toko di dropdown
+  //butuh master ini meski menu SKR belum pernah dibuka (fetch hanya
+  //sekaligus lewat flag customersFetched).
   const customersFetched = useRef(false)
   useEffect(() => {
-    if (!NEEDS_SKR_DATA.includes(activeView)) return
+    if (!NEEDS_SKR_DATA.includes(activeView) && !searchLower) return
     if (customersFetched.current) return
     customersFetched.current = true
     let cancelled = false
@@ -323,7 +330,7 @@ function DashboardContent() {
     return () => {
       cancelled = true
     }
-  }, [activeView])
+  }, [activeView, searchLower])
 
   // armada_outbound di-fetch terpisah sesuai rentang tanggal menu Pengiriman
   // — tanpa ini, seluruh tabel besar ikut termuat setiap kali app dibuka.
@@ -557,9 +564,42 @@ function DashboardContent() {
   useEffect(() => {
     //_Defer ke menu yang memakainya (SKR & Analisa) — jendela 3 bulan ×
     //20k baris bukan muatan kecil; jangan diunduh sebelum dipakai.
-    if (!NEEDS_SKR_DATA.includes(activeView)) return
-    fetchSkr(skrRange.from, skrRange.to)
-  }, [fetchSkr, activeView, skrRange.from, skrRange.to])
+    //Global search juga memicu muat PERTAMA: dropdown hasil harus bisa
+    //menemukan SKR meski menu SKR belum pernah dibuka. Refetch pada tiap
+    //ketikan dihindari bila data sudah ada; menu SKR tetap refetch bila
+    //rentangnya diubah.
+    const isSkrView = NEEDS_SKR_DATA.includes(activeView)
+    if (!isSkrView && (!searchLower || skrDetails.length > 0)) return
+    if (isSkrView) {
+      fetchSkr(skrRange.from, skrRange.to)
+    } else {
+      fetchSkr('', '') // pencarian lintas menu pakai jendela penuh (tanpa batas tanggal)
+    }
+  }, [fetchSkr, activeView, skrRange.from, skrRange.to, searchLower, skrDetails.length])
+
+  // ── Hydrate kartu menu dashboard ──
+  // Kartu "Ringkasan menu" mewakili semua menu, termasuk SKR & Pengiriman.
+  // Datanya deferred; bila dashboard dibuka dan datanya masih kosong, muat
+  // sekali di latar ~0.8s setelah mount supaya render pertama tetap instan —
+  // jika sudah termuat (mis. lewat pencarian) tidak ada query tambahan.
+  //
+  // Flag "sudah pernah terbang" diset DI DALAM callback timer, bukan saat
+  // efek disiapkan: React Strict Mode menjalankan setup→cleanup→setup dua
+  // kali di dev — cleanup membatalkan timer pertama, dan bila flag sudah
+  // terisi, setup kedua mundur tanpa menjadwalkan ulang → fetch tak pernah
+  // jalan (bug yang kemarin bikin kartu selalu tampil "belum dimuat").
+  const dashboardHydrated = useRef(false)
+  useEffect(() => {
+    if (activeView !== 'dashboard') return
+    const t = setTimeout(() => {
+      if (dashboardHydrated.current) return
+      dashboardHydrated.current = true
+      if (outbounds.length === 0) fetchOutbounds(outboundRange.from, outboundRange.to)
+      if (skrDetails.length === 0) fetchSkr(skrRange.from, skrRange.to)
+    }, 800)
+    return () => clearTimeout(t)
+  }, [activeView, outbounds.length, skrDetails.length, fetchOutbounds, fetchSkr, outboundRange.from, outboundRange.to, skrRange.from, skrRange.to])
+
   const equipmentByPlate = useMemo(() => {
     const map = new Map<string, { equipment_id?: string; description?: string }>()
     for (const eq of equipments) {
@@ -585,20 +625,37 @@ function DashboardContent() {
 
   // Baris SKR sudah difilter tanggal oleh query bila view aktif. Pada mode
   // cadangan (view belum ada) penyaringan tetap dilakukan di sini.
+  // Pencarian header ikut menyaring: nopol, salesman, nomor dokumen, POD reason.
   const filteredSkr = useMemo(() => {
-    if (skrDateFiltered) return skrDetails
-    if (!skrRange.from && !skrRange.to) return skrDetails
-    return skrDetails.filter((row) => {
-      const iso = row.pod_d
-      if (!iso) return false
-      if (skrRange.from && iso < skrRange.from) return false
-      if (skrRange.to && iso > skrRange.to) return false
-      return true
-    })
-  }, [skrDetails, skrDateFiltered, skrRange.from, skrRange.to])
+    let rows = skrDetails
+    if (!skrDateFiltered && (skrRange.from || skrRange.to)) {
+      rows = rows.filter((row) => {
+        const iso = row.pod_d
+        if (!iso) return false
+        if (skrRange.from && iso < skrRange.from) return false
+        if (skrRange.to && iso > skrRange.to) return false
+        return true
+      })
+    }
+    if (searchLower) {
+      rows = rows.filter((row) => {
+        // Nama toko hasil join customer_id → customers_ringkas, ikut menyaring
+        const toko = customerById.get(String(row.customer_id ?? '').trim()) ?? ''
+        return (
+          row.license_no?.toLowerCase().includes(searchLower) ||
+          row.salesman?.toLowerCase().includes(searchLower) ||
+          row.salesman_nama?.toLowerCase().includes(searchLower) ||
+          row.delivery_number?.toLowerCase().includes(searchLower) ||
+          row.pod_reason?.toLowerCase().includes(searchLower) ||
+          toko.toLowerCase().includes(searchLower) ||
+          String(row.customer_id ?? '').includes(searchLower)
+        )
+      })
+    }
+    return rows
+  }, [skrDetails, skrDateFiltered, skrRange.from, skrRange.to, searchLower, customerById])
 
-  // Filter & turunannya di-memoize agar tidak dihitung ulang pada setiap render
-  const searchLower = debouncedSearch.toLowerCase()
+  // Filter & turunannya di-mêmoize agar tidak dihitung ulang pada setiap render
 
   const filteredEquipments = useMemo(() => {
     return equipments.filter((item) => {
@@ -626,13 +683,120 @@ function DashboardContent() {
     );
   }, [histories, searchLower])
 
+  const filteredOutbounds = useMemo(() => {
+    if (!searchLower) return outbounds
+    return outbounds.filter(
+      (o) =>
+        String(o.no_polisi ?? "").toLowerCase().includes(searchLower) ||
+        String(o.freight_order ?? "").toLowerCase().includes(searchLower),
+    )
+  }, [outbounds, searchLower])
+
+  /** Hasil pencarian lintas menu untuk dropdown search header (pola command
+   *  palette). Data mentah — BUKAN hasil filter view aktif — supaya mencari
+   *  berasal dari Dashboard pun tetap mendapat jawaban. Masing-masing grup
+   *  maksimal 5 item; hitungan lengkap ada di footer dropdown. */
+  const searchResults = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase()
+    if (!q) return { items: [] as GlobalSearchItem[], counts: [] as GlobalSearchGroupCount[] }
+
+    const items: GlobalSearchItem[] = []
+    const counts: GlobalSearchGroupCount[] = []
+
+    // Equipment → menu Equipment
+    const eqHits = equipments.filter(
+      (it) =>
+        it.equipment_id?.toLowerCase().includes(q) ||
+        it.description?.toLowerCase().includes(q) ||
+        it.license_plate?.toLowerCase().includes(q),
+    )
+    counts.push({ label: "Equipment", view: "equipment", count: eqHits.length })
+    for (const it of eqHits.slice(0, 5)) {
+      items.push({
+        view: "equipment",
+        group: "Equipment",
+        title: it.license_plate || it.equipment_id || "(tanpa nopol)",
+        subtitle: [it.equipment_id, it.description, it.status].filter(Boolean).join(" · "),
+      })
+    }
+
+    // Riwayat perbaikan → menu Histories
+    const hisHits = histories.filter(
+      (h) =>
+        h.nama_barang_atau_jasa?.toLowerCase().includes(q) ||
+        h.license_plate?.toLowerCase().includes(q) ||
+        h.equipment_id?.toLowerCase().includes(q),
+    )
+    counts.push({ label: "Histories", view: "maintenance", count: hisHits.length })
+    for (const h of hisHits.slice(0, 5)) {
+      items.push({
+        view: "maintenance",
+        group: "Histories",
+        title: h.nama_barang_atau_jasa || "(tanpa uraian)",
+        subtitle: [h.license_plate, h.tanggal ? formatDateMedium(h.tanggal) : ""].filter(Boolean).join(" · "),
+      })
+    }
+
+    // SKR → menu SKR (data mentah, bukan potongan rentang tanggal aktif;
+    // nama toko hasil join customer_id ikut dicocokkan)
+    const skrHits = skrDetails.filter((r) => {
+      const toko = customerById.get(String(r.customer_id ?? '').trim()) ?? ''
+      return (
+        r.license_no?.toLowerCase().includes(q) ||
+        r.salesman?.toLowerCase().includes(q) ||
+        r.salesman_nama?.toLowerCase().includes(q) ||
+        r.delivery_number?.toLowerCase().includes(q) ||
+        r.pod_reason?.toLowerCase().includes(q) ||
+        toko.toLowerCase().includes(q) ||
+        String(r.customer_id ?? '').includes(q)
+      )
+    })
+    counts.push({ label: "SKR", view: "skr", count: skrHits.length })
+    for (const r of skrHits.slice(0, 5)) {
+      items.push({
+        view: "skr",
+        group: "SKR",
+        title: r.license_no || "(tanpa nopol)",
+        subtitle: [
+          customerById.get(String(r.customer_id ?? '').trim()),
+          r.delivery_number,
+          r.salesman_nama || r.salesman,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      })
+    }
+
+    // Pengiriman → menu Pengiriman (freight order + nopol + kendala jam)
+    const outHits = outbounds.filter(
+      (o) =>
+        String(o.no_polisi ?? "").toLowerCase().includes(q) ||
+        String(o.freight_order ?? "").toLowerCase().includes(q),
+    )
+    counts.push({ label: "Pengiriman", view: "pengiriman", count: outHits.length })
+    for (const o of outHits.slice(0, 5)) {
+      items.push({
+        view: "pengiriman",
+        group: "Pengiriman",
+        title: o.freight_order || o.no_polisi || "(tanpa FO)",
+        subtitle: o.no_polisi && o.freight_order ? o.no_polisi : "",
+      })
+    }
+
+    return { items, counts }
+  }, [equipments, histories, skrDetails, outbounds, customerById, debouncedSearch])
+
   const handleViewChange = useCallback((view: View) => {
     setActiveView(view)
-    setFilters({}) // Reset filter saat pindah menu
+    // Reset filter saat pindah menu, tapi kata kunci search header TETAP —
+    // search global sekarang lintas menu: sekali ketik, semua menu ikut saringan.
+    setFilters((prev) => (prev.search ? { search: prev.search } : {}))
   }, [])
 
-  const handleSearchFilterChange = useCallback((newFilters: EquipmentFilters) => {
-    setFilters(newFilters)
+  /** Input search header menulis langsung ke filters.search (respond instan);
+   *  pemfilteran berat pakai debouncedSearch supaya tidak chaque ketikan. */
+  const handleSearchChange = useCallback((value: string) => {
+    setFilters((prev) => ({ ...prev, search: value || undefined }))
   }, [])
 
   // Konfigurasi Header Dinamis
@@ -650,6 +814,15 @@ function DashboardContent() {
     analisa: { title: 'Analisa', desc: 'Ringkasan bergaya Head of Transport dari KPI otomatis: biaya transport, redelivery, sisa kiriman, dan ritase — dihitung dari data asli, bukan perkiraan.' },
   }
 
+  // Placeholder search global di header, mengikuti konteks menu aktif
+  const searchPlaceholder =
+    activeView === 'equipment' ? 'Cari equipment… (ID, deskripsi, nopol)'
+    : activeView === 'maintenance' ? 'Cari riwayat perbaikan… (barang/jasa, nopol)'
+    : activeView === 'monitoring' ? 'Cari unit untuk monitoring… (ID, nopol)'
+    : activeView === 'skr' ? 'Cari SKR… (nopol, salesman, nomor dokumen)'
+    : activeView === 'pengiriman' ? 'Cari pengiriman… (nopol, freight order)'
+    : 'Cari data… (equipment, riwayat, SKR, pengiriman)'
+
   // Title tab browser mengikuti menu aktif — rapi di riwayat tab & bookmark.
   usePageTitle(headerInfo[activeView].title)
 
@@ -661,6 +834,12 @@ function DashboardContent() {
       activeView={activeView}
       onViewChange={handleViewChange}
       equipmentCounts={{ total: filteredEquipments.length, available: availableCount }}
+      searchTerm={filters.search ?? ""}
+      onSearchChange={handleSearchChange}
+      searchPlaceholder={searchPlaceholder}
+      searchItems={searchResults.items}
+      searchCounts={searchResults.counts}
+      onSearchSelect={handleViewChange}
     >
       {/* Padding bawah lebih besar dari `p-6`: baris paling bawah halaman
           (kontrol paginasi) berada di kanan bawah, dan tombol mengambang
@@ -692,16 +871,6 @@ function DashboardContent() {
             <p className="text-muted-foreground mb-4">
               {headerInfo[activeView].desc}
             </p>
-
-            {/* Sembunyikan SearchBar di mode Dashboard & menu Ekspedisi yang belum ada datanya.
-                Analisa Ban punya kotak pencarian sendiri di dalam halamannya. */}
-            {activeView !== 'dashboard' && activeView !== 'skr' && activeView !== 'pengiriman' && activeView !== 'ban' && activeView !== 'weather' && activeView !== 'traffic' && activeView !== 'analisa' && (
-              <SearchBar
-                filters={{ ...filters, search: debouncedSearch }}
-                onFiltersChange={handleSearchFilterChange}
-                activeView={activeView}
-              />
-            )}
           </div>
         )}
 
@@ -716,6 +885,8 @@ function DashboardContent() {
               equipments={equipments}
               histories={histories}
               serviceLogs={serviceLogs}
+              outbounds={outbounds}
+              skrDetails={skrDetails}
               isLoading={isLoading}
               onNavigate={handleViewChange}
             />
@@ -726,6 +897,7 @@ function DashboardContent() {
           <EquipmentTable
             equipments={filteredEquipments}
             histories={histories}
+            serviceLogs={serviceLogs}
             isLoading={isLoading}
             error={error}
             statusFilter={filters.status || 'all'}
@@ -774,12 +946,13 @@ function DashboardContent() {
             totalRows={skrDetails.length}
             bounds={skrBounds}
             usingView={skrUsesView}
+            searchActive={!!debouncedSearch}
           />
         )}
 
         {activeView === 'pengiriman' && (
           <OutboundTable
-            outbounds={outbounds}
+            outbounds={filteredOutbounds}
             isLoading={isLoading && outboundError == null}
             error={outboundError}
             dateFrom={outboundRange.from}

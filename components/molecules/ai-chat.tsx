@@ -12,6 +12,7 @@ import {
   Check,
   ChevronDown,
   Copy,
+  Download,
   Eraser,
   Loader2,
   Plus,
@@ -81,6 +82,94 @@ interface ChatMessage {
 const STORAGE_KEY = "midaa.ai-chat.v1";
 const MAX_STORED_MESSAGES = 60;
 
+/** Label konteks menu untuk header panel — bukan id mentah "pengiriman". */
+const VIEW_LABELS: Record<string, string> = {
+  dashboard: "Dashboard",
+  equipment: "Equipment",
+  maintenance: "Histories",
+  monitoring: "Monitoring",
+  skr: "SKR",
+  pengiriman: "Pengiriman",
+  ban: "Analisa Ban",
+  weather: "Cuaca",
+  traffic: "Lalu Lintas",
+  analisa: "Analisa",
+  about: "Tentang",
+};
+
+/**
+ * Inline mini-markdown: hanya **bold** — sesuatu yang model memang kerap
+ * pakai. Semua teks dirender sebagai child React (bukan innerHTML), jadi
+ * tidak ada Permukaan XSS meski jawaban datang dari model.
+ */
+function inlineNodes(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") && part.length > 4 ? (
+      <strong key={i} className="font-semibold text-foreground">
+        {part.slice(2, -2)}
+      </strong>
+    ) : (
+      <React.Fragment key={i}>{part}</React.Fragment>
+    ),
+  );
+}
+
+/**
+ * Render jawaban dengan format ringan: bullet "- / •", daftar bernomor,
+ * **bold**, dan baris kosong pemisah. Plain text panjang dari model jadi
+ * terbaca seperti jawaban asisten, bukan blocang teks mentah.
+ */
+function RichAnswer({ text, error }: { text: string; error?: boolean }) {
+  return (
+    <div
+      className={
+        error ? "space-y-1 text-sm text-destructive" : "space-y-1.5 text-sm"
+      }
+    >
+      {text.split("\n").map((line, i) => {
+        const trimmed = line.trim();
+        if (!trimmed)
+          return <div key={i} aria-hidden className="h-1.5" />;
+
+        // Bullet: "- " atau "• "
+        const bullet = trimmed.startsWith("- ")
+          ? trimmed.slice(2)
+          : trimmed.startsWith("• ")
+            ? trimmed.slice(2)
+            : null;
+        if (bullet !== null) {
+          return (
+            <div key={i} className="flex gap-2">
+              <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" />
+              <span className="flex-1 leading-relaxed">{inlineNodes(bullet)}</span>
+            </div>
+          );
+        }
+
+        // Daftar bernomor: "1. ..." / "2) ..."
+        const numbered = trimmed.match(/^(\d+)[.)]\s+(.*)$/);
+        if (numbered) {
+          return (
+            <div key={i} className="flex gap-2">
+              <span className="shrink-0 font-semibold text-primary">
+                {numbered[1]}.
+              </span>
+              <span className="flex-1 leading-relaxed">{inlineNodes(numbered[2])}</span>
+            </div>
+          );
+        }
+
+        return (
+          <p key={i} className="leading-relaxed">
+            {inlineNodes(line)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function loadStoredMessages(): ChatMessage[] {
   if (typeof window === "undefined") return [];
   try {
@@ -121,7 +210,22 @@ export function AIChat({ activeView }: { activeView?: string }) {
   // layar, dan di halaman tabel isi itu sering kali kontrol paginasi.
   const [fabHidden, setFabHidden] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Shortcut keyboard: Alt+A buka/tutup panel, Escape tutup saat terbuka.
+  // Sebagian besar asisten punya shortcut — pola yang sama bikin chat bisa
+  // dimanggil dalam dua ketukan dari mana pun, tanpa berhenti scroll dulu.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        setOpen((v) => !v);
+      }
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Sembunyikan tombol saat scroll turun, tampilkan lagi saat scroll naik
   // atau berhenti. Arah scroll dibaca dari selisih posisi, bukan dari
@@ -160,6 +264,36 @@ export function AIChat({ activeView }: { activeView?: string }) {
       behavior: "smooth",
     });
   }, [messages, loading]);
+
+  // Textarea pertanyaan ikut tumbuh mengikuti isi (batas ~5 baris). Efek
+  // berjalan pada [input] supaya tinggi juga pulih saat pesan terkirim.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [input, open]);
+
+  /**
+   * Unduh percakapan sebagai .txt — bahan catatan risalah/slide.
+   * Tanpa server, tanpa dependensi: cukup Blob + anchor download.
+   */
+  const exportChat = useCallback(() => {
+    if (messages.length === 0) return;
+    const lines = messages
+      .filter((m) => m.content)
+      .map((m) => `${m.role === "user" ? "Kamu" : "Midaa"}:${m.content}`)
+      .join("\n\n");
+    const header = `Tanya Midaa — diekspor ${new Date().toLocaleString("id-ID")}\n\n`;
+    const url = URL.createObjectURL(
+      new Blob([header + lines], { type: "text/plain;charset=utf-8" }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tanya-midaa-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [messages]);
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -353,6 +487,9 @@ export function AIChat({ activeView }: { activeView?: string }) {
               role: m.role,
               content: m.content,
             })),
+            // Menu yang sedang dibuka — jawaban lebih nyambung dengan
+            // data yang user sedang lihat. Server mem-whitelist id-nya.
+            view: activeView ?? "",
             // Salam satu: server akan menyimpan kalimat ini apa adanya ke
             // ai_memory, tanpa bergantung pada keputusan model.
             remember: rememberNext,
@@ -475,8 +612,11 @@ export function AIChat({ activeView }: { activeView?: string }) {
                 <p className="text-sm font-semibold leading-tight">
                   Tanya Midaa
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="truncate text-xs text-muted-foreground">
                   Jawaban dihitung dari database
+                  {activeView && VIEW_LABELS[activeView]
+                    ? ` · konteks: ${VIEW_LABELS[activeView]}`
+                    : ""}
                 </p>
               </div>
               <Button
@@ -498,16 +638,28 @@ export function AIChat({ activeView }: { activeView?: string }) {
                 )}
               </Button>
               {messages.length > 0 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearHistory}
-                  title="Hapus seluruh riwayat percakapan"
-                  className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <Eraser className="h-3.5 w-3.5" /> Bersihkan
-                </Button>
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={exportChat}
+                    title="Unduh percakapan sebagai teks — bahan laporan/presentasi"
+                    className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Unduh
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearHistory}
+                    title="Hapus seluruh riwayat percakapan"
+                    className="h-7 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Eraser className="h-3.5 w-3.5" /> Bersihkan
+                  </Button>
+                </>
               )}
             </div>
 
@@ -667,16 +819,29 @@ export function AIChat({ activeView }: { activeView?: string }) {
                   className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`}
                 />
               </Button>
-              <Input
+              {/* Textarea multi-baris: pertanyaan panjang akhirnya bisa
+                  ditulis utuh. Enter = kirim, Shift+Enter = baris baru —
+                  pola standar aplikasi chat (Slack/WhatsApp). */}
+              <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={
-                  rememberNext ? "Ketik yang mau diingat…" : "Tanya apa saja…"
-                }
-                maxLength={500}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !loading) {
+                    e.preventDefault();
+                    ask(input);
+                  }
+                }}
+                rows={1}
+                maxLength={1000}
                 disabled={loading}
                 aria-label="Pertanyaan untuk asisten AI"
+                placeholder={
+                  rememberNext
+                    ? "Ketik yang mau diingat…"
+                    : "Tanya apa saja… (Enter kirim, Shift+Enter baris baru)"
+                }
+                className="max-h-[120px] min-h-[2.25rem] flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
               />
               <Button
                 type="submit"
@@ -746,9 +911,7 @@ function MessageBubble({
 
   return (
     <div className="space-y-2">
-      <p className={message.error ? "text-sm text-destructive" : "text-sm"}>
-        {message.content}
-      </p>
+      <RichAnswer text={message.content} error={message.error} />
 
       {/* Tahan banting: jawaban gagal bisa diulang satu klik dengan
           pertanyaan yang sama — tanpa mengetik ulang lewat kolom input. */}

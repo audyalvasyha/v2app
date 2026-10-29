@@ -36,18 +36,27 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "flex h-full flex-col rounded-xl border bg-card px-4 py-3 shadow-sm",
+        "flex h-full flex-col rounded-xl border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-primary/30",
         className,
       )}
       title={title}
     >
-      <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-        {icon}
-        <span className="truncate">{label}</span>
+      {/* Eyebrow: ikon dalam bubble aksen + label kapital — bahasa kartu yang
+          sama dengan header kartu besar (CardHeaderBadge) supaya satu halaman
+          terbaca sebagai satu sistem, bukan kumpulan komponen berbeda gaya. */}
+      <div className="flex items-center gap-2.5">
+        {icon && (
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary [&_svg]:h-3.5 [&_svg]:w-3.5">
+            {icon}
+          </div>
+        )}
+        <span className="truncate text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          {label}
+        </span>
       </div>
       <div
         className={cn(
-          "mt-2 truncate text-lg font-semibold leading-none tabular-nums",
+          "mt-3 truncate text-xl font-semibold leading-none tabular-nums",
           emphasis && "text-primary",
         )}
       >

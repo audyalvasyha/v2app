@@ -60,6 +60,7 @@ import {
 // Chart di-lazy-load sebagai komponen utuh (chunk terpisah dari bundle dashboard).
 // Ketiganya keluar dari modul boundary yang sama (components/molecules/charts)
 // supaya Turbopack membuat SATU chunk recharts, bukan salinan per grafik.
+import { DashboardMenuCards } from "@/components/molecules/dashboard-menu-cards"
 const LazyCostChart = dynamic(() =>
   import("@/components/molecules/charts").then((m) => m.CostChart),
 );
@@ -71,6 +72,12 @@ interface DashboardViewProps {
   equipments: any[];
   histories: any[];
   serviceLogs: any[];
+  /** Dataset menu Pengiriman & SKR — untuk kartu ringkasan menu (boleh kosong) */
+  outbounds: any[];
+  skrDetails: any[];
+  /** Error fetch menu.GetCurrentMethod — supaya kartu jujur bila hydrate gagal */
+  skrError?: string | null;
+  outboundError?: string | null;
   isLoading: boolean;
   /** Dipakai tombol pintas "buka menu X" di dalam dashboard */
   onNavigate?: (view: View) => void;
@@ -82,6 +89,10 @@ function DashboardViewImpl({
   equipments,
   histories,
   serviceLogs,
+  outbounds,
+  skrDetails,
+  skrError,
+  outboundError,
   isLoading,
   onNavigate,
 }: DashboardViewProps) {
@@ -94,6 +105,10 @@ function DashboardViewImpl({
       equipments={equipments}
       histories={histories}
       serviceLogs={serviceLogs}
+      outbounds={outbounds}
+      skrDetails={skrDetails}
+      skrError={skrError}
+      outboundError={outboundError}
       onNavigate={onNavigate}
     />
   );
@@ -103,9 +118,9 @@ function DashboardViewImpl({
 function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-4 pb-4">
-      {/* Kartu metrik */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {Array.from({ length: 6 }).map((_, i) => (
+      {/* Ringkasan menu (menggantikan baris KPI yang dihapus) */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 9 }).map((_, i) => (
           <div key={i} className="rounded-xl border bg-card px-4 py-3">
             <Skeleton className="h-3 w-24" />
             <Skeleton className="mt-3 h-5 w-24" />
@@ -231,11 +246,19 @@ function DashboardContent({
   equipments,
   histories,
   serviceLogs,
+  outbounds,
+  skrDetails,
+  skrError,
+  outboundError,
   onNavigate,
 }: {
   equipments: any[];
   histories: any[];
   serviceLogs: any[];
+  outbounds: any[];
+  skrDetails: any[];
+  skrError?: string | null;
+  outboundError?: string | null;
   onNavigate?: (view: View) => void;
 }) {
   const today = useMemo(() => new Date(), []);
@@ -436,70 +459,32 @@ function DashboardContent({
 
   return (
     <div className="flex flex-col gap-4 pb-4">
-      {/* KARTU METRIK */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatTile
-          label="Total unit"
-          value={formatNumber(analytics.totalUnits)}
-          hint="unit terdaftar"
-          icon={<Truck className="h-3.5 w-3.5" />}
-        />
-        <StatTile
-          label="Available"
-          value={formatNumber(analytics.availableCount)}
-          hint={`${analytics.capacityRate.toFixed(0)}% siap pakai`}
-          icon={<ShieldCheck className="h-3.5 w-3.5" />}
-        />
-        <StatTile
-          label="Biaya 30 hari"
-          value={compactRupiah(analytics.cost30)}
-          hint={<DeltaBadge delta={analytics.delta30} />}
-          title={formatRupiah(analytics.cost30)}
-          icon={<TrendingUp className="h-3.5 w-3.5" />}
-          emphasis
-        />
-        <StatTile
-          label="Rata-rata / unit"
-          value={compactRupiah(analytics.averagePerUnit)}
-          hint="dari seluruh riwayat"
-          title={formatRupiah(analytics.averagePerUnit)}
-          icon={<CircleDollarSign className="h-3.5 w-3.5" />}
-        />
-        <StatTile
-          label="Servis terlewat"
-          value={formatNumber(analytics.overdueCount)}
-          hint={
-            analytics.warningCount > 0
-              ? `+ ${analytics.warningCount} unit segera servis`
-              : "semua unit aman"
-          }
-          icon={
-            <AlertTriangle
-              className={cn(
-                "h-3.5 w-3.5",
-                analytics.overdueCount > 0
-                  ? "text-destructive"
-                  : "text-muted-foreground",
-              )}
-            />
-          }
-        />
-        <StatTile
-          label="Total biaya"
-          value={compactRupiah(analytics.totalCost)}
-          hint="seluruh riwayat perbaikan"
-          title={formatRupiah(analytics.totalCost)}
-          icon={<Wrench className="h-3.5 w-3.5" />}
-        />
-      </div>
+      {/* Baris KPI dihapus: kartu "RINGKASAN MENU" di bawah kini mewakili
+          tiap menu. Dua nilai yang tidak diwakili kartu mana pun (total
+          biaya & rata-rata per unit) dipindah ke kartu Histories. */}
+
+      {/* RINGKASAN MENU — satu kartu per menu; klik → langsung buka menu */}
+      <DashboardMenuCards
+        equipments={equipments}
+        histories={histories}
+        serviceLogs={serviceLogs}
+        outbounds={outbounds}
+        skrDetails={skrDetails}
+        skrError={skrError}
+        outboundError={outboundError}
+        onNavigate={onNavigate}
+      />
 
       {/* GRAFIK TREN — data & rentang tetap 3 bulan, tampilan dipoles */}
       <Card>
-        <CardHeader>
-          <CardTitle>Tren Biaya Perbaikan</CardTitle>
-          <CardDescription>
-            Total biaya harian dalam 3 bulan terakhir
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start gap-3 space-y-0">
+          <CardHeaderBadge icon={<TrendingUp className="h-4 w-4" />} />
+          <div>
+            <CardTitle>Tren Biaya Perbaikan</CardTitle>
+            <CardDescription>
+              Total biaya harian dalam 3 bulan terakhir
+            </CardDescription>
+          </div>
         </CardHeader>
         <CardContent>
           {analytics.trend.length > 0 ? (

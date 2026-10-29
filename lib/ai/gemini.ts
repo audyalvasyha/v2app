@@ -442,9 +442,12 @@ const MAX_REPAIR_SQL_LENGTH = 600
 function buildSqlPrompt(
   question: string,
   historyBlock: string,
+  viewBlock: string,
   failures: SqlFailure[],
 ): string {
   const parts = [AI_SCHEMA_DOC, historyBlock]
+
+  if (viewBlock) parts.push("", viewBlock)
 
   if (failures.length > 0) {
     parts.push(
@@ -520,6 +523,7 @@ function sqlErrorDetail(error: unknown): string {
 async function answerChatQuestion(
   question: string,
   memories: string[],
+  viewBlock: string = "",
 ): Promise<{ answer: string; remembered: string[]; saran: string[] }> {
   const raw = await callAi(
     [
@@ -527,6 +531,7 @@ async function answerChatQuestion(
       "",
       AI_USER_CONTEXT,
       buildKpiBlock(),
+      ...(viewBlock ? ["", viewBlock] : []),
       "",
       buildMemoryBlock(memories),
       "",
@@ -604,6 +609,38 @@ async function answerChatQuestion(
 export interface QuestionContext {
   history?: ConversationTurn[]
   memories?: string[]
+  /** Menu UI yang sedang dibuka user — di-whitelist, dipakai sebagai hint konteks */
+  view?: string
+}
+
+/**
+ * Menu yang BULIH disebut ke model — whitelist, bukan string bebas dari
+ * klien. Isinya cuma label Indonesia; bila klien mengirim id lain, bloknya
+ * kosong dan tidak ada apa pun yang berubah di prompt.
+ */
+const VIEW_PROMPT_LABELS: Record<string, string> = {
+  dashboard: "Dashboard",
+  equipment: "Equipment",
+  maintenance: "Histories",
+  monitoring: "Monitoring",
+  skr: "SKR",
+  pengiriman: "Pengiriman",
+  ban: "Analisa Ban",
+  weather: "Perkiraan Cuaca",
+  traffic: "Lalu Lintas",
+  analisa: "Analisa",
+}
+
+function buildViewBlock(view?: string): string {
+  if (!view) return ""
+  const label = VIEW_PROMPT_LABELS[view]
+  if (!label) return ""
+  return [
+    "## Konteks UI",
+    `User sedang membuka menu "${label}" — sapukan jawaban ke data yang`,
+    "nyambung dengan menu itu bila relevan. Isi datanya TIDAK ada di sini;",
+    "bila perlu angka, susun SQL sesuai skema di atas.",
+  ].join("\n")
 }
 
 /**
@@ -629,6 +666,7 @@ export async function answerQuestion(
   // kalimat preferensi user, bukan filter query, dan menambahkannya
   // hanya menambah token tanpa memperbaiki SQL.
   const historyBlock = buildHistoryBlock(context.history ?? [])
+  const viewBlock = buildViewBlock(context.view)
   const failures: SqlFailure[] = []
 
   let sql = ""
@@ -637,7 +675,7 @@ export async function answerQuestion(
 
   for (let attempt = 1; attempt <= MAX_SQL_ATTEMPTS; attempt++) {
     const sqlResponse = await callAi(
-      buildSqlPrompt(question, historyBlock, failures),
+      buildSqlPrompt(question, historyBlock, viewBlock, failures),
       MAX_TOKENS_SQL,
       TEMPERATURE_SQL,
       CHAT_TIMEOUT_OPENKEY_MS,
@@ -689,7 +727,7 @@ export async function answerQuestion(
   // ("pengembangmu adalah Audy Al Vasyah") bisa dipakai menjawab
   // pertanyaan identitas — itu justru gunanya memori.
   if (!sql) {
-    const chat = await answerChatQuestion(question, context.memories ?? [])
+    const chat = await answerChatQuestion(question, context.memories ?? [], viewBlock)
     return {
       sql: "",
       rows: [],
@@ -738,6 +776,7 @@ export async function answerQuestion(
       "",
       AI_USER_CONTEXT,
       buildKpiBlock(),
+      ...(viewBlock ? ["", viewBlock] : []),
       "",
       `User bertanya: ${question}`,
       buildMemoryBlock(context.memories ?? []),

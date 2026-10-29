@@ -12,6 +12,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+
+/** Detail riwayat perbaikan: batas baris tampil sebelum tombol "tampilkan semua". */
+const HISTORY_SHOW_LIMIT = 25
 import {
     Pagination,
     PaginationContent,
@@ -25,6 +29,7 @@ import { compactRupiah, formatDateMedium, formatKm, formatRupiah, relativeDayLab
 import { unitStatusTone as statusTone } from "@/lib/unit-status"
 import {
     AlertTriangle,
+    ArrowLeft,
     ArrowUpDown,
     Building2,
     ChevronDown,
@@ -46,6 +51,8 @@ interface EquipmentTableProps {
     /** Sinkron dengan filter status di SearchBar (state induk) */
     statusFilter?: string
     onStatusFilterChange?: (next: string) => void
+    /** Log servis per unit untuk jadwal servis berikutnya di dialog detail */
+    serviceLogs?: any[]
 }
 
 type SortKey = "default" | "id" | "odometer" | "cost" | "history"
@@ -177,11 +184,17 @@ function EquipmentTableImpl({
     error,
     statusFilter = "all",
     onStatusFilterChange,
+    serviceLogs,
 }: EquipmentTableProps) {
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [sortKey, setSortKey] = useState<SortKey>("default")
     const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0])
     const [page, setPage] = useState(1)
+    /** Equipment id yang dibuka di halaman detail (klik baris). */
+    const [detailId, setDetailId] = useState<string | null>(null)
+    /** Pencarian riwayat perbaikan di halaman detail + mode tampil semua. */
+    const [historyQuery, setHistoryQuery] = useState("")
+    const [showAllHistory, setShowAllHistory] = useState(false)
 
     // Index riwayat per unit sekali — dipakai untuk kolom biaya, detail, dan panel expanded
     const { byUnit, statsByUnit } = useMemo(() => {
@@ -276,6 +289,30 @@ function EquipmentTableImpl({
         setPage(1)
     }, [equipments.length, sortKey, pageSize])
 
+    // Ganti unit → reset pencarian & limit riwayat supaya tidak membawa state unit sebelumnya.
+    useEffect(() => {
+        setHistoryQuery("")
+        setShowAllHistory(false)
+    }, [detailId])
+
+    /** Baris dialog detail — di-resolve dari rows biar ikut data terbaru. */
+    const detailRow = useMemo(
+        () => (detailId ? rows.find((r) => String(r.item.id) === detailId) ?? null : null),
+        [rows, detailId],
+    )
+
+    /** Log servis terbaru unit yang dibuka — sumber jadwal servis di dialog. */
+    const detailServiceLog = useMemo(() => {
+        const eq = detailRow?.item?.equipment_id
+        if (eq == null || !serviceLogs?.length) return null
+        let latest: any = null
+        for (const s of serviceLogs) {
+            if (String(s.equipment_id) !== String(eq)) continue
+            if (!latest || new Date(s.service_date ?? 0) > new Date(latest.service_date ?? 0)) latest = s
+        }
+        return latest
+    }, [detailRow, serviceLogs])
+
     const activeChip = statusFilter || "all"
 
     if (isLoading) {
@@ -307,6 +344,181 @@ function EquipmentTableImpl({
                 <AlertTriangle className="mx-auto h-6 w-6 text-destructive" />
                 <p className="mt-3 text-sm font-medium text-destructive">Gagal memuat data equipment</p>
                 <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">{error}</p>
+            </div>
+        )
+    }
+
+    // VIEW DETAIL: klik baris → render sebagai halaman di dalam menu Equipment.
+    // Menggantikan seluruh daftar sampai user menekan tombol kembali.
+    if (detailRow) {
+        const it = detailRow.item
+        const st = detailRow.stat
+        const tone = statusTone(it.status)
+        const avg = st && st.count > 0 ? st.total / st.count : 0
+        const nextOdo = detailServiceLog?.next_service_odometer
+        const q = historyQuery.trim().toLowerCase()
+        const filteredHistory = q
+            ? detailRow.history.filter((h) => {
+                  const nama = String(h.nama_barang_atau_jasa ?? "").toLowerCase()
+                  const raw = String(h.tanggal ?? "").toLowerCase()
+                  const tgl = h.tanggal ? formatDateMedium(h.tanggal).toLowerCase() : ""
+                  return nama.includes(q) || raw.includes(q) || tgl.includes(q)
+              })
+            : detailRow.history
+        const shownHistory = showAllHistory ? filteredHistory : filteredHistory.slice(0, HISTORY_SHOW_LIMIT)
+        const hiddenCount = filteredHistory.length - shownHistory.length
+
+        return (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Button variant="outline" size="sm" className="gap-1.5 bg-card" onClick={() => setDetailId(null)}>
+                        <ArrowLeft className="h-3.5 w-3.5" /> Kembali ke daftar
+                    </Button>
+                    <span className="text-xs text-muted-foreground">Detail equipment {it.equipment_id}</span>
+                </div>
+
+                {/* Kartu identitas + ringkasan unit */}
+                <div className="rounded-xl border bg-card shadow-sm">
+                    <div className="flex items-start gap-3 border-b border-border p-5">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                            <Truck className="h-5 w-5 text-primary" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-sm border bg-muted/40 px-1.5 py-0.5 font-mono text-sm font-medium">
+                                    {it.license_plate || "—"}
+                                </span>
+                                <span className="font-medium">{it.equipment_id}</span>
+                                <Badge
+                                    variant="outline"
+                                    className={["gap-1.5 border font-medium", tone.badge].join(" ")}
+                                >
+                                    <span className={["h-1.5 w-1.5 rounded-full", tone.dot].join(" ")} />
+                                    {it.status || "Tidak diketahui"}
+                                </Badge>
+                            </div>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                                {it.description || "Tanpa deskripsi"}
+                                {detailServiceLog?.next_service_date
+                                    ? ` · Servis berikutnya ${formatDateMedium(detailServiceLog.next_service_date)}`
+                                    : ""}
+                                {detailServiceLog?.next_service_date && nextOdo
+                                    ? ` (@ ${formatKm(nextOdo)})`
+                                    : ""}
+                            </p>
+                        </div>
+                    </div>
+
+                    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 p-5 sm:grid-cols-4">
+                        <div>
+                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Odometer</dt>
+                            <dd className="mt-1 font-mono text-sm tabular-nums">{formatKm(it.last_odometer)}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Tipe</dt>
+                            <dd className="mt-1 text-sm">{it.type_vehicle || "—"}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Tahun</dt>
+                            <dd className="mt-1 text-sm tabular-nums">{it.construction_year || "—"}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Perusahaan</dt>
+                            <dd className="mt-1 text-sm">{it.company_code || "—"}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Total perawatan</dt>
+                            <dd className="mt-1 font-mono text-sm font-semibold tabular-nums text-primary">
+                                {st ? formatRupiah(st.total) : "—"}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Rata-rata / servis</dt>
+                            <dd className="mt-1 font-mono text-sm tabular-nums">{avg > 0 ? formatRupiah(avg) : "—"}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Jumlah servis</dt>
+                            <dd className="mt-1 text-sm tabular-nums">{st?.count ?? 0}×</dd>
+                        </div>
+                        <div>
+                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Servis terakhir</dt>
+                            <dd className="mt-1 text-sm">{st?.last ? formatDateMedium(st.last) : "Belum pernah"}</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                {/* Riwayat perbaikan lengkap */}
+                <div className="rounded-xl border bg-card shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
+                        <div className="text-sm font-semibold">
+                            Riwayat perbaikan <span className="text-muted-foreground">({st?.count ?? 0})</span>
+                        </div>
+                        <div className="text-xs tabular-nums text-muted-foreground">
+                            Total {st ? formatRupiah(st.total) : "—"}
+                        </div>
+                    </div>
+                    <div className="p-5">
+                        {/* Pencarian + hitungan entri riwayat */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Input
+                                value={historyQuery}
+                                onChange={(e) => setHistoryQuery(e.target.value)}
+                                placeholder="Cari barang/jasa atau tanggal…"
+                                className="h-8 max-w-xs text-sm"
+                            />
+                            <span className="text-xs tabular-nums text-muted-foreground">
+                                Menampilkan {shownHistory.length} dari {filteredHistory.length} entri
+                            </span>
+                        </div>
+
+                        {filteredHistory.length > 0 ? (
+                            <div className="mt-3 overflow-hidden rounded-lg border">
+                                <Table>
+                                    <TableHeader className="bg-muted/40">
+                                        <TableRow className="hover:bg-transparent">
+                                            <TableHead className="h-8 whitespace-nowrap py-1 text-xs">Tanggal</TableHead>
+                                            <TableHead className="h-8 py-1 text-xs">Barang / Jasa</TableHead>
+                                            <TableHead className="h-8 whitespace-nowrap py-1 text-right text-xs">Biaya</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {shownHistory.map((h, idx) => (
+                                            <TableRow key={String(h.id ?? `${h.tanggal}-${idx}`)}>
+                                                <TableCell className="py-2 text-xs tabular-nums">
+                                                    {formatDateMedium(h.tanggal)}
+                                                </TableCell>
+                                                <TableCell
+                                                    className="max-w-[420px] truncate py-2 text-xs"
+                                                    title={h.nama_barang_atau_jasa || ""}
+                                                >
+                                                    {h.nama_barang_atau_jasa || "—"}
+                                                </TableCell>
+                                                <TableCell className="py-2 text-right font-mono text-xs tabular-nums">
+                                                    {formatRupiah(Number(h.jumlah_harga) || 0)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                                {hiddenCount > 0 && (
+                                    <div className="border-t bg-muted/20 px-3 py-2 text-center">
+                                        <Button variant="outline" size="sm" onClick={() => setShowAllHistory((v) => !v)}>
+                                            {showAllHistory
+                                                ? "Tampilkan lebih sedikit"
+                                                : `Tampilkan semua ${filteredHistory.length} entri (+${hiddenCount})`}
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="mt-3 rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+                                {q
+                                    ? `Tidak ada riwayat yang cocok dengan pencarian "${historyQuery.trim()}".`
+                                    : "Belum ada riwayat perbaikan untuk unit ini."}
+                            </p>
+                        )}
+                    </div>
+                </div>
             </div>
         )
     }
@@ -423,14 +635,20 @@ function EquipmentTableImpl({
                                 return (
                                     <Fragment key={String(item.id)}>
                                         <TableRow
-                                            onClick={() => setExpandedId(isExpanded ? null : String(item.id))}
+                                            onClick={() => setDetailId(String(item.id))}
                                             className={[
                                                 "cursor-pointer border-l-2 transition-colors hover:bg-muted/40",
                                                 tone.accent,
                                                 isExpanded ? "bg-muted/30" : "",
                                             ].join(" ")}
                                         >
-                                            <TableCell className="py-2.5">
+                                            <TableCell
+                                                className="py-2.5"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setExpandedId(isExpanded ? null : String(item.id))
+                                                }}
+                                            >
                                                 {isExpanded ? (
                                                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                                 ) : (
@@ -680,6 +898,7 @@ function EquipmentTableImpl({
                     )}
                 </div>
             )}
+
         </div>
     )
 }

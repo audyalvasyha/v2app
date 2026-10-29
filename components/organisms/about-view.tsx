@@ -34,7 +34,7 @@ const CAPABILITIES: { index: string; title: string; desc: string }[] = [
   {
     index: "04",
     title: "Sisa Kiriman (SKR)",
-    desc: "Dasbor Sisa Kiriman per armada, sales, dan toko: dokumen, qty, dan nilai tersaji berdampingan dengan tren harian dibanding bulan sebelumnya.",
+    desc: "Dasbor Sisa Kiriman per armada, sales, dan toko: dokumen, qty, dan nilai berdampingan dengan tren harian. Mencari via header langsung menampilkan daftar detail dokumen yang cocok — tanpa grafik mengganggu.",
   },
   {
     index: "05",
@@ -54,7 +54,7 @@ const CAPABILITIES: { index: string; title: string; desc: string }[] = [
   {
     index: "08",
     title: "Tanya Data (AI)",
-    desc: "Pertanyaan bahasa sehari-hari diubah jadi SQL dan dijawab dari angka database asli — AI tidak pernah melihat data sebelum query dieksekusi, dan mengingat preferensi antar sesi. Panel pop-up dengan ingatan jangka panjang per user.",
+    desc: "Pertanyaan bahasa sehari-hari diubah jadi SQL dan dijawab dari angka database asli. Sadar konteks menu yang sedang dibuka, jawaban tampil terformat (bold, poin), ingat preferensi antar sesi, bisa dibuka dengan Alt+A, dan percakapan bisa diunduh untuk laporan.",
   },
   {
     index: "09",
@@ -71,6 +71,11 @@ const CAPABILITIES: { index: string; title: string; desc: string }[] = [
     title: "Import Data Harian",
     desc: "Halaman terproteksi login untuk mengunggah CSV dari sistem: baris yang sama ditimpa, yang baru ditambah — data hari sebelumnya tetap aman.",
   },
+  {
+    index: "12",
+    title: "Pencarian Global Lintas-Menu",
+    desc: "Satu kotak pencarian di header (Ctrl + /) menyaring semua menu sekaligus: nopol, nama toko, salesman, freight order. Hasilnya tampil sebagai dropdown lintas menu berpola command palette — klik lompat langsung ke menunya, dari menu mana pun termasuk dashboard.",
+  },
 ];
 
 const SKILLS = [
@@ -85,7 +90,7 @@ const SKILLS = [
 
 export function AboutView() {
   return (
-    <div className="w-full max-w-5xl mx-auto pb-16 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="w-full mx-auto pb-16 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Masthead: penanda seksi + versi, dipisah satu garis rambut */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="flex items-center gap-3">
@@ -95,7 +100,7 @@ export function AboutView() {
           </span>
         </div>
         <span className="font-mono text-[11px] tabular-nums uppercase tracking-[0.28em] text-muted-foreground">
-          v2.1
+          v2.2
         </span>
       </div>
 
@@ -112,8 +117,11 @@ export function AboutView() {
             Satu dasbor operasional untuk mengelola armada kendaraan: inventaris
             unit, riwayat perbaikan, pengingat servis, sisa kiriman, keadaan
             lalu lintas rute pengiriman, perkiraan cuaca, sampai asisten AI yang
-            menjawab pertanyaan data langsung dari database. Dibangun agar tim
-            lapangan dan tim administrasi membaca angka yang sama.
+            menjawab pertanyaan data langsung dari database. Satu kotak
+            pencarian di header menembus seluruh menu — sampai nama toko di SKR
+            maupun freight order — dan kartu ringkasan di dashboard membuka
+            pintu ke setiap menu dalam satu klik. Dibangun agar tim lapangan
+            dan tim administrasi membaca angka yang sama.
           </p>
         </div>
 

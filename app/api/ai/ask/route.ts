@@ -139,11 +139,13 @@ export async function POST(request: Request) {
   let question: unknown;
   let rawHistory: unknown = [];
   let rememberThis: unknown = false;
+  let rawView: unknown = undefined;
   try {
     const body = await request.json();
     question = body?.question;
     rawHistory = body?.history;
     rememberThis = body?.remember === true;
+    rawView = body?.view;
   } catch {
     return NextResponse.json(
       { error: "Body harus berupa JSON." },
@@ -227,6 +229,10 @@ export async function POST(request: Request) {
       {
         history: parseHistory(rawHistory),
         memories: toPromptMemories(memories.items),
+        // Konteks menu UI — dipotong sebelum masuk prompt. Kepercayaan
+        // rendah konten-nya (dari klien), tapi model hanya memakai ini
+        // sebagai hint, dan gemini.ts mem-whitelist id menu yang sah.
+        view: typeof rawView === "string" ? rawView.slice(0, 30) : undefined,
       },
     );
 
