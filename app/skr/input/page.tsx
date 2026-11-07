@@ -235,14 +235,14 @@ export default function SkrInputPage() {
                     <div className="space-y-2 pt-1 text-xs">
                         <div className="flex flex-wrap gap-1.5">
                             {parseSummary.headerMap.map((m) => (
-                                <Badge key={m.csvHeader} variant="outline" className="gap-1 font-normal">
+                                <Badge key={m.csvHeader} variant="outline" className="gap-1 normal-case tracking-normal">
                                     <span className="text-muted-foreground">{m.csvHeader}</span>
                                     <span aria-hidden>→</span>
                                     <span className="font-mono">{m.dbColumn}</span>
                                 </Badge>
                             ))}
                             {parseSummary.unknownHeaders.map((h) => (
-                                <Badge key={h} variant="outline" className="border-amber-500/40 font-normal text-amber-700 dark:text-amber-400">
+                                <Badge key={h} variant="outline" className="border-amber-500/35 normal-case tracking-normal text-amber-700 dark:text-amber-400">
                                     {h} (diabaikan)
                                 </Badge>
                             ))}

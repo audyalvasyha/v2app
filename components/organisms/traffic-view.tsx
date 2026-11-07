@@ -36,6 +36,7 @@ import {
     Wifi,
     WifiOff,
 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import type { MapLocation } from "@/components/organisms/traffic-map"
 import { useTrafficHistory, type LocationHistoryUi } from "@/hooks/use-traffic-history"
 
@@ -104,25 +105,25 @@ const STATUS_META: Record<TrafficLevel, { label: string; text: string; badge: st
     good: {
         label: "Lancar",
         text: "text-emerald-700 dark:text-emerald-400",
-        badge: "border-emerald-300/60 bg-emerald-500/10",
+        badge: "border-emerald-500/35 bg-emerald-500/10",
         icon: <Activity className="h-3.5 w-3.5" />,
     },
     warning: {
         label: "Perlu perhatian",
         text: "text-amber-700 dark:text-amber-400",
-        badge: "border-amber-300/60 bg-amber-500/10",
+        badge: "border-amber-500/35 bg-amber-500/10",
         icon: <AlertTriangle className="h-3.5 w-3.5" />,
     },
     critical: {
         label: "Macet",
         text: "text-red-700 dark:text-red-400",
-        badge: "border-red-300/60 bg-red-500/10",
+        badge: "border-red-500/35 bg-red-500/10",
         icon: <AlertTriangle className="h-3.5 w-3.5" />,
     },
     unknown: {
         label: "Tanpa data",
         text: "text-slate-600 dark:text-slate-400",
-        badge: "border-slate-300/60 bg-slate-500/10",
+        badge: "border-slate-500/35 bg-slate-500/10",
         icon: <Navigation className="h-3.5 w-3.5" />,
     },
 }
@@ -292,13 +293,13 @@ export function TrafficView() {
                             {/* Sumber data — jujur live vs estimasi */}
                             {data && (
                                 liveFlowCount > 0 ? (
-                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/60 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                                    <Badge variant="outline" className="gap-1.5 border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
                                         <Wifi className="h-3 w-3" /> Data live TomTom
-                                    </span>
+                                    </Badge>
                                 ) : (
-                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-300/60 bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-medium text-blue-700 dark:text-blue-400">
+                                    <Badge variant="outline" className="gap-1.5 border-blue-500/35 bg-blue-500/10 text-blue-700 dark:text-blue-300">
                                         <Satellite className="h-3 w-3" /> Mode estimasi (fallback gratis)
-                                    </span>
+                                    </Badge>
                                 )
                             )}
                         </div>
@@ -538,13 +539,13 @@ export function TrafficView() {
                                             </p>
                                             <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{selected.note}</p>
                                         </div>
-                                        <span
-                                            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_META[effLevel(selected)].badge
-                                                } ${STATUS_META[effLevel(selected)].text}`}
+                                        <Badge
+                                            variant="outline"
+                                            className={`gap-1.5 ${STATUS_META[effLevel(selected)].badge} ${STATUS_META[effLevel(selected)].text}`}
                                         >
                                             {STATUS_META[effLevel(selected)].icon}
                                             {STATUS_META[effLevel(selected)].label}
-                                        </span>
+                                        </Badge>
                                     </div>
                                     <div className="grid grid-cols-3 gap-2 text-center">
                                         <div className="rounded-lg bg-muted/40 p-1.5">

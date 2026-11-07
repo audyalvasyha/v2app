@@ -2,12 +2,13 @@
 
 import Image from "next/image"
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Github, Search, X } from "lucide-react"
+import { Search, X } from "lucide-react"
 import type { ThemePreference } from "@/hooks/use-theme"
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog"
+import { NotificationsBell } from "./notifications-bell"
 import { ThemeToggle } from "./theme-toggle"
+import type { AlertView, AppAlert } from "@/lib/alerts"
 import { GlobalSearchDropdown, type GlobalSearchGroupCount, type GlobalSearchItem } from "./molecules/global-search-dropdown"
 
 interface HeaderProps {
@@ -24,6 +25,10 @@ interface HeaderProps {
   searchCounts: GlobalSearchGroupCount[]
   /** Item hasil dipilih → pindah ke menu tujuan */
   onSearchSelect: (view: "dashboard" | "equipment" | "maintenance" | "monitoring" | "about" | "skr" | "pengiriman" | "ban" | "weather" | "traffic" | "analisa") => void
+  /** Peringatan operasional untuk lonceng notifikasi */
+  alerts?: AppAlert[]
+  /** Klik notifikasi → buka menu sumbernya */
+  onSelectAlert?: (view: AlertView) => void
 }
 
 /**
@@ -33,7 +38,7 @@ interface HeaderProps {
  * disembunyikan dari header. Komponen ExportImportDialog sengaja dibiarkan ada
  * di repo supaya gampang dipasang lagi kalau nanti diperlukan.
  */
-export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSearchChange, searchPlaceholder, searchItems, searchCounts, onSearchSelect }: HeaderProps) {
+export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSearchChange, searchPlaceholder, searchItems, searchCounts, onSearchSelect, alerts = [], onSelectAlert }: HeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   return (
     <header className="border-b border-border bg-background sticky top-0 z-20">
@@ -96,20 +101,9 @@ export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSe
         </div>
 
         <div className="flex items-center gap-2">
+          {onSelectAlert && <NotificationsBell alerts={alerts} onSelect={onSelectAlert} />}
           <ThemeToggle theme={theme} preference={themePreference} onToggle={onToggleTheme} />
           <KeyboardShortcutsDialog />
-
-          {/* Tombol GitHub */}
-          <Button asChild className="hidden gap-2 lg:inline-flex">
-            <a
-              href="https://github.com/audyalvasyha/v2app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Github className="h-4 w-4" />
-              GitHub Repo
-            </a>
-          </Button>
         </div>
       </div>
     </header>

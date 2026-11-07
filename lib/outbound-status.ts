@@ -28,20 +28,20 @@ export function outboundStatus(
         return {
             status: "selesai",
             label: "Selesai",
-            className: "border-transparent bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+            className: "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
         }
     }
     if (hasJam(jamOut)) {
         return {
             status: "berjalan",
             label: "Berjalan",
-            className: "border-transparent bg-amber-500/15 text-amber-600 dark:text-amber-400",
+            className: "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300",
         }
     }
     return {
         status: "menunggu",
         label: "Menunggu",
-        className: "border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400",
+        className: "border-sky-500/35 bg-sky-500/10 text-sky-700 dark:text-sky-300",
     }
 }
 
@@ -86,6 +86,58 @@ export function durationMinutes(
     // Jam keluar yang lebih besar dari jam kembali berarti keluar hari berikutnya
     const diff = inn - out
     return diff >= 0 ? diff : diff + 24 * 60
+}
+
+/**
+ * Ambang keterlambatan pengiriman: unit yang sudah keluar lebih dari 24 jam
+ * tapi belum punya jam masuk dianggap terlambat. Truk antar-toko biasanya
+ * pulang hari yang sama atau paling lambat besok pagi, jadi 24 jam aman
+ * sebagai peringatan tanpa terlalu banyak alarm palsu.
+ */
+export const OUTBOUND_LATE_HOURS = 24
+
+/** Jam sejak `jam_out` sampai sekarang. Null bila jam kosong/tidak valid. */
+export function elapsedHoursSince(
+    jamOut: string | null | undefined,
+    now: number = Date.now(),
+): number | null {
+    if (!hasJam(jamOut)) return null
+    const start = new Date(jamOut as string).getTime()
+    if (Number.isNaN(start)) return null
+    const diff = now - start
+    return diff >= 0 ? diff / 3_600_000 : null
+}
+
+/**
+ * Trip "menginap": unit keluar sampai 24 jam atau lebih.
+ *
+ * Berlaku untuk trip yang masih berjalan (sekarang − jam_out) DAN trip yang
+ * sudah selesai (jam_in − jam_out). Versi selesai dipakai untuk riwayat: satu
+ * trip lama yang butuh dua hari tetap tercatat sebagai satu kali menginap.
+ */
+export function isOutboundOvernight(
+    jamOut: string | null | undefined,
+    jamIn: string | null | undefined,
+    now: number = Date.now(),
+): boolean {
+    if (!hasJam(jamOut)) return false
+    if (hasJam(jamIn)) {
+        const minutes = durationMinutesFromTimestamps(jamOut, jamIn)
+        return minutes != null && minutes >= OUTBOUND_LATE_HOURS * 60
+    }
+    const hours = elapsedHoursSince(jamOut, now)
+    return hours != null && hours >= OUTBOUND_LATE_HOURS
+}
+
+/** Sudah keluar melewati ambang tapi belum kembali (jam_in masih kosong). */
+export function isOutboundLate(
+    jamOut: string | null | undefined,
+    jamIn: string | null | undefined,
+    now: number = Date.now(),
+): boolean {
+    if (hasJam(jamIn)) return false
+    const hours = elapsedHoursSince(jamOut, now)
+    return hours != null && hours >= OUTBOUND_LATE_HOURS
 }
 
 /** "2j 15m" */

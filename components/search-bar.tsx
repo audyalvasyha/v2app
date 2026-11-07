@@ -75,7 +75,7 @@ export function SearchBar({ filters, onFiltersChange, activeView }: SearchBarPro
                 {(filters.status || filters.serviceStatus) && (
                   <Badge
                     variant="secondary"
-                    className="ml-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs bg-[#f97316] text-white"
+                    className="ml-1 h-5 w-5 rounded-[4px] bg-primary p-0 text-primary-foreground"
                   >
                     !
                   </Badge>
@@ -148,7 +148,7 @@ export function SearchBar({ filters, onFiltersChange, activeView }: SearchBarPro
       {hasActiveFilters && (
         <div className="flex flex-wrap gap-2">
           {filters.search && (
-            <Badge variant="secondary" className="gap-1">
+            <Badge variant="secondary" className="gap-1 normal-case tracking-normal">
               Search: {filters.search}
               <button
                 onClick={() => {
@@ -163,7 +163,7 @@ export function SearchBar({ filters, onFiltersChange, activeView }: SearchBarPro
           )}
 
           {filters.status && (
-            <Badge variant="secondary" className="gap-1">
+            <Badge variant="secondary" className="gap-1 normal-case tracking-normal">
               Status: {filters.status}
               <button
                 onClick={() => onFiltersChange({ ...filters, status: undefined })}
@@ -175,7 +175,7 @@ export function SearchBar({ filters, onFiltersChange, activeView }: SearchBarPro
           )}
 
           {filters.serviceStatus && (
-            <Badge variant="secondary" className="gap-1">
+            <Badge variant="secondary" className="gap-1 normal-case tracking-normal">
               Servis: {getServiceStatusLabel(filters.serviceStatus)}
               <button
                 onClick={() => onFiltersChange({ ...filters, serviceStatus: undefined })}

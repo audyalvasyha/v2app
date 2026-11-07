@@ -192,13 +192,32 @@ function loadStoredMessages(): ChatMessage[] {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as ChatMessage[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    // Placeholder jawaban yang kosong dibuang: bisa tersisa kalau halaman
+    // dimuat ulang saat permintaan belum selesai. Tanpa filter ini, gelembung
+    // kosong muncul seolah percakapannya terputus.
+    return (parsed as ChatMessage[]).filter(
+      (m) =>
+        m.role !== "assistant" ||
+        (typeof m.content === "string" && m.content.trim().length > 0),
+    );
   } catch {
     return [];
   }
 }
 
-export function AIChat({ activeView }: { activeView?: string }) {
+export function AIChat({
+  activeView,
+  active = true,
+}: {
+  activeView?: string;
+  /**
+   * Apakah workspace ini sedang terlihat. Komponen tetap ter-mount saat user
+   * pindah menu, sehingga permintaan yang belum selesai terus berjalan dan
+   * jawabannya tetap diterima — hanya tampilannya yang disembunyikan.
+   */
+  active?: boolean;
+}) {
   const isPageMode = activeView === "analisa"
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -313,8 +332,8 @@ export function AIChat({ activeView }: { activeView?: string }) {
   }, [messages]);
 
   useEffect(() => {
-    if (open || isPageMode) inputRef.current?.focus();
-  }, [open, isPageMode]);
+    if ((open || isPageMode) && active) inputRef.current?.focus();
+  }, [open, isPageMode, active]);
 
   // Simpan setiap kali percakapan berubah. `slice` di sini bukan sekadar
   // penghemat ruang: ia juga membatasi ukuran tulisan berikutnya, jadi
@@ -695,7 +714,13 @@ export function AIChat({ activeView }: { activeView?: string }) {
         // menimpa translate centering selama animasi dan panel terlihat
         // melompat. Wrapper pointer-events-none supaya klik di luar
         // panel tetap jatuh ke dashboard di belakangnya.
-        <div className={isPageMode ? "w-full" : "pointer-events-none fixed inset-0 z-40 flex items-center justify-center p-4"}>
+        <div
+          className={
+            isPageMode
+              ? `w-full ${active ? "" : "hidden"}`
+              : "pointer-events-none fixed inset-0 z-40 flex items-center justify-center p-4"
+          }
+        >
           <div className={`pointer-events-auto flex w-full flex-col overflow-hidden border ${
             isPageMode
               ? "mx-auto flex h-[min(82vh,64rem)] min-h-[38rem] max-w-7xl rounded-none border-0 bg-background text-foreground shadow-none"

@@ -26,17 +26,22 @@ import {
     Clock,
     Download,
     LogOut,
+    Moon,
     Timer,
     Truck,
     X,
 } from "lucide-react"
 import { StatTile } from "@/components/molecules/stat-tile"
 import { FilterToolbar } from "@/components/molecules/filter-toolbar"
-import { APP_TIMEZONE, formatNumber } from "@/lib/format"
+import { cn } from "@/lib/utils"
+import { APP_TIMEZONE, formatNumber, startOfZonedDay } from "@/lib/format"
 import {
     durationMinutesFromTimestamps,
+    elapsedHoursSince,
     formatDuration,
+    isOutboundOvernight,
     outboundStatus,
+    OUTBOUND_LATE_HOURS,
     type OutboundStatus,
 } from "@/lib/outbound-status"
 
@@ -54,18 +59,19 @@ interface OutboundTableProps {
 }
 
 type SortKey = "createdDesc" | "createdAsc" | "orderAsc" | "orderDesc"
-type StatusFilter = "all" | OutboundStatus
+type StatusFilter = "all" | OutboundStatus | "menginap"
 
 const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
     { id: "all", label: "Semua" },
     { id: "menunggu", label: "Menunggu" },
     { id: "berjalan", label: "Berjalan" },
+    { id: "menginap", label: "Menginap" },
     { id: "selesai", label: "Selesai" },
 ]
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
-const COLUMN_COUNT = 7
+const COLUMN_COUNT = 8
 
 function toTime(value: string | null | undefined): number {
     if (!value) return 0
@@ -166,16 +172,25 @@ function OutboundTableImpl({
     const [sortKey, setSortKey] = useState<SortKey>("createdDesc")
     const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0])
     const [page, setPage] = useState(1)
+    /** Detak 60 detik supaya hitungan "sudah keluar X jam" ikut berjalan. */
+    const [now, setNow] = useState(() => Date.now())
+
+    useEffect(() => {
+        const id = window.setInterval(() => setNow(Date.now()), 60_000)
+        return () => window.clearInterval(id)
+    }, [])
 
     // 1. Filter status saja — pencarian nopol/FO ditangani search header; kabul
     //    entri data yang sudah terfilter (prop `outbounds` dari DashboardContent).
     const filtered = useMemo(() => {
-        return outbounds.filter((row) =>
-            statusFilter === "all"
-                ? true
-                : outboundStatus(row.jam_out, row.jam_in).status === statusFilter,
-        )
-    }, [outbounds, statusFilter])
+        return outbounds.filter((row) => {
+            if (statusFilter === "all") return true
+            if (statusFilter === "menginap") {
+                return isOutboundOvernight(row.jam_out, row.jam_in, now)
+            }
+            return outboundStatus(row.jam_out, row.jam_in).status === statusFilter
+        })
+    }, [outbounds, statusFilter, now])
 
     // 2. Urutkan
     const rows = useMemo(() => {
@@ -244,7 +259,28 @@ function OutboundTableImpl({
                 : null,
             jamOutCount: jamOutMinutes.length,
         }
-    }, [outbounds])
+    }, [outbounds, now])
+
+    // Ritase hari ini — jumlah trip yang sudah keluar sejak 00:00 WIB,
+    // dikelompokkan per nopol supaya terlihat unit mana yang paling produktif.
+    const ritase = useMemo(() => {
+        const dayStart = startOfZonedDay(new Date(now))
+        const dayEnd = dayStart + 86_400_000
+        const byPlate = new Map<string, number>()
+        let total = 0
+        for (const row of outbounds) {
+            if (!row.jam_out) continue
+            const t = new Date(row.jam_out).getTime()
+            if (Number.isNaN(t) || t < dayStart || t >= dayEnd) continue
+            total += 1
+            const plate = String(row.no_polisi ?? "").trim() || "Tanpa nopol"
+            byPlate.set(plate, (byPlate.get(plate) ?? 0) + 1)
+        }
+        const units = Array.from(byPlate.entries())
+            .map(([plate, count]) => ({ plate, count }))
+            .sort((a, b) => b.count - a.count)
+        return { total, units, activeUnits: units.length }
+    }, [outbounds, now])
 
     const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
     const currentPage = Math.min(page, totalPages)
@@ -284,7 +320,9 @@ function OutboundTableImpl({
         const url = URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = `armada-outbound_${dateFrom}_${dateTo}.csv`
+        a.download = dateFrom || dateTo
+            ? `armada-outbound_${dateFrom || "awal"}_${dateTo || "akhir"}.csv`
+            : "armada-outbound_semua-tanggal.csv"
         a.click()
         URL.revokeObjectURL(url)
     }
@@ -350,6 +388,41 @@ function OutboundTableImpl({
                     icon={<LogOut className="h-3.5 w-3.5" />}
                 />
             </div>
+
+            {/* Ritase hari ini — produktivitas per unit sejak 00:00 WIB */}
+            {ritase.total > 0 && (
+                <div className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                Ritase hari ini
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                {formatNumber(ritase.total)} trip dari {formatNumber(ritase.activeUnits)} unit sejak 00:00 WIB
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {ritase.units.slice(0, 6).map((unit) => (
+                                <Badge
+                                    key={unit.plate}
+                                    variant="outline"
+                                    className="gap-1.5 bg-muted/30"
+                                >
+                                    {unit.plate}
+                                    <span className="rounded-[2px] bg-background px-1 py-px font-mono text-[9px] tracking-normal">
+                                        {unit.count}×
+                                    </span>
+                                </Badge>
+                            ))}
+                            {ritase.units.length > 6 && (
+                                <Badge variant="outline" className="bg-muted/30">
+                                    +{ritase.units.length - 6} unit
+                                </Badge>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* KONTROL — kiri: rentang tanggal; kanan: reset + export + urutan + paginasi */}
             <FilterToolbar
@@ -454,11 +527,14 @@ function OutboundTableImpl({
                                     )}
                                 </button>
                             </TableHead>
-                            <TableHead className="whitespace-nowrap">No. Polisi</TableHead>
+                            {/* Lebar nopol & status dipatok supaya kolom tidak bergeser
+                                saat baris menginap memunculkan ikon tambahan. */}
+                            <TableHead className="w-[180px] whitespace-nowrap">No. Polisi</TableHead>
                             <TableHead className="whitespace-nowrap">Jam Out (WIB)</TableHead>
                             <TableHead className="whitespace-nowrap">Jam In (WIB)</TableHead>
+                            <TableHead className="whitespace-nowrap">Berjalan</TableHead>
                             <TableHead className="whitespace-nowrap text-right">Durasi</TableHead>
-                            <TableHead className="whitespace-nowrap">Status</TableHead>
+                            <TableHead className="w-[104px] whitespace-nowrap">Status</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -466,6 +542,8 @@ function OutboundTableImpl({
                             pageRows.map((row, i) => {
                                 const info = outboundStatus(row.jam_out, row.jam_in)
                                 const durasi = durationMinutesFromTimestamps(row.jam_out, row.jam_in)
+                                const menginap = isOutboundOvernight(row.jam_out, row.jam_in, now)
+                                const hoursOut = elapsedHoursSince(row.jam_out, now)
                                 return (
                                     <TableRow key={rowKey(row, i)} className="transition-colors hover:bg-muted/40">
                                         <TableCell className="py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
@@ -482,9 +560,30 @@ function OutboundTableImpl({
                                             )}
                                         </TableCell>
                                         <TableCell className="py-2.5">
-                                            <span className="whitespace-nowrap text-sm">
-                                                {row.no_polisi || "—"}
-                                            </span>
+                                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                <span className="text-sm">{row.no_polisi || "—"}</span>
+                                                {/* Penanda menginap menempel di nopol, bukan di
+                                                    kolom Status, agar lebar status tidak berubah
+                                                    antar baris. Ikon 20×20, detail di tooltip. */}
+                                                {menginap && (
+                                                    <Badge
+                                                        variant="outline"
+                                                        aria-label={
+                                                            info.status === "selesai"
+                                                                ? `Menginap: trip selesai dengan durasi ${Math.floor((durasi ?? 0) / 60)} jam`
+                                                                : `Menginap: keluar ${Math.floor(hoursOut ?? 0)} jam tanpa jam masuk`
+                                                        }
+                                                        title={
+                                                            info.status === "selesai"
+                                                                ? `Menginap — trip selesai, durasi ${formatDuration(durasi)} (lebih dari ${OUTBOUND_LATE_HOURS} jam)`
+                                                                : `Menginap — keluar ${Math.floor(hoursOut ?? 0)} jam, belum kembali`
+                                                        }
+                                                        className="h-5 w-5 shrink-0 justify-center gap-0 border-amber-500/35 bg-amber-500/10 px-0 text-amber-700 dark:text-amber-400"
+                                                    >
+                                                        <Moon className="h-3 w-3" />
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell className="py-2.5 font-mono text-sm tabular-nums">
                                             {formatJam(row.jam_out)}
@@ -492,11 +591,27 @@ function OutboundTableImpl({
                                         <TableCell className="py-2.5 font-mono text-sm tabular-nums">
                                             {formatJam(row.jam_in)}
                                         </TableCell>
+                                        <TableCell className="py-2.5">
+                                            {info.status === "berjalan" ? (
+                                                <span
+                                                    className={cn(
+                                                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 py-1 text-xs tabular-nums",
+                                                        menginap
+                                                            ? "bg-amber-500/10 font-medium text-amber-700 dark:text-amber-400"
+                                                            : "text-muted-foreground",
+                                                    )}
+                                                >
+                                                    {Math.floor(hoursOut ?? 0)} jam
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">—</span>
+                                            )}
+                                        </TableCell>
                                         <TableCell className="py-2.5 text-right font-mono text-sm tabular-nums text-muted-foreground">
                                             {formatDuration(durasi)}
                                         </TableCell>
                                         <TableCell className="py-2.5">
-                                            <Badge variant="outline" className={info.className}>
+                                            <Badge variant="outline" className={cn("shrink-0", info.className)}>
                                                 {info.label}
                                             </Badge>
                                         </TableCell>
@@ -512,7 +627,9 @@ function OutboundTableImpl({
                                         </p>
                                         <p className="text-xs leading-relaxed text-muted-foreground">
                                             {outbounds.length === 0
-                                                ? `Tidak ada outbound pada rentang ${tanggalWIB(dateFrom)} – ${tanggalWIB(dateTo)}. Coba lebarkan rentangnya atau ubah kata pencarian di header.`
+                                                ? dateFrom || dateTo
+                                                    ? `Tidak ada outbound pada rentang ${tanggalWIB(dateFrom)} – ${tanggalWIB(dateTo)}. Coba lebarkan rentangnya atau ubah kata pencarian di header.`
+                                                    : "Tidak ada outbound pada seluruh tanggal. Coba ubah kata pencarian di header."
                                                 : "Hapus filter status untuk melihat semua baris."}
                                         </p>
                                         {statusFilter !== "all" && (
@@ -586,6 +703,7 @@ function OutboundTableImpl({
                     )}
                 </div>
             )}
+
         </div>
     )
 }

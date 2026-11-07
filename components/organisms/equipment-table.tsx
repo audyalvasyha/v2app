@@ -24,6 +24,7 @@ import {
     PaginationPrevious,
 } from "@/components/ui/pagination"
 import { StatTile } from "@/components/molecules/stat-tile"
+import { UnitProfileDialog } from "@/components/organisms/unit-profile-dialog"
 // Format & warna status kini dari lib bersama — konsisten dengan menu Dashboard
 import { compactRupiah, formatDateMedium, formatKm, formatRupiah, relativeDayLabel } from "@/lib/format"
 import { unitStatusTone as statusTone } from "@/lib/unit-status"
@@ -53,6 +54,8 @@ interface EquipmentTableProps {
     onStatusFilterChange?: (next: string) => void
     /** Log servis per unit untuk jadwal servis berikutnya di dialog detail */
     serviceLogs?: any[]
+    /** Pengiriman per nopol — bahan tab Pengiriman di profil 360° */
+    outbounds?: any[]
 }
 
 type SortKey = "default" | "id" | "odometer" | "cost" | "history"
@@ -135,19 +138,18 @@ function CostHistoryCell({
             <div className="flex flex-wrap items-center gap-1">
                 <Badge
                     variant="outline"
-                    className={[
-                        "h-5 border px-1.5 text-[10px] font-medium",
+                    className={
                         countHigh
-                            ? "border-amber-300/50 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                            : "border-border bg-muted/30 text-muted-foreground",
-                    ].join(" ")}
+                            ? "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                            : "border-border bg-muted/30 text-muted-foreground"
+                    }
                 >
                     {stat.count}× perbaikan
                 </Badge>
                 {stat.last && (
                     <Badge
                         variant="outline"
-                        className="h-5 border-border bg-muted/30 px-1.5 text-[10px] font-medium text-muted-foreground"
+                        className="border-border bg-muted/30 text-muted-foreground"
                     >
                         {relativeDayLabel(stat.last)}
                     </Badge>
@@ -156,7 +158,7 @@ function CostHistoryCell({
                     <Badge
                         variant="outline"
                         title={`Biaya 30 hari terakhir: ${formatRupiah(recentTotal)}`}
-                        className="h-5 gap-1 border-primary/30 bg-primary/10 px-1.5 text-[10px] font-medium text-primary"
+                        className="gap-1 border-primary/30 bg-primary/10 text-primary"
                     >
                         <Clock3 className="h-2.5 w-2.5" />
                         <span className="tabular-nums">{compactRupiah(recentTotal)}</span>
@@ -167,7 +169,7 @@ function CostHistoryCell({
                     <Badge
                         variant="outline"
                         title={`Pengeluaran terbesar di armada (≥${Math.round((stat.total / maxCost) * 100)}% dari unit termahal)`}
-                        className="h-5 border-amber-300/50 bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                        className="border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-400"
                     >
                         Biaya tinggi
                     </Badge>
@@ -185,6 +187,7 @@ function EquipmentTableImpl({
     statusFilter = "all",
     onStatusFilterChange,
     serviceLogs,
+    outbounds = [],
 }: EquipmentTableProps) {
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [sortKey, setSortKey] = useState<SortKey>("default")
@@ -194,6 +197,8 @@ function EquipmentTableImpl({
     const [detailId, setDetailId] = useState<string | null>(null)
     /** Pencarian riwayat perbaikan di halaman detail + mode tampil semua. */
     const [historyQuery, setHistoryQuery] = useState("")
+    /** Dialog profil 360° — ringkasan servis, biaya, ban, dan pengiriman. */
+    const [profileOpen, setProfileOpen] = useState(false)
     const [showAllHistory, setShowAllHistory] = useState(false)
 
     // Index riwayat per unit sekali — dipakai untuk kolom biaya, detail, dan panel expanded
@@ -374,7 +379,18 @@ function EquipmentTableImpl({
                     <Button variant="outline" size="sm" className="gap-1.5 bg-card" onClick={() => setDetailId(null)}>
                         <ArrowLeft className="h-3.5 w-3.5" /> Kembali ke daftar
                     </Button>
-                    <span className="text-xs text-muted-foreground">Detail equipment {it.equipment_id}</span>
+                    <div className="flex items-center gap-2">
+                        <span className="hidden text-xs text-muted-foreground sm:inline">
+                            Detail equipment {it.equipment_id}
+                        </span>
+                        <Button
+                            size="sm"
+                            className="cursor-pointer gap-1.5"
+                            onClick={() => setProfileOpen(true)}
+                        >
+                            Profil 360°
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Kartu identitas + ringkasan unit */}
@@ -391,7 +407,7 @@ function EquipmentTableImpl({
                                 <span className="font-medium">{it.equipment_id}</span>
                                 <Badge
                                     variant="outline"
-                                    className={["gap-1.5 border font-medium", tone.badge].join(" ")}
+                                    className={["gap-1.5", tone.badge].join(" ")}
                                 >
                                     <span className={["h-1.5 w-1.5 rounded-full", tone.dot].join(" ")} />
                                     {it.status || "Tidak diketahui"}
@@ -519,6 +535,15 @@ function EquipmentTableImpl({
                         )}
                     </div>
                 </div>
+
+                <UnitProfileDialog
+                    open={profileOpen}
+                    onOpenChange={setProfileOpen}
+                    equipment={it}
+                    histories={histories}
+                    serviceLogs={serviceLogs ?? []}
+                    outbounds={outbounds}
+                />
             </div>
         )
     }
@@ -703,8 +728,8 @@ function EquipmentTableImpl({
                                                 )}
                                             </TableCell>
                                             <TableCell className="py-2.5">
-                                                <Badge variant="outline" className={["gap-1.5 border font-medium", tone.badge].join(" ")}>
-                                                    <span className={["h-1.5 w-1.5 rounded-full", tone.dot].join(" ")} />
+                                                <Badge variant="outline" className={["gap-1.5", tone.badge].join(" ")}>
+                                                    <span className={["h-1.5 w-1.5 rounded-[1px]", tone.dot].join(" ")} />
                                                     {item.status || "Tidak diketahui"}
                                                 </Badge>
                                             </TableCell>

@@ -72,7 +72,7 @@ export function ExportImportDialog() {
                 <DialogHeader>
                     <div className="flex items-center gap-2">
                         <DialogTitle>Export &amp; Import Data Armada</DialogTitle>
-                        <Badge variant="outline" className="shrink-0 gap-1 border-amber-300/50 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                        <Badge variant="outline" className="shrink-0 gap-1 border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-400">
                             <Lock className="h-3 w-3" />
                             Segera hadir
                         </Badge>

@@ -95,7 +95,7 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
                                 <span className="text-sm text-muted-foreground">{desc?.label}</span>
                                 <span className="text-xs text-muted-foreground">· {focus.def.name}</span>
                             </div>
-                            <Badge variant="outline" className={cn("gap-1.5 border text-[11px] font-medium", RISK_TONE[focusRisk.level].badge)}>
+                            <Badge variant="outline" className={cn("gap-1.5", RISK_TONE[focusRisk.level].badge)}>
                                 <RiskDot level={focusRisk.level} />
                                 {RISK_TONE[focusRisk.level].label}
                             </Badge>
@@ -133,7 +133,7 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
                         {/* Ringkasan seluruh daerah */}
                         <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-xs">
                             {summary.worst && (
-                                <Badge variant="outline" className={cn("gap-1.5 border text-[11px] font-medium", RISK_TONE[summary.worst.level].badge)}>
+                                <Badge variant="outline" className={cn("gap-1.5", RISK_TONE[summary.worst.level].badge)}>
                                     <RiskDot level={summary.worst.level} />
                                     {RISK_TONE[summary.worst.level].label}
                                 </Badge>

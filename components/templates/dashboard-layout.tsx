@@ -4,6 +4,7 @@ import { Header } from "@/components/header"
 import { Sidebar } from "@/components/sidebar"
 import type { ThemePreference } from "@/hooks/use-theme"
 import type { GlobalSearchItem, GlobalSearchGroupCount } from "@/components/molecules/global-search-dropdown"
+import type { AlertView, AppAlert } from "@/lib/alerts"
 
 export type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman' | 'ban' | 'weather' | 'traffic' | 'analisa'
 
@@ -25,6 +26,9 @@ export interface DashboardLayoutProps {
   searchCounts: GlobalSearchGroupCount[];
   /** Item hasil dipilih → pindah ke menu tujuan */
   onSearchSelect: (view: View) => void;
+  /** Peringatan operasional untuk lonceng di header */
+  alerts?: AppAlert[];
+  onSelectAlert?: (view: AlertView) => void;
   children: React.ReactNode;
 }
 
@@ -41,6 +45,8 @@ function DashboardLayoutImpl({
   searchItems,
   searchCounts,
   onSearchSelect,
+  alerts,
+  onSelectAlert,
   children
 }: DashboardLayoutProps) {
   // State collapse sidebar — dipulihkan dari localStorage saat mount
@@ -73,6 +79,8 @@ function DashboardLayoutImpl({
         searchItems={searchItems}
         searchCounts={searchCounts}
         onSearchSelect={onSearchSelect}
+        alerts={alerts}
+        onSelectAlert={onSelectAlert}
       />
 
       {/* Sidebar fixed (selalu terlihat di bawah header); konten utama scroll di level dokumen */}

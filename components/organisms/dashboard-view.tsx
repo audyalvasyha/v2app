@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatTile } from "@/components/molecules/stat-tile";
 import {
@@ -37,21 +36,28 @@ import {
   type ServiceScheduleStatus,
 } from "@/lib/service-status";
 import { unitStatusTone, unitStatusLabel } from "@/lib/unit-status";
+import {
+  durationMinutesFromTimestamps,
+  formatDuration,
+  outboundStatus,
+} from "@/lib/outbound-status";
 import { cn } from "@/lib/utils";
 import type { View } from "@/components/templates/dashboard-layout";
 import {
+  Activity,
   AlertTriangle,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
   BarChart3,
   CircleDollarSign,
-  Clock3,
-  Hash,
+  FileText,
   ListChecks,
+  PackageCheck,
   PieChart,
   ReceiptText,
   ShieldCheck,
+  Sparkles,
   TrendingUp,
   Truck,
   Wrench,
@@ -60,7 +66,6 @@ import {
 // Chart di-lazy-load sebagai komponen utuh (chunk terpisah dari bundle dashboard).
 // Ketiganya keluar dari modul boundary yang sama (components/molecules/charts)
 // supaya Turbopack membuat SATU chunk recharts, bukan salinan per grafik.
-import { DashboardMenuCards } from "@/components/molecules/dashboard-menu-cards"
 const LazyCostChart = dynamic(() =>
   import("@/components/molecules/charts").then((m) => m.CostChart),
 );
@@ -117,26 +122,57 @@ function DashboardViewImpl({
 // Skeleton dengan bentuk yang sama persis seperti konten — layout tidak "lompat" saat data siap
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-4 pb-4">
-      {/* Ringkasan menu (menggantikan baris KPI yang dihapus) */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 9 }).map((_, i) => (
-          <div key={i} className="rounded-xl border bg-card px-4 py-3">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="mt-3 h-5 w-24" />
+    <div className="flex flex-col gap-5 pb-4">
+      {/* Hero */}
+      <div className="rounded-2xl border bg-card p-5 sm:p-6">
+        <Skeleton className="h-3 w-28" />
+        <Skeleton className="mt-3 h-8 w-72" />
+        <Skeleton className="mt-2 h-3 w-56" />
+        <Skeleton className="mt-5 h-2.5 w-full" />
+        <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-xl" />
+          ))}
+        </div>
+      </div>
+      {/* KPI */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-xl border bg-card px-4 py-3.5">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="mt-3 h-6 w-24" />
+            <Skeleton className="mt-2 h-3 w-32" />
           </div>
         ))}
       </div>
-      {/* Tren */}
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-5 w-44" />
-          <Skeleton className="h-3 w-60" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-[260px] w-full rounded-md" />
-        </CardContent>
-      </Card>
+      {/* Tren + pengiriman */}
+      <div className="grid gap-4 lg:grid-cols-7">
+        <Card className="lg:col-span-4">
+          <CardHeader>
+            <Skeleton className="h-5 w-44" />
+            <Skeleton className="h-3 w-60" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-[260px] w-full rounded-md" />
+          </CardContent>
+        </Card>
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-3 w-40" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-2.5 w-full" />
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-10" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
       {/* Peringkat */}
       <Card>
         <CardHeader>
@@ -237,6 +273,58 @@ function CardHeaderBadge({ icon }: { icon: React.ReactNode }) {
   );
 }
 
+/**
+ * Sinyal kecil di hero: satu angka penting + arah klik ke menu terkait.
+ * Dipakai untuk hal yang butuh keputusan (terlewat servis, pengiriman
+ * aktif), bukan sekadar angka statistik.
+ */
+function HeroSignal({
+  label,
+  value,
+  hint,
+  icon,
+  tone = "neutral",
+  onClick,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  icon: React.ReactNode;
+  tone?: "danger" | "warning" | "neutral";
+  onClick?: () => void;
+}) {
+  const valueTone =
+    tone === "danger"
+      ? "text-destructive"
+      : tone === "warning"
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-foreground";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group rounded-xl border border-border/70 bg-card/90 p-3 text-left shadow-sm transition-colors hover:border-primary/30 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+    >
+      <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        {icon}
+        <span className="truncate">{label}</span>
+      </span>
+      <span
+        className={cn(
+          "mt-2 block text-lg font-semibold leading-none tabular-nums",
+          valueTone,
+        )}
+      >
+        {value}
+      </span>
+      <span className="mt-1 block truncate text-[11px] text-muted-foreground">
+        {hint}
+      </span>
+    </button>
+  );
+}
+
 interface UrgentUnit {
   equipment: any;
   status: ServiceScheduleStatus;
@@ -284,8 +372,12 @@ function DashboardContent({
     let newest: number | null = null;
 
     const byDay3m = new Map<string, number>();
-    const byUnit30 = new Map<string, number>();
     const byUnit6m = new Map<string, { totalCost: number; count: number }>();
+    // Komposisi biaya per jenis perbaikan (6 bulan) — nama dinormalisasi
+    // (huruf kecil + spasi tunggal) supaya "Ganti Oli" dan "ganti  oli"
+    // tidak tercatat sebagai dua kategori berbeda.
+    const byCategory6m = new Map<string, { label: string; total: number; count: number }>();
+    let cost6m = 0;
 
     for (const h of histories) {
       const time = new Date(h.tanggal).getTime();
@@ -300,7 +392,6 @@ function DashboardContent({
       if (time >= cutoff30) {
         cost30 += cost;
         entries30 += 1;
-        if (unit) byUnit30.set(unit, (byUnit30.get(unit) ?? 0) + cost);
       } else if (time >= cutoff60) {
         costPrev30 += cost;
       }
@@ -317,6 +408,21 @@ function DashboardContent({
           prev.count += 1;
         } else {
           byUnit6m.set(unit, { totalCost: cost, count: 1 });
+        }
+      }
+
+      if (time >= cutoff6m.getTime()) {
+        const rawName = String(h.nama_barang_atau_jasa ?? "").trim();
+        if (rawName) {
+          const key = rawName.toLowerCase().replace(/\s+/g, " ");
+          cost6m += cost;
+          const prevCat = byCategory6m.get(key);
+          if (prevCat) {
+            prevCat.total += cost;
+            prevCat.count += 1;
+          } else {
+            byCategory6m.set(key, { label: rawName, total: cost, count: 1 });
+          }
         }
       }
     }
@@ -355,10 +461,6 @@ function DashboardContent({
       count: v.count,
     }));
     ranking.sort((a, b) => b.totalCost - a.totalCost);
-
-    // Unit paling mahal 30 hari
-    const topUnit30Entry =
-      Array.from(byUnit30.entries()).sort((a, b) => b[1] - a[1])[0] ?? null;
 
     // Distribusi status operasional (apa adanya, bukan "total - available")
     const statusCounts = new Map<string, number>();
@@ -414,6 +516,47 @@ function DashboardContent({
       );
     });
 
+    // ── Pengiriman: status dari pasangan jam keluar/masuk ──
+    let outSelesai = 0;
+    let outBerjalan = 0;
+    let outMenunggu = 0;
+    let outDurationTotal = 0;
+    let outDurationCount = 0;
+    let outDurationMax = 0;
+    for (const o of outbounds) {
+      const info = outboundStatus(o.jam_out, o.jam_in);
+      if (info.status === "selesai") {
+        outSelesai += 1;
+        const dur = durationMinutesFromTimestamps(o.jam_out, o.jam_in);
+        if (dur != null) {
+          outDurationTotal += dur;
+          outDurationCount += 1;
+          if (dur > outDurationMax) outDurationMax = dur;
+        }
+      } else if (info.status === "berjalan") {
+        outBerjalan += 1;
+      } else if (info.status === "menunggu") {
+        outMenunggu += 1;
+      }
+    }
+    // Komposisi kategori biaya terbesar.
+    const composition = Array.from(byCategory6m.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+      .map((c) => ({ ...c, share: cost6m > 0 ? (c.total / cost6m) * 100 : 0 }));
+
+    // ── SKR: sisa kiriman yang belum tuntas ──
+    let skrQty = 0;
+    let skrNilai = 0;
+    const skrStores = new Set<string>();
+    for (const r of skrDetails) {
+      skrQty += Number(r.qty) || 0;
+      skrNilai += Number(r.nilai) || 0;
+      if (r.customer_id != null && String(r.customer_id).trim()) {
+        skrStores.add(String(r.customer_id).trim());
+      }
+    }
+
     const totalUnits = equipments.length;
     const entryCount = histories.length;
 
@@ -431,9 +574,6 @@ function DashboardContent({
       costPrev30,
       entries30,
       averageEntry30: entries30 > 0 ? cost30 / entries30 : 0,
-      topUnit30: topUnit30Entry
-        ? { equipment_id: topUnit30Entry[0], totalCost: topUnit30Entry[1] }
-        : null,
       delta30:
         costPrev30 > 0 ? ((cost30 - costPrev30) / costPrev30) * 100 : null,
       averagePerUnit: totalUnits > 0 ? totalCost / totalUnits : 0,
@@ -443,6 +583,22 @@ function DashboardContent({
       totalUnits,
       urgent: urgent.slice(0, 5),
       urgentTotal: urgent.length,
+      outSelesai,
+      outBerjalan,
+      outMenunggu,
+      outTotal: outbounds.length,
+      outAverageDuration: outDurationCount > 0 ? outDurationTotal / outDurationCount : null,
+      outLongestDuration: outDurationMax > 0 ? outDurationMax : null,
+      composition,
+      cost6m,
+      compositionTopShare:
+        cost6m > 0
+          ? (composition.reduce((s, c) => s + c.total, 0) / cost6m) * 100
+          : 0,
+      skrDocs: skrDetails.length,
+      skrQty,
+      skrNilai,
+      skrStores: skrStores.size,
       overdueCount,
       warningCount,
       withoutLog,
@@ -455,29 +611,139 @@ function DashboardContent({
         .slice(0, 6),
       averageEntry: entryCount > 0 ? totalCost / entryCount : 0,
     };
-  }, [equipments, histories, serviceLogs, today]);
+  }, [equipments, histories, serviceLogs, outbounds, skrDetails, today]);
 
   return (
-    <div className="flex flex-col gap-4 pb-4">
-      {/* Baris KPI dihapus: kartu "RINGKASAN MENU" di bawah kini mewakili
-          tiap menu. Dua nilai yang tidak diwakili kartu mana pun (total
-          biaya & rata-rata per unit) dipindah ke kartu Histories. */}
+    <div className="flex flex-col gap-4 pb-2 lg:gap-5">
+      {/* ── HERO: satu pandangan tentang kondisi hari ini ─────────── */}
+      <section
+        aria-label="Kondisi armada hari ini"
+        className="relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-primary/[0.07] via-card to-card p-4 shadow-sm lg:p-5"
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-24 -top-28 h-64 w-64 rounded-full bg-primary/10 blur-3xl"
+        />
+        <div className="relative flex flex-col gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">
+                <Activity className="h-3.5 w-3.5" /> Kondisi hari ini
+              </p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight lg:text-2xl">
+                {analytics.capacityRate.toFixed(0)}% armada siap beroperasi
+              </h2>
+              <p className="mt-1.5 text-xs text-muted-foreground sm:text-sm">
+                {formatNumber(analytics.availableCount)} dari {formatNumber(analytics.totalUnits)} unit tersedia ·{" "}
+                {today.toLocaleDateString("id-ID", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  timeZone: APP_TIMEZONE,
+                })}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => onNavigate?.("analisa")}
+              >
+                <Sparkles className="h-3.5 w-3.5" /> Tanya Midaa
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 bg-card"
+                onClick={() => onNavigate?.("monitoring")}
+              >
+                Monitoring servis <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
 
-      {/* RINGKASAN MENU — satu kartu per menu; klik → langsung buka menu */}
-      <DashboardMenuCards
-        equipments={equipments}
-        histories={histories}
-        serviceLogs={serviceLogs}
-        outbounds={outbounds}
-        skrDetails={skrDetails}
-        skrError={skrError}
-        outboundError={outboundError}
-        onNavigate={onNavigate}
-      />
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-center">
+            <div className="space-y-3">
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-500"
+                  style={{ width: `${analytics.capacityRate}%` }}
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {analytics.statusBreakdown.map(({ status, count }) => {
+                  const tone = unitStatusTone(status);
+                  return (
+                    <Badge
+                      key={status}
+                      variant="outline"
+                      className="gap-1.5 bg-card/80"
+                    >
+                      <span className={cn("h-1.5 w-1.5 rounded-[1px]", tone.dot)} />
+                      {unitStatusLabel(status)}
+                      <span className="tabular-nums text-foreground">{count}</span>
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
 
-      {/* GRAFIK TREN — data & rentang tetap 3 bulan, tampilan dipoles */}
-      <Card>
-        <CardHeader className="flex flex-row items-start gap-3 space-y-0">
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              <HeroSignal
+                label="Terlewat servis"
+                value={formatNumber(analytics.overdueCount)}
+                hint="unit lewat jadwal"
+                tone={analytics.overdueCount > 0 ? "danger" : "neutral"}
+                icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                onClick={() => onNavigate?.("monitoring")}
+              />
+              <HeroSignal
+                label="Tanpa jadwal"
+                value={formatNumber(analytics.withoutLog)}
+                hint="belum ada log servis"
+                icon={<Wrench className="h-3.5 w-3.5" />}
+                onClick={() => onNavigate?.("monitoring")}
+              />
+              <HeroSignal
+                label="Pengiriman aktif"
+                value={formatNumber(analytics.outBerjalan)}
+                hint={`${formatNumber(analytics.outMenunggu)} menunggu berangkat`}
+                tone={analytics.outBerjalan > 0 ? "warning" : "neutral"}
+                icon={<PackageCheck className="h-3.5 w-3.5" />}
+                onClick={() => onNavigate?.("pengiriman")}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── KPI: hanya angka yang tidak diulang hero maupun kartu lain.
+          Urgensi servis sudah hidup di sinyal hero + kartu Perlu Tindakan;
+          total FO pengiriman sudah ada di kartu Operasional Pengiriman. ── */}
+      <section aria-label="Metrik pendukung" className="grid gap-3 sm:grid-cols-2">
+        <StatTile
+          label="Biaya Perbaikan · 30 Hari"
+          value={compactRupiah(analytics.cost30)}
+          title={formatRupiah(analytics.cost30)}
+          hint={<DeltaBadge delta={analytics.delta30} suffix="vs 30 hari lalu" />}
+          icon={<CircleDollarSign />}
+          emphasis
+          className="border-primary/20 bg-gradient-to-br from-primary/[0.08] via-card to-card shadow-sm hover:shadow-md"
+        />
+        <StatTile
+          label="Rata-rata / Entri"
+          value={compactRupiah(analytics.averageEntry30)}
+          title={formatRupiah(analytics.averageEntry30)}
+          hint={`${formatNumber(analytics.entries30)} entri maintenance 30 hari`}
+          icon={<ReceiptText />}
+          className="border-border/70 bg-card shadow-sm hover:shadow-md"
+        />
+      </section>
+
+      {/* TREN BIAYA + OPERASIONAL PENGIRIMAN */}
+      <div className="grid gap-4 lg:grid-cols-7">
+      <Card className="overflow-hidden border-border/70 shadow-sm lg:col-span-4">
+        <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-1">
           <CardHeaderBadge icon={<TrendingUp className="h-4 w-4" />} />
           <div>
             <CardTitle>Tren Biaya Perbaikan</CardTitle>
@@ -490,7 +756,7 @@ function DashboardContent({
           {analytics.trend.length > 0 ? (
             <>
               <Suspense
-                fallback={<Skeleton className="h-[260px] w-full rounded-md" />}
+                fallback={<Skeleton className="h-[240px] w-full rounded-md lg:h-[210px]" />}
               >
                 <LazyCostChart data={analytics.trend} />
               </Suspense>
@@ -527,16 +793,127 @@ function DashboardContent({
               </dl>
             </>
           ) : (
-            <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+            <div className="flex h-[240px] items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground lg:h-[210px]">
               Belum ada data pengeluaran dalam 3 bulan terakhir.
             </div>
           )}
         </CardContent>
       </Card>
 
+        <Card className="overflow-hidden border-border/70 shadow-sm lg:col-span-3">
+          <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
+            <CardHeaderBadge icon={<PackageCheck className="h-4 w-4" />} />
+            <div>
+              <CardTitle>Operasional Pengiriman</CardTitle>
+              <CardDescription>Freight order 30 hari terakhir.</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col gap-3">
+            {outboundError ? (
+              <p className="rounded-lg border border-dashed bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
+                Data pengiriman gagal dimuat. Buka menu Pengiriman untuk mencoba lagi.
+              </p>
+            ) : analytics.outTotal === 0 ? (
+              <p className="rounded-lg border border-dashed bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
+                Data pengiriman dimuat otomatis — buka menu Pengiriman untuk detailnya.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                      Sedang berjalan
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold leading-none tabular-nums">
+                      {formatNumber(analytics.outBerjalan)}
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 border-border bg-muted/30"
+                  >
+                    {formatNumber(analytics.outTotal)} FO
+                  </Badge>
+                </div>
+
+                <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                  {analytics.outSelesai > 0 && (
+                    <div
+                      className="h-full bg-emerald-500"
+                      style={{ width: `${(analytics.outSelesai / analytics.outTotal) * 100}%` }}
+                      title={`Selesai: ${analytics.outSelesai}`}
+                    />
+                  )}
+                  {analytics.outBerjalan > 0 && (
+                    <div
+                      className="h-full bg-amber-500"
+                      style={{ width: `${(analytics.outBerjalan / analytics.outTotal) * 100}%` }}
+                      title={`Berjalan: ${analytics.outBerjalan}`}
+                    />
+                  )}
+                  {analytics.outMenunggu > 0 && (
+                    <div
+                      className="h-full bg-sky-500"
+                      style={{ width: `${(analytics.outMenunggu / analytics.outTotal) * 100}%` }}
+                      title={`Menunggu: ${analytics.outMenunggu}`}
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  {[
+                    { label: "Selesai", count: analytics.outSelesai, dot: "bg-emerald-500" },
+                    { label: "Berjalan", count: analytics.outBerjalan, dot: "bg-amber-500" },
+                    { label: "Menunggu", count: analytics.outMenunggu, dot: "bg-sky-500" },
+                  ].map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        <span className={cn("h-1.5 w-1.5 rounded-full", row.dot)} />
+                        {row.label}
+                      </span>
+                      <span className="font-mono tabular-nums">
+                        {formatNumber(row.count)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <dl className="mt-auto space-y-1.5 border-t pt-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Rata-rata durasi</dt>
+                    <dd className="font-mono tabular-nums">
+                      {formatDuration(analytics.outAverageDuration)}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Durasi terlama</dt>
+                    <dd className="font-mono tabular-nums">
+                      {formatDuration(analytics.outLongestDuration)}
+                    </dd>
+                  </div>
+                </dl>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 w-full justify-between text-muted-foreground hover:text-foreground"
+                  onClick={() => onNavigate?.("pengiriman")}
+                >
+                  Buka Pengiriman
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       {/* PERINGKAT BIAYA PER UNIT — 6 bulan (Top 5 / Bottom 5) */}
-      <Card className="overflow-hidden">
-        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+      <Card className="overflow-hidden border-border/70 shadow-sm">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-2">
           <div className="flex items-start gap-3">
             <CardHeaderBadge icon={<BarChart3 className="h-4 w-4" />} />
             <div>
@@ -550,7 +927,7 @@ function DashboardContent({
             <Badge
               variant="outline"
               title={`Paling boros: ${analytics.top5[0].label}`}
-              className="hidden shrink-0 items-center gap-1.5 border-primary/25 bg-primary/5 text-[11px] font-medium sm:inline-flex"
+              className="hidden shrink-0 items-center gap-1.5 border-primary/25 bg-primary/10 sm:inline-flex"
             >
               <Truck className="h-3 w-3" />
               {analytics.top5[0].label}
@@ -562,8 +939,7 @@ function DashboardContent({
           )}
         </CardHeader>
         <CardContent>
-          <Suspense
-            fallback={<Skeleton className="h-[150px] w-full rounded-md" />}
+          <Suspense              fallback={<Skeleton className="h-[150px] w-full rounded-md lg:h-[130px]" />}
           >
             <LazyUnitCostRankingChart
               top5={analytics.top5}
@@ -573,10 +949,57 @@ function DashboardContent({
         </CardContent>
       </Card>
 
-      {/* PERLU TINDAKAN + DISTRIBUSI STATUS */}
-      <div className="grid gap-4 lg:grid-cols-7">
-        <Card className="lg:col-span-4">
-          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+      {/* KOMPOSISI BIAYA — satu-satunya tempat kategori biaya ditampilkan.
+          Kartu Ritase per Unit dihapus dari sini: angka trip per nopol yang
+          sama sudah ada di panel "Ritase hari ini" menu Pengiriman. */}
+        <Card className="overflow-hidden border-border/70 shadow-sm">
+          <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
+            <CardHeaderBadge icon={<PieChart className="h-4 w-4" />} />
+            <div>
+              <CardTitle>Komposisi Biaya</CardTitle>
+              <CardDescription>
+                6 bulan terakhir · per jenis perbaikan · Top 5 mencakup{" "}
+                {analytics.compositionTopShare.toFixed(0)}% total
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {analytics.composition.length > 0 ? (
+              <ul className="space-y-2.5">
+                {analytics.composition.map((c) => (
+                  <li key={c.label}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium" title={`${c.label} · ${formatNumber(c.count)} entri`}>
+                        {c.label}
+                      </span>
+                      <span className="shrink-0 font-mono text-xs tabular-nums">
+                        {compactRupiah(c.total)}
+                        <span className="ml-1.5 text-[11px] text-muted-foreground">
+                          {c.share.toFixed(0)}%
+                        </span>
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary/70"
+                        style={{ width: `${Math.max(c.share, 2)}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="rounded-lg border border-dashed bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
+                Belum ada rincian biaya 6 bulan terakhir.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+      {/* PERLU TINDAKAN — distribusi status tidak lagi di sini karena angkanya
+          sudah tampil di badge hero (bar kapasitas + per-status). */}
+        <Card className="overflow-hidden border-border/70 shadow-sm">
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-2">
             <div className="flex items-start gap-3">
               <CardHeaderBadge icon={<ListChecks className="h-4 w-4" />} />
               <div>
@@ -589,7 +1012,7 @@ function DashboardContent({
             {analytics.urgentTotal > 0 && (
               <Badge
                 variant="outline"
-                className="shrink-0 border-destructive/30 bg-destructive/10 font-semibold tabular-nums text-destructive"
+                className="shrink-0 border-destructive/35 bg-destructive/10 text-destructive"
               >
                 {analytics.urgentTotal}
               </Badge>
@@ -602,7 +1025,7 @@ function DashboardContent({
                   <div
                     key={String(equipment.id ?? equipment.equipment_id)}
                     className={cn(
-                      "flex items-center justify-between gap-4 rounded-lg border py-2.5 pl-3 pr-3.5 transition-colors hover:bg-muted/30",
+                      "flex items-center justify-between gap-4 rounded-lg border py-2.5 pl-3 pr-3.5 transition-colors hover:bg-muted/30 lg:py-2",
                       status.tone.accent,
                       status.id === "overdue"
                         ? "border-l-2 border-l-destructive bg-destructive/[0.04] hover:bg-destructive/[0.07]"
@@ -616,14 +1039,11 @@ function DashboardContent({
                         </span>
                         <Badge
                           variant="outline"
-                          className={cn(
-                            "gap-1.5 border text-[11px] font-medium",
-                            status.tone.badge,
-                          )}
+                          className={cn("gap-1.5", status.tone.badge)}
                         >
                           <span
                             className={cn(
-                              "h-1.5 w-1.5 rounded-full",
+                              "h-1.5 w-1.5 rounded-[1px]",
                               status.tone.dot,
                             )}
                           />
@@ -688,101 +1108,11 @@ function DashboardContent({
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-3">
-          <CardHeader className="flex flex-row items-start gap-3 space-y-0">
-            <CardHeaderBadge icon={<PieChart className="h-4 w-4" />} />
-            <div>
-              <CardTitle>Distribusi Status Unit</CardTitle>
-              <CardDescription>
-                Komposisi status operasional seluruh armada.
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {analytics.statusBreakdown.length > 0 ? (
-              <>
-                <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
-                  {analytics.statusBreakdown.map(({ status, count }) => (
-                    <div
-                      key={status}
-                      className={unitStatusTone(status).bar}
-                      style={{
-                        width: `${(count / analytics.totalUnits) * 100}%`,
-                      }}
-                      title={`${unitStatusLabel(status)}: ${count} unit`}
-                    />
-                  ))}
-                </div>
-
-                <div className="space-y-2">
-                  {analytics.statusBreakdown.map(({ status, count }) => {
-                    const tone = unitStatusTone(status);
-                    const pct =
-                      analytics.totalUnits > 0
-                        ? (count / analytics.totalUnits) * 100
-                        : 0;
-                    return (
-                      <div
-                        key={status}
-                        className="rounded-lg border bg-muted/20 p-2.5 transition-colors hover:bg-muted/40"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span
-                              className={cn(
-                                "h-2 w-2 shrink-0 rounded-full",
-                                tone.dot,
-                              )}
-                            />
-                            <span className="truncate text-sm">
-                              {unitStatusLabel(status)}
-                            </span>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <span className="text-sm font-semibold tabular-nums">
-                              {count}
-                            </span>
-                            <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">
-                              {pct.toFixed(0)}%
-                            </span>
-                          </div>
-                        </div>
-                        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={cn("h-full rounded-full", tone.bar)}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="rounded-lg border bg-muted/20 p-3">
-                  <div className="mb-2 flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Kapasitas Operasional
-                    </span>
-                    <span className="font-semibold tabular-nums">
-                      {analytics.capacityRate.toFixed(1)}%
-                    </span>
-                  </div>
-                  <Progress value={analytics.capacityRate} className="h-2" />
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Belum ada data unit.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* RIWAYAT TERBARU + RINGKASAN 30 HARI */}
+      {/* RIWAYAT TERBARU + SISA KIRIMAN — kartu Ringkasan 30 Hari dihapus:
+          cost30/delta/entri/rata-rata sudah tampil di tile KPI di atas. */}
       <div className="grid gap-4 lg:grid-cols-7">
-        <Card className="lg:col-span-4">
-          <CardHeader className="flex flex-row items-start gap-3 space-y-0">
+        <Card className="overflow-hidden border-border/70 shadow-sm lg:col-span-4">
+          <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
             <CardHeaderBadge icon={<Wrench className="h-4 w-4" />} />
             <div>
               <CardTitle>Riwayat Maintenance Terbaru</CardTitle>
@@ -823,7 +1153,7 @@ function DashboardContent({
                       analytics.averageEntry > 0 &&
                       cost >= analytics.averageEntry * 2;
                     return (
-                      <TableRow key={hist.id}>
+                      <TableRow key={hist.id} className="transition-colors hover:bg-muted/40">
                         <TableCell className="whitespace-nowrap py-2.5">
                           <div className="text-xs tabular-nums">
                             {formatDateMedium(hist.tanggal)}
@@ -894,94 +1224,77 @@ function DashboardContent({
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-3">
-          <CardHeader className="flex flex-row items-start gap-3 space-y-0">
-            <CardHeaderBadge icon={<ReceiptText className="h-4 w-4" />} />
+        <div className="flex flex-col gap-4 lg:col-span-3">
+        <Card className="overflow-hidden border-border/70 shadow-sm">
+          <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
+            <CardHeaderBadge icon={<FileText className="h-4 w-4" />} />
             <div>
-              <CardTitle>Ringkasan 30 Hari</CardTitle>
-              <CardDescription>
-                Belanja perbaikan bulan berjalan.
-              </CardDescription>
+              <CardTitle>Sisa Kiriman (SKR)</CardTitle>
+              <CardDescription>Dokumen yang belum tuntas.</CardDescription>
             </div>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-3">
-            {/* Stat utama */}
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  Biaya 30 hari
-                </span>
-                <DeltaBadge
-                  delta={analytics.delta30}
-                  suffix="vs periode lalu"
-                />
-              </div>
-              <div
-                className="mt-2 font-mono text-2xl font-semibold tabular-nums leading-none text-primary"
-                title={formatRupiah(analytics.cost30)}
-              >
-                {formatRupiah(analytics.cost30)}
-              </div>
-            </div>
+            {skrError ? (
+              <p className="rounded-lg border border-dashed bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
+                Data SKR gagal dimuat. Buka menu SKR untuk mencoba lagi.
+              </p>
+            ) : analytics.skrDocs === 0 ? (
+              <p className="rounded-lg border border-dashed bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
+                Data sisa kiriman dimuat otomatis — buka menu SKR untuk detailnya.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                      Dokumen
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold leading-none tabular-nums">
+                      {formatNumber(analytics.skrDocs)}
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 border-border bg-muted/30"
+                  >
+                    {formatNumber(analytics.skrStores)} toko
+                  </Badge>
+                </div>
 
-            {/* Grid mini-stat */}
-            <div className="grid flex-1 grid-cols-2 gap-2.5">
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
-                  Periode sebelumnya
-                </p>
-                <p
-                  className="mt-1.5 font-mono text-sm font-medium tabular-nums"
-                  title={formatRupiah(analytics.costPrev30)}
-                >
-                  {formatRupiah(analytics.costPrev30)}
-                </p>
-              </div>
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
-                  Entri perbaikan
-                </p>
-                <p className="mt-1.5 font-mono text-sm font-medium tabular-nums">
-                  {formatNumber(analytics.entries30)}
-                </p>
-              </div>
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
-                  Rata-rata / entri
-                </p>
-                <p
-                  className="mt-1.5 font-mono text-sm font-medium tabular-nums"
-                  title={formatRupiah(analytics.averageEntry30)}
-                >
-                  {formatRupiah(analytics.averageEntry30)}
-                </p>
-              </div>
-              <div className="rounded-lg border bg-muted/20 p-3">
-                <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
-                  Unit termahal
-                </p>
-                {analytics.topUnit30 ? (
-                  <>
-                    <p className="mt-1.5 truncate text-sm font-medium">
-                      {analytics.topUnit30.equipment_id}
-                    </p>
-                    <p
-                      className="mt-0.5 font-mono text-xs tabular-nums text-muted-foreground"
-                      title={formatRupiah(analytics.topUnit30.totalCost)}
+                <dl className="space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Qty baris</dt>
+                    <dd className="font-mono tabular-nums">
+                      {formatNumber(analytics.skrQty)}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Nilai</dt>
+                    <dd
+                      className="font-mono tabular-nums"
+                      title={formatRupiah(analytics.skrNilai)}
                     >
-                      {formatRupiah(analytics.topUnit30.totalCost)}
-                    </p>
-                  </>
-                ) : (
-                  <p className="mt-1.5 text-sm text-muted-foreground">
-                    Belum ada
-                  </p>
-                )}
-              </div>
-            </div>
+                      {compactRupiah(analytics.skrNilai)}
+                    </dd>
+                  </div>
+                </dl>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-auto w-full justify-between text-muted-foreground hover:text-foreground"
+                  onClick={() => onNavigate?.("skr")}
+                >
+                  Buka SKR
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
+        </div>
       </div>
+
     </div>
   );
 }

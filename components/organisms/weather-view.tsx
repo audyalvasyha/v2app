@@ -136,7 +136,7 @@ function LocationDetail({ loc, trafficPattern }: { loc: LocationWeather; traffic
                     </div>
                     <div className="flex items-center gap-2">
                         <WeatherEmoji code={loc.current.code} className="text-2xl" />
-                        <Badge variant="outline" className={cn("border text-[11px] font-medium", tone.badge)}>
+                        <Badge variant="outline" className={tone.badge}>
                             {tone.label}
                         </Badge>
                     </div>
@@ -261,7 +261,7 @@ export function WeatherView() {
                     {/* Ringkasan wilayah — risiko terburuk hari ini */}
                     {summary.worst && (
                         <div className="flex flex-wrap items-center gap-2 text-xs">
-                            <Badge variant="outline" className={cn("gap-1.5 border font-medium", RISK_TONE[summary.worst.level].badge)}>
+                            <Badge variant="outline" className={cn("gap-1.5", RISK_TONE[summary.worst.level].badge)}>
                                 <RiskDot level={summary.worst.level} />
                                 {RISK_TONE[summary.worst.level].label}
                             </Badge>

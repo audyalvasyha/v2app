@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, Gauge, type LucideIcon } from "lucide-react"
+import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, Gauge, Layers, ChevronDown, Info, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/utils/supabase"
 import type { View } from "@/components/templates/dashboard-layout"
@@ -59,14 +59,21 @@ function SidebarSectionLabel({ label, collapsed }: { label: string; collapsed: b
 
 export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, onToggleCollapsed }: SidebarProps) {
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [fleetOpen, setFleetOpen] = useState(true)
+  const fleetSubmenuActive = ["equipment", "maintenance", "ban", "monitoring"].includes(activeView)
+
+  useEffect(() => {
+    if (fleetSubmenuActive) setFleetOpen(true)
+  }, [fleetSubmenuActive])
 
   useEffect(() => {
     supabase.auth
       .getSession()
       .then(({ data }) => setUserEmail(data.session?.user.email ?? null))
       .catch(() => setUserEmail(null))
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) =>
-      setUserEmail(s?.user.email ?? null),
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) =>
+      setUserEmail(session?.user.email ?? null),
     )
     return () => sub.subscription.unsubscribe()
   }, [])
@@ -99,8 +106,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
       </div>
 
       <nav className="flex-1 p-2 space-y-1 flex flex-col overflow-y-auto">
-        <SidebarSectionLabel label="Fleet" collapsed={collapsed} />
-
         <SidebarButton
           icon={LayoutDashboard}
           label="Dashboard"
@@ -109,42 +114,62 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           onClick={() => onViewChange('dashboard')}
         />
 
-        <SidebarButton
-          icon={Activity}
-          label="Monitoring Servis"
-          active={activeView === 'monitoring'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('monitoring')}
-        />
+        {collapsed && <SidebarSectionLabel label="Fleet" collapsed />}
+        <button
+          type="button"
+          onClick={() => setFleetOpen((open) => !open)}
+          title={collapsed ? "Fleet" : undefined}
+          aria-expanded={fleetOpen}
+          className={`flex w-full items-center rounded-md px-3 py-2.5 text-sm font-semibold transition-colors ${
+            collapsed ? "justify-center px-0" : "justify-between"
+          } ${fleetSubmenuActive ? "text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+        >
+          <span className="flex items-center gap-3">
+            <Layers className="h-4 w-4 shrink-0" />
+            {!collapsed && <span>Fleet</span>}
+          </span>
+          {!collapsed && (
+            <ChevronDown className={`h-4 w-4 transition-transform ${fleetOpen ? "rotate-0" : "-rotate-90"}`} />
+          )}
+        </button>
 
-        <SidebarButton
-          icon={Settings}
-          label="Equipment"
-          active={activeView === 'equipment'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('equipment')}
-          badge={
-            <Badge variant="secondary" className="h-5 px-1.5 min-w-5 flex items-center justify-center">
-              {equipmentCounts.total}
-            </Badge>
-          }
-        />
-
-        <SidebarButton
-          icon={History}
-          label="Histories"
-          active={activeView === 'maintenance'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('maintenance')}
-        />
-
-        <SidebarButton
-          icon={Disc3}
-          label="Analisa Ban"
-          active={activeView === 'ban'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('ban')}
-        />
+        {fleetOpen && (
+          <div className={`space-y-1 ${collapsed ? "" : "ml-3 border-l border-border pl-2"}`}>
+            <SidebarButton
+              icon={Activity}
+              label="Monitoring Servis"
+              active={activeView === 'monitoring'}
+              collapsed={collapsed}
+              onClick={() => onViewChange('monitoring')}
+            />
+            <SidebarButton
+              icon={Settings}
+              label="Equipment"
+              active={activeView === 'equipment'}
+              collapsed={collapsed}
+              onClick={() => onViewChange('equipment')}
+              badge={
+                <Badge variant="secondary" className="min-w-5">
+                  {equipmentCounts.total}
+                </Badge>
+              }
+            />
+            <SidebarButton
+              icon={History}
+              label="Histories"
+              active={activeView === 'maintenance'}
+              collapsed={collapsed}
+              onClick={() => onViewChange('maintenance')}
+            />
+            <SidebarButton
+              icon={Disc3}
+              label="Analisa Ban"
+              active={activeView === 'ban'}
+              collapsed={collapsed}
+              onClick={() => onViewChange('ban')}
+            />
+          </div>
+        )}
 
         <SidebarSectionLabel label="Ekspedisi" collapsed={collapsed} />
 
@@ -189,43 +214,49 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
         />
 
         <SidebarButton
-          icon={User}
+          icon={Info}
           label="About"
           active={activeView === 'about'}
           collapsed={collapsed}
           onClick={() => onViewChange('about')}
           pushToBottom
         />
+      </nav>
 
-        <div className={`border-t border-border pt-2 ${collapsed ? '' : 'mt-1'}`}>
-          {collapsed ? (
+      <div className="relative border-t border-border p-2">
+        <button
+          type="button"
+          onClick={() => setAccountOpen((open) => !open)}
+          title={collapsed ? (userEmail ?? "Akun") : undefined}
+          aria-label={userEmail ? `Akun ${userEmail}` : "Akun"}
+          aria-expanded={accountOpen}
+          className={`flex w-full min-w-0 items-center overflow-hidden rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+            collapsed ? "justify-center px-0" : "justify-between"
+          } ${accountOpen ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+        >
+          <span className={`flex items-center gap-3 ${collapsed ? "" : "min-w-0 flex-1"}`}>
+            <User className="h-4 w-4 shrink-0" />
+            {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{userEmail ?? "Akun"}</span>}
+          </span>
+          {!collapsed && <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${accountOpen ? "rotate-180" : ""}`} />}
+        </button>
+
+        {accountOpen && (
+          <div className={collapsed
+            ? "absolute bottom-0 left-full z-20 ml-2 w-40 rounded-md border bg-popover p-1 shadow-md"
+            : "mt-1 rounded-md bg-muted/40 p-1"}
+          >
             <button
+              type="button"
               onClick={handleSignOut}
-              title={userEmail ? `Keluar — ${userEmail}` : 'Keluar'}
-              aria-label="Keluar dari akun"
-              className="flex w-full items-center justify-center rounded-md px-0 py-2.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
             >
               <LogOut className="h-4 w-4 shrink-0" />
+              <span>Keluar</span>
             </button>
-          ) : (
-            <div className="px-1">
-              <p
-                className="truncate px-2 pb-1.5 text-[11px] text-muted-foreground"
-                title={userEmail ?? undefined}
-              >
-                {userEmail ?? 'Belum login'}
-              </p>
-              <button
-                onClick={handleSignOut}
-                className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <LogOut className="h-4 w-4 shrink-0" />
-                <span>Keluar</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </nav>
+          </div>
+        )}
+      </div>
     </aside>
   )
 }

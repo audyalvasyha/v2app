@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 import { DashboardLayout, type View } from "@/components/templates/dashboard-layout"
 import { AuthGate } from "@/components/auth-gate"
+import { buildAlerts } from "@/lib/alerts"
 import { AIChat } from "@/components/molecules/ai-chat"
 // Banner cuaca ringan (tanpa recharts) — statis supaya langsung tampil
 // sebagai elemen pertama dashboard tanpa menunggu chunk chart.
@@ -337,28 +338,37 @@ function DashboardContent() {
   // armada_outbound di-fetch terpisah sesuai rentang tanggal menu Pengiriman
   // — tanpa ini, seluruh tabel besar ikut termuat setiap kali app dibuka.
   const fetchOutbounds = useCallback(async (from: string, to: string) => {
-    // Validasi format YYYY-MM-DD — input date bisa dikosongkan user, dan
-    // string kosong akan menghasilkan Invalid Date (NaN → toISOString throw).
+    // Rentang kosong berarti "Semua tanggal" (preset di DateRangeField).
+    // Format hanya divalidasi untuk tanggal yang benar-benar diisi; input
+    // setengah terisi dibiarkan sebagai rentang terbuka satu sisi.
     const datePattern = /^\d{4}-\d{2}-\d{2}$/
-    if (!datePattern.test(from) || !datePattern.test(to)) {
+    const hasFrom = from !== ''
+    const hasTo = to !== ''
+    if ((hasFrom && !datePattern.test(from)) || (hasTo && !datePattern.test(to))) {
       setOutboundError('Rentang tanggal tidak valid. Pilih tanggal dari dan sampai.')
       return
     }
     // Bila rentang terbalik (dari > sampai), balik otomatis agar hasilnya
     // konsisten alih-alih kosong tanpa penjelasan.
-    const [start, end] = from <= to ? [from, to] : [to, from]
+    const [start, end] = hasFrom && hasTo && from > to ? [to, from] : [from, to]
+    const noRange = !hasFrom && !hasTo
 
     setIsOutboundFetching(true)
     try {
-      // Batas akhir dikasih +1 hari (lt) karena jam_out berisi jam.
-      const toNext = new Date(`${end}T00:00:00+07:00`)
-      toNext.setDate(toNext.getDate() + 1)
-      const res = await supabase
-        .from('armada_outbound')
-        .select(OUTBOUND_COLS)
-        .gte('jam_out', `${start}T00:00:00+07:00`)
-        .lt('jam_out', toNext.toISOString())
-        .order('jam_out', { ascending: false })
+      let filters = supabase.from('armada_outbound').select(OUTBOUND_COLS)
+      if (hasFrom) filters = filters.gte('jam_out', `${start}T00:00:00+07:00`)
+      if (hasTo) {
+        // Batas akhir dikasih +1 hari (lt) karena jam_out berisi jam.
+        const toNext = new Date(`${end}T00:00:00+07:00`)
+        toNext.setDate(toNext.getDate() + 1)
+        filters = filters.lt('jam_out', toNext.toISOString())
+      }
+      let query = filters.order('jam_out', { ascending: false })
+      // Tanpa rentang sama sekali, seluruh riwayat bisa puluhan ribu baris —
+      // batasi supaya payload tetap wajar.
+      if (noRange) query = query.limit(10000)
+
+      const res = await query
       if (res.error) {
         setOutboundError(res.error.message)
       } else {
@@ -828,6 +838,19 @@ function DashboardContent() {
   // Title tab browser mengikuti menu aktif — rapi di riwayat tab & bookmark.
   usePageTitle(headerInfo[activeView].title)
 
+  // Peringatan operasional untuk lonceng di header. Dihitung ulang tiap 5
+  // menit supaya ambang keterlambatan pengiriman ikut berjalan tanpa reload.
+  const [alertTick, setAlertTick] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => setAlertTick((t) => t + 1), 5 * 60 * 1000)
+    return () => window.clearInterval(id)
+  }, [])
+  const alerts = useMemo(
+    () => buildAlerts({ equipments, serviceLogs, outbounds }),
+    // alertTick sengaja jadi pemicu hitung ulang, bukan dipakai di dalam.
+    [equipments, serviceLogs, outbounds, alertTick],
+  )
+
   return (
     <DashboardLayout
       theme={theme}
@@ -842,6 +865,8 @@ function DashboardContent() {
       searchItems={searchResults.items}
       searchCounts={searchResults.counts}
       onSearchSelect={handleViewChange}
+      alerts={alerts}
+      onSelectAlert={handleViewChange}
     >
       <div className="container mx-auto flex flex-col space-y-4 px-6 pt-6 pb-10">
 
@@ -896,6 +921,7 @@ function DashboardContent() {
             equipments={filteredEquipments}
             histories={histories}
             serviceLogs={serviceLogs}
+            outbounds={outbounds}
             isLoading={isLoading}
             error={error}
             statusFilter={filters.status || 'all'}
@@ -985,16 +1011,16 @@ function DashboardContent() {
           <TrafficView />
         )}
 
-        {activeView === 'analisa' && (
-          <AIChat activeView="analisa" />
-        )}
+        {/* Tetap ter-mount saat pindah menu: pertanyaan yang belum dijawab
+            tidak terputus, prosesnya lanjut di latar, dan jawabannya muncul
+            begitu user kembali ke Analisa. Hanya tampilannya yang disembunyikan. */}
+        <AIChat activeView="analisa" active={activeView === 'analisa'} />
 
         {activeView === 'about' && (
           <AboutView />
         )}
 
       </div>
-
 
     </DashboardLayout>
   )

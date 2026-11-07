@@ -284,12 +284,12 @@ export function skrCategory(reason: string | null | undefined): SkrCategoryInfo 
                         label: rule.label,
                         className:
                             rule.category === "internal"
-                                ? "border-transparent bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                                ? "border-rose-500/35 bg-rose-500/10 text-rose-700 dark:text-rose-300"
                                 : rule.category === "operasional"
-                                  ? "border-transparent bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                  ? "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300"
                                   : rule.category === "pelanggan"
-                                    ? "border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400"
-                                    : "border-transparent bg-violet-500/15 text-violet-600 dark:text-violet-400",
+                                    ? "border-sky-500/35 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+                                    : "border-violet-500/35 bg-violet-500/10 text-violet-700 dark:text-violet-300",
                     }
                 }
             }
@@ -299,6 +299,6 @@ export function skrCategory(reason: string | null | undefined): SkrCategoryInfo 
     return {
         category: "lainnya",
         label: "Lainnya",
-        className: "border-transparent bg-muted text-muted-foreground",
+        className: "border-border bg-muted/60 text-muted-foreground",
     }
 }

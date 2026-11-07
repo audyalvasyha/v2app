@@ -108,7 +108,7 @@ export function GlobalSearchDropdown({ open, hasQuery, items, counts, onSelect, 
                     <span className="block truncate text-xs text-muted-foreground">{item.subtitle}</span>
                   )}
                 </span>
-                <Badge variant="outline" className="shrink-0 text-[10px]">
+                <Badge variant="outline" className="shrink-0">
                   {item.group}
                 </Badge>
                 {idx === highlight && <CornerDownLeft className="h-3 w-3 shrink-0 text-muted-foreground" />}
