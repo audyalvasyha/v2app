@@ -280,7 +280,7 @@ export function TrafficView() {
     return (
         <div className="space-y-4">
             {/* ── Hero header ─────────────────────────────────────────────── */}
-            <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-sky-600/10 via-card to-card">
+            <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 p-5">
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">

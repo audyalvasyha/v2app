@@ -248,7 +248,7 @@ export function UnitProfileDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
-                <DialogHeader className="shrink-0 border-b bg-gradient-to-br from-primary/[0.06] via-card to-card py-4 pl-5 pr-12 text-left">
+                <DialogHeader className="shrink-0 border-b py-4 pl-5 pr-12 text-left">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">

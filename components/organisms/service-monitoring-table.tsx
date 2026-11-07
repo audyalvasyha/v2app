@@ -22,10 +22,6 @@ import {
 import {
     ChevronDown,
     ChevronRight,
-    ShieldCheck,
-    AlertTriangle,
-    Clock3,
-    Gauge,
     ArrowUpDown,
     Wrench,
 } from "lucide-react"
@@ -58,107 +54,41 @@ interface Props {
 const PAGE_SIZE = 10
 type SortKey = "urgency" | "dueDate" | "odometer" | "equipmentId"
 
-type KpiTone = "overdue" | "warning" | "safe" | "neutral"
-
-/** Warna aksen per status — satu sumber untuk KPI, chip, dan baris tabel. */
-const TONE: Record<
-    KpiTone,
-    { icon: string; surface: string; bar: string; ring: string }
-> = {
-    safe: {
-        icon: "text-emerald-600 dark:text-emerald-400",
-        surface: "bg-emerald-500/15",
-        bar: "bg-emerald-500",
-        ring: "ring-emerald-500/30",
-    },
-    warning: {
-        icon: "text-amber-600 dark:text-amber-400",
-        surface: "bg-amber-500/15",
-        bar: "bg-amber-500",
-        ring: "ring-amber-500/35",
-    },
-    overdue: {
-        icon: "text-destructive",
-        surface: "bg-destructive/15",
-        bar: "bg-destructive",
-        ring: "ring-destructive/35",
-    },
-    neutral: {
-        icon: "text-muted-foreground",
-        surface: "bg-muted/60",
-        bar: "bg-muted-foreground/40",
-        ring: "ring-border",
-    },
-}
-
 function KpiCard({
     label,
     value,
     hint,
     active,
-    tone = "neutral",
-    icon,
     onClick,
 }: {
     label: string
     value: number
     hint: string
     active?: boolean
-    tone?: KpiTone
-    icon: React.ReactNode
     onClick?: () => void
 }) {
-    const palette = TONE[tone]
-
     return (
         <button
             type="button"
             onClick={onClick}
             aria-pressed={active}
             className={cn(
-                "group relative flex cursor-pointer flex-col gap-2.5 overflow-hidden rounded-xl border bg-card p-3.5 text-left shadow-sm transition-all",
-                "hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                active ? cn("ring-1", palette.ring) : "border-border/70",
+                "flex cursor-pointer flex-col gap-1 rounded-xl border bg-card p-4 text-left shadow-sm transition-colors",
+                "hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                active ? "border-primary/60 ring-1 ring-primary/30" : "border-border/70",
             )}
         >
-            <span
-                aria-hidden
-                className={cn(
-                    "pointer-events-none absolute -right-8 -top-10 h-20 w-20 rounded-full blur-2xl transition-opacity",
-                    palette.surface,
-                    active ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                )}
-            />
-            <span className="relative flex items-center gap-2">
-                <span
-                    className={cn(
-                        "grid h-7 w-7 shrink-0 place-items-center rounded-md bg-background/80 [&_svg]:h-3.5 [&_svg]:w-3.5",
-                        palette.icon,
-                    )}
-                >
-                    {icon}
-                </span>
-                <span className="truncate text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    {label}
-                </span>
+            <span className="truncate text-sm font-medium text-muted-foreground">
+                {label}
             </span>
-            <span className="relative flex items-baseline gap-1.5">
+            <span className="flex items-baseline gap-1.5">
                 <span className="text-2xl font-semibold leading-none tabular-nums">
                     {value.toLocaleString("id-ID")}
                 </span>
-                <span className="truncate text-[11px] text-muted-foreground">
+                <span className="truncate text-xs text-muted-foreground">
                     {hint}
                 </span>
             </span>
-            {active && (
-                <span
-                    aria-hidden
-                    className={cn(
-                        "absolute inset-x-0 bottom-0 h-0.5 rounded-full",
-                        palette.bar,
-                    )}
-                />
-            )}
         </button>
     )
 }
@@ -299,8 +229,6 @@ function ServiceMonitoringTableImpl({
                     value={counts.total}
                     hint="unit"
                     active={activeFilter === "all"}
-                    tone="neutral"
-                    icon={<Wrench />}
                     onClick={() => setFilter("all")}
                 />
                 <KpiCard
@@ -308,8 +236,6 @@ function ServiceMonitoringTableImpl({
                     value={counts.safe}
                     hint="siap pakai"
                     active={activeFilter === "safe"}
-                    tone="safe"
-                    icon={<ShieldCheck />}
                     onClick={() => setFilter("safe")}
                 />
                 <KpiCard
@@ -317,8 +243,6 @@ function ServiceMonitoringTableImpl({
                     value={counts.warning}
                     hint="≤14 hr / ≤1.000 km"
                     active={activeFilter === "warning"}
-                    tone="warning"
-                    icon={<Clock3 />}
                     onClick={() => setFilter("warning")}
                 />
                 <KpiCard
@@ -326,8 +250,6 @@ function ServiceMonitoringTableImpl({
                     value={counts.overdue}
                     hint="butuh tindakan"
                     active={activeFilter === "overdue"}
-                    tone="overdue"
-                    icon={<AlertTriangle />}
                     onClick={() => setFilter("overdue")}
                 />
                 <KpiCard
@@ -335,8 +257,6 @@ function ServiceMonitoringTableImpl({
                     value={counts.none}
                     hint="belum ada log"
                     active={activeFilter === "none"}
-                    tone="neutral"
-                    icon={<Gauge />}
                     onClick={() => setFilter("none")}
                 />
             </div>
@@ -641,17 +561,6 @@ function ServiceMonitoringTableImpl({
                                                             </p>
                                                         )}
 
-                                                        <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                                                            <span className="inline-flex items-center gap-1.5">
-                                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Aman
-                                                            </span>
-                                                            <span className="inline-flex items-center gap-1.5">
-                                                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Segera (≤14 hari / ≤1.000 km)
-                                                            </span>
-                                                            <span className="inline-flex items-center gap-1.5">
-                                                                <span className="h-1.5 w-1.5 rounded-full bg-destructive" /> Terlewat
-                                                            </span>
-                                                        </div>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>

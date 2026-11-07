@@ -3,12 +3,12 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react"
 import {
     BadgeCheck,
+    Boxes,
     ChevronDown,
     CircleDollarSign,
     FileText,
     Store,
     TrendingUp,
-    Truck,
     X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -502,7 +502,7 @@ function SkrViewImpl({
                             ? `${totals.rows.toLocaleString("id-ID")} baris · tanpa batas tanggal`
                             : `${totals.rows.toLocaleString("id-ID")} baris · ${isoToTanggal(dateFrom)} – ${isoToTanggal(dateTo)}`
                     }
-                    icon={<Truck className="h-3.5 w-3.5" />}
+                    icon={<Boxes className="h-3.5 w-3.5" />}
                     emphasis
                 />
                 <StatTile

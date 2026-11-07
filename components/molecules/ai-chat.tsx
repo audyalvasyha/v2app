@@ -26,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { suggestionsForView } from "@/lib/ai/schema-client";
-import { formatNumber } from "@/lib/format";
+import { compactRupiah, formatNumber } from "@/lib/format";
 import { supabase } from "@/utils/supabase";
 
 /**
@@ -675,7 +675,7 @@ export function AIChat({
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? "Tutup asisten AI" : "Buka asisten AI"}
-          className={`fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-5 text-primary-foreground shadow-lg transition-all duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          className={`fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-5 text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             fabHidden && !open
               ? "pointer-events-none translate-y-20 opacity-0"
               : "translate-y-0 opacity-100"
@@ -925,7 +925,7 @@ export function AIChat({
                           key={idea.category}
                           type="button"
                           onClick={() => ask(idea.question)}
-                          className="group flex min-h-36 flex-col justify-between rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+                          className="group flex min-h-36 flex-col justify-between rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-colors hover:border-primary/30"
                         >
                           <span className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground">{idea.category}</span>
                           <span className="mt-5 text-sm font-medium leading-relaxed text-foreground">{idea.question}</span>
@@ -944,15 +944,28 @@ export function AIChat({
                 </div>
               ))}
 
-              {messages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  loading={loading && message.content === ""}
-                  onAsk={ask}
-                  fallbackSuggestions={contextualSuggestions}
-                />
-              ))}
+              {messages.map((message, index) => {
+                // Pertanyaan user yang memicu jawaban ini: pesan user
+                // terakhir sebelum pesan asisten — dipakai untuk menilai
+                // apakah user memang meminta visual (lihat wantsVisual).
+                let question = "";
+                for (let i = index - 1; i >= 0; i--) {
+                  if (messages[i]?.role === "user") {
+                    question = messages[i].content;
+                    break;
+                  }
+                }
+                return (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    question={question}
+                    loading={loading && message.content === ""}
+                    onAsk={ask}
+                    fallbackSuggestions={contextualSuggestions}
+                  />
+                );
+              })}
             </div>
 
             {/* Saat percakapan dimulai composer berada di hero; setelah ada pesan ia menetap di bawah. */}
@@ -964,13 +977,26 @@ export function AIChat({
   );
 }
 
+/**
+ * Visual hanya muncul kalau user memintanya eksplisit ("tampilkan grafik",
+ * "buatkan chart", …). Tanpa kata kunci itu, jawaban tetap narasi +
+ * tabel terlipat seperti semula — visual otomatis yang selalu terbuka
+ * bikin panel berisik untuk pertanyaan yang jawabannya cukup satu angka.
+ */
+function wantsVisual(question: string): boolean {
+  return /(grafik|chart|visual|plot|diagram|bagan|pie|donat|bar|batang|kurva|tren.*gambar|gambar.*tren)/i.test(question);
+}
+
 function MessageBubble({
   message,
+  question,
   loading,
   onAsk,
   fallbackSuggestions,
 }: {
   message: ChatMessage;
+  /** Pertanyaan user yang memicu pesan asisten ini. */
+  question?: string;
   loading: boolean;
   /** Dipakai tombol Coba lagi & chip saran lanjutan. */
   onAsk?: (question: string) => void;
@@ -1051,7 +1077,12 @@ function MessageBubble({
               ditawarkan terlipat saat hasilnya multi-baris — hemat ruang
               dan yang butuh detail membukanya sendiri. */}
           {message.result.rows.length > 1 ? (
-            <FoldableData rows={message.result.rows} />
+            <>
+              {wantsVisual(question ?? "") && (
+                <ResultVisual rows={message.result.rows} />
+              )}
+              <FoldableData rows={message.result.rows} />
+            </>
           ) : message.result.rows.length === 0 ? (
             // Query sukses tapi 0 baris: bedakan dari kegagalan. Tanpa
             // pesan ini, panel terlihat seolah-olah tidak menjawab apa pun.
@@ -1127,6 +1158,126 @@ function CopyAnswer({ text }: { text: string }) {
  * dipotong supaya satu kolom panjang tidak merusak layout panel
  * yang sempit ini.
  */
+/**
+ * Visual otomatis dari hasil query — bar horizontal mini, tanpa dependensi
+ * grafik baru (CSS murni, bahasa yang sama dengan mini-bar dashboard).
+ *
+ * Muncul TERBUKA saat bentuk datanya cocok: minimal 2 baris, satu kolom
+ * label (teks/periode) + satu kolom angka. Contoh yang langsung jadi
+ * visual: biaya per unit, ritase per nopol, tren per bulan. Yang tidak
+ * cocok (satu baris, semua teks, semua nol) tetap narasi + tabel saja.
+ *
+ * Batas 6 bar teratas: panel chat sempit, visual harus memberi bentuk
+ * sekilas — verifikasi angka lengkap tetap tugas tabel terlipat.
+ */
+interface VisualData {
+  labelKey: string;
+  valueKey: string;
+  isMoney: boolean;
+  items: Array<{ label: string; value: number; full: string }>;
+  hiddenCount: number;
+}
+
+function analyzeVisual(
+  rows: Array<Record<string, unknown>>,
+): VisualData | null {
+  if (rows.length < 2) return null;
+  const columns = Object.keys(rows[0] ?? {});
+  if (columns.length < 2) return null;
+
+  const sample = rows.slice(0, 20);
+  const asNumber = (v: unknown): number | null => {
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    if (typeof v === "string" && v.trim() !== "") {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+
+  // Kolom angka: yang pertama dengan mayoritas nilai numerik.
+  const valueKey = columns.find(
+    (c) => sample.filter((r) => asNumber(r[c]) !== null).length >= Math.ceil(sample.length / 2),
+  );
+  if (!valueKey) return null;
+
+  // Kolom label: kolom non-angka pertama; kalau semua kolom angka
+  // (mis. tahun + jumlah), kolom pertama non-nilai jadi label.
+  const labelKey =
+    columns.find((c) => c !== valueKey && sample.some((r) => asNumber(r[c]) === null && String(r[c] ?? "").trim() !== "")) ??
+    columns.find((c) => c !== valueKey);
+  if (!labelKey) return null;
+
+  const items = rows
+    .map((r) => {
+      const value = asNumber(r[valueKey]);
+      const label = String(r[labelKey] ?? "").trim();
+      if (value === null || !label) return null;
+      return { label: label.length > 24 ? `${label.slice(0, 24)}…` : label, value, full: label };
+    })
+    .filter((i): i is { label: string; value: number; full: string } => i !== null);
+  if (items.length < 2) return null;
+
+  const max = Math.max(...items.map((i) => i.value));
+  if (!(max > 0)) return null;
+
+  const sorted = items.sort((a, b) => b.value - a.value);
+  const shown = sorted.slice(0, 6);
+  return {
+    labelKey,
+    valueKey,
+    isMoney: /(rp|rupiah|biaya|cost|harga|nominal|total|bayar|ongkos)/i.test(valueKey),
+    items: shown,
+    hiddenCount: sorted.length - shown.length,
+  };
+}
+
+function ResultVisual({ rows }: { rows: Array<Record<string, unknown>> }) {
+  const visual = useMemo(() => analyzeVisual(rows), [rows]);
+  if (!visual) return null;
+  const max = Math.max(...visual.items.map((i) => i.value));
+  const pretty = (key: string) => key.replace(/_/g, " ");
+
+  return (
+    <div className="rounded-md border border-ai-panel-foreground/15 bg-ai-panel-foreground/[0.05] px-2.5 py-2">
+      <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+        {pretty(visual.valueKey)} per {pretty(visual.labelKey)}
+      </p>
+      <ul className="space-y-1.5">
+        {visual.items.map((item) => (
+          <li key={item.full}>
+            <div className="flex items-center gap-2">
+              <span
+                className="w-24 shrink-0 truncate text-xs text-muted-foreground"
+                title={item.full}
+              >
+                {item.label}
+              </span>
+              <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-ai-panel-foreground/10">
+                <div
+                  className="h-full rounded-full bg-primary/70"
+                  style={{ width: `${Math.max((item.value / max) * 100, 4)}%` }}
+                />
+              </div>
+              <span
+                className="w-20 shrink-0 text-right font-mono text-xs tabular-nums"
+                title={visual.isMoney ? `Rp ${formatNumber(item.value)}` : formatNumber(item.value)}
+              >
+                {visual.isMoney ? compactRupiah(item.value) : formatNumber(item.value)}
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {visual.hiddenCount > 0 && (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          +{visual.hiddenCount} lainnya ada di tabel bawah.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function FoldableData({ rows }: { rows: Array<Record<string, unknown>> }) {
   const [open, setOpen] = useState(false);
 

@@ -15,12 +15,12 @@ import { Disc3, ArrowRight } from "lucide-react";
 export function ComingSoon() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-xl rounded-2xl border border-border bg-card p-10 text-center shadow-xl">
+      <div className="w-full max-w-xl rounded-xl border border-border bg-card p-8 text-center shadow-sm">
         <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
           <Disc3 className="h-7 w-7 text-primary" />
         </div>
 
-        <h1 className="text-3xl font-bold tracking-tight">Coming Soon</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Segera Hadir</h1>
 
         <p className="mt-3 text-muted-foreground">
           Menu Analisa Ban masih dalam pengembangan. Kembalilah nanti untuk

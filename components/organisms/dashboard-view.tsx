@@ -618,13 +618,9 @@ function DashboardContent({
       {/* ── HERO: satu pandangan tentang kondisi hari ini ─────────── */}
       <section
         aria-label="Kondisi armada hari ini"
-        className="relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-primary/[0.07] via-card to-card p-4 shadow-sm lg:p-5"
+        className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm lg:p-5"
       >
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-24 -top-28 h-64 w-64 rounded-full bg-primary/10 blur-3xl"
-        />
-        <div className="relative flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">
@@ -728,7 +724,7 @@ function DashboardContent({
           hint={<DeltaBadge delta={analytics.delta30} suffix="vs 30 hari lalu" />}
           icon={<CircleDollarSign />}
           emphasis
-          className="border-primary/20 bg-gradient-to-br from-primary/[0.08] via-card to-card shadow-sm hover:shadow-md"
+          className="border-primary/20 bg-card shadow-sm"
         />
         <StatTile
           label="Rata-rata / Entri"
@@ -736,7 +732,7 @@ function DashboardContent({
           title={formatRupiah(analytics.averageEntry30)}
           hint={`${formatNumber(analytics.entries30)} entri maintenance 30 hari`}
           icon={<ReceiptText />}
-          className="border-border/70 bg-card shadow-sm hover:shadow-md"
+          className="border-border/70 bg-card shadow-sm"
         />
       </section>
 
