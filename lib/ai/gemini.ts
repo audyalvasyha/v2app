@@ -109,7 +109,12 @@ export async function callAi(
       console.error("[ai] OpenKey gagal, beralih ke Gemini:", error.message)
     }
   }
-  return callGemini(prompt, maxOutputTokens, temperature)
+  return callGemini(
+    prompt,
+    maxOutputTokens,
+    temperature,
+    AbortSignal.timeout(timeoutMs ?? CHAT_TIMEOUT_OPENKEY_MS),
+  )
 }
 
 /**

@@ -8,6 +8,8 @@ import React, {
   useState,
 } from "react";
 import {
+  ArrowRight,
+  ArrowUp,
   Brain,
   Check,
   ChevronDown,
@@ -83,6 +85,20 @@ const STORAGE_KEY = "midaa.ai-chat.v1";
 const MAX_STORED_MESSAGES = 60;
 
 /** Label konteks menu untuk header panel — bukan id mentah "pengiriman". */
+const PAGE_STARTERS = [
+  { label: "Armada", question: "Ringkas kondisi armada hari ini" },
+  { label: "Servis", question: "Unit mana yang perlu segera servis?" },
+  { label: "Biaya", question: "Bagaimana tren biaya perbaikan bulan ini?" },
+  { label: "Pengiriman", question: "Bagaimana ritase pengiriman periode ini?" },
+]
+
+const PAGE_IDEAS = [
+  { category: "KONDISI ARMADA", question: "Buat ringkasan kesiapan armada dan unit yang perlu perhatian." },
+  { category: "PEMELIHARAAN", question: "Unit mana yang jadwal servisnya paling mendesak?" },
+  { category: "BIAYA OPERASIONAL", question: "Bandingkan biaya perbaikan bulan ini dengan periode sebelumnya." },
+  { category: "PENGIRIMAN", question: "Tinjau ritase dan pola keberangkatan dalam 30 hari terakhir." },
+]
+
 const VIEW_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
   equipment: "Equipment",
@@ -183,6 +199,7 @@ function loadStoredMessages(): ChatMessage[] {
 }
 
 export function AIChat({ activeView }: { activeView?: string }) {
+  const isPageMode = activeView === "analisa"
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Riwayat dibaca SETELAH mount, bukan dari lazy initializer useState.
@@ -296,8 +313,8 @@ export function AIChat({ activeView }: { activeView?: string }) {
   }, [messages]);
 
   useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
+    if (open || isPageMode) inputRef.current?.focus();
+  }, [open, isPageMode]);
 
   // Simpan setiap kali percakapan berubah. `slice` di sini bukan sekadar
   // penghemat ruang: ia juga membatasi ukuran tulisan berikutnya, jadi
@@ -501,6 +518,9 @@ export function AIChat({ activeView }: { activeView?: string }) {
         if (!response.ok) {
           throw new Error(payload?.error ?? "Gagal memproses pertanyaan.");
         }
+        if (typeof payload?.answer !== "string" || !payload.answer.trim()) {
+          throw new Error("Midaa belum mengembalikan jawaban. Coba kirim ulang pertanyaanmu.");
+        }
 
         setMessages((prev) =>
           prev.map((m) =>
@@ -552,6 +572,78 @@ export function AIChat({ activeView }: { activeView?: string }) {
     [activeView],
   );
 
+  const renderComposer = (pageMode: boolean) => (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        ask(input);
+      }}
+      className={pageMode
+        ? "w-full rounded-3xl border border-border bg-card p-3 shadow-sm transition-shadow focus-within:shadow-md"
+        : "flex gap-2 border-t border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.04] p-3"}
+    >
+      <textarea
+        ref={inputRef}
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey && !loading) {
+            e.preventDefault();
+            ask(input);
+          }
+        }}
+        rows={pageMode ? 2 : 1}
+        maxLength={1000}
+        disabled={loading}
+        aria-label="Pertanyaan untuk asisten AI"
+        placeholder={rememberNext ? "Ketik yang mau diingat…" : pageMode ? "Apa yang ingin kamu kerjakan?" : "Tanya apa saja… (Enter kirim, Shift+Enter baris baru)"}
+        className={pageMode
+          ? "min-h-20 w-full resize-none overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-transparent px-3 py-2 text-base leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none disabled:opacity-50"
+          : "max-h-[120px] min-h-[2.25rem] flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"}
+      />
+      {pageMode ? (
+        <div className="flex items-center justify-between gap-2 px-1 pb-1">
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              disabled={loading}
+              onClick={() => setRememberNext((v) => !v)}
+              title="Simpan pertanyaan ini ke ingatan Midaa"
+              aria-pressed={rememberNext}
+              className={`h-9 w-9 rounded-full ${rememberNext ? "text-primary" : "text-muted-foreground"}`}
+            >
+              <Brain className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`} />
+            </Button>
+            <span className="text-[11px] text-muted-foreground">Enter untuk kirim · Shift + Enter untuk baris baru</span>
+          </div>
+          <Button type="submit" size="icon" disabled={loading || !input.trim()} className="h-9 w-9 rounded-full">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={loading}
+            onClick={() => setRememberNext((v) => !v)}
+            title="Simpan pertanyaan ini ke ingatan Midaa"
+            aria-pressed={rememberNext}
+            className={rememberNext ? "shrink-0 text-primary" : "shrink-0 text-muted-foreground"}
+          >
+            <Brain className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`} />
+          </Button>
+          <Button type="submit" size="icon" disabled={loading || !input.trim()}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </div>
+      )}
+    </form>
+  );
+
   return (
     <>
       {/* Tombol mengambang — bentuk pil supaya label ikut terbaca.
@@ -559,27 +651,29 @@ export function AIChat({ activeView }: { activeView?: string }) {
           user sedang scroll ke bawah: di posisi fixed, tombol ini
           menutupi apa pun yang ada di kanan bawah layar — termasuk
           paginasi tabel. */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={open ? "Tutup asisten AI" : "Buka asisten AI"}
-        className={`fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-5 text-primary-foreground shadow-lg transition-all duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-          fabHidden && !open
-            ? "pointer-events-none translate-y-20 opacity-0"
-            : "translate-y-0 opacity-100"
-        }`}
-      >
-        {open ? (
-          <X className="h-5 w-5 shrink-0" />
-        ) : (
-          <Sparkles className="h-5 w-5 shrink-0" />
-        )}
-        <span className="text-sm font-semibold">
-          {open ? "Tutup" : "Tanya Midaa"}
-        </span>
-      </button>
+      {!isPageMode && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label={open ? "Tutup asisten AI" : "Buka asisten AI"}
+          className={`fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-5 text-primary-foreground shadow-lg transition-all duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            fabHidden && !open
+              ? "pointer-events-none translate-y-20 opacity-0"
+              : "translate-y-0 opacity-100"
+          }`}
+        >
+          {open ? (
+            <X className="h-5 w-5 shrink-0" />
+          ) : (
+            <Sparkles className="h-5 w-5 shrink-0" />
+          )}
+          <span className="text-sm font-semibold">
+            {open ? "Tutup" : "Tanya Midaa"}
+          </span>
+        </button>
+      )}
 
-      {open && (
+      {(open || isPageMode) && (
         // Permukaan panel memakai token khusus `bg-ai-panel`, bukan
         // `bg-muted` atau `bg-card`:
         //
@@ -601,24 +695,26 @@ export function AIChat({ activeView }: { activeView?: string }) {
         // menimpa translate centering selama animasi dan panel terlihat
         // melompat. Wrapper pointer-events-none supaya klik di luar
         // panel tetap jatuh ke dashboard di belakangnya.
-        <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center p-4">
-          <div className="pointer-events-auto flex h-[min(70vh,42rem)] w-[max(20rem,70vw)] flex-col overflow-hidden rounded-2xl border border-ai-panel-foreground/15 bg-ai-panel text-ai-panel-foreground shadow-2xl duration-200 animate-in fade-in-0 zoom-in-95">
+        <div className={isPageMode ? "w-full" : "pointer-events-none fixed inset-0 z-40 flex items-center justify-center p-4"}>
+          <div className={`pointer-events-auto flex w-full flex-col overflow-hidden border ${
+            isPageMode
+              ? "mx-auto flex h-[min(82vh,64rem)] min-h-[38rem] max-w-7xl rounded-none border-0 bg-background text-foreground shadow-none"
+              : "h-[min(70vh,42rem)] min-w-[20rem] max-w-[min(70vw,60rem)] rounded-2xl border-ai-panel-foreground/15 bg-ai-panel text-ai-panel-foreground shadow-2xl duration-200 animate-in fade-in-0 zoom-in-95"
+          }`}>
             {/* Kepala — shrink-0 supaya strip minimalnya selalu penuh */}
-            <div className="flex shrink-0 items-center gap-2 border-b border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.06] px-4 py-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15">
-                <Sparkles className="h-4 w-4 text-primary" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold leading-tight">
-                  Tanya Midaa
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  Jawaban dihitung dari database
-                  {activeView && VIEW_LABELS[activeView]
-                    ? ` · konteks: ${VIEW_LABELS[activeView]}`
-                    : ""}
-                </p>
-              </div>
+            <div className={`flex shrink-0 items-center gap-3 px-4 ${isPageMode ? "justify-end py-3 sm:px-6" : "border-b border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.06] py-3"}`}>
+              {!isPageMode && <>
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold leading-tight">Tanya Midaa</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    Jawaban dihitung dari database
+                    {activeView && VIEW_LABELS[activeView] ? ` · konteks: ${VIEW_LABELS[activeView]}` : ""}
+                  </p>
+                </div>
+              </>}
               <Button
                 type="button"
                 variant="ghost"
@@ -764,27 +860,64 @@ export function AIChat({ activeView }: { activeView?: string }) {
             {/* Riwayat */}
             <div
               ref={scrollRef}
-              className="flex-1 space-y-4 overflow-y-auto px-4 py-4"
+              className={`flex-1 space-y-5 overflow-y-auto py-5 ${isPageMode ? "px-4 sm:px-8 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" : "px-4"}`}
             >
-              {messages.length === 0 && (
+              {messages.length === 0 && (isPageMode ? (
+                <div className="mx-auto flex min-h-full max-w-6xl flex-col py-10 sm:py-14">
+                  <section className="mx-auto w-full max-w-3xl space-y-5 text-center">
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">Selamat datang di Tanya Midaa</p>
+                      <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Apa yang ingin kamu capai?</h2>
+                    </div>
+                    {renderComposer(true)}
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      {PAGE_STARTERS.map((starter) => (
+                        <button
+                          key={starter.label}
+                          type="button"
+                          onClick={() => {
+                            setInput(starter.question);
+                            inputRef.current?.focus();
+                          }}
+                          className="rounded-full border border-border bg-card px-3.5 py-2 text-xs font-medium text-muted-foreground shadow-sm transition-colors hover:border-primary/30 hover:bg-primary/[0.04] hover:text-foreground"
+                        >
+                          {starter.label}
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                  <section className="mt-14">
+                    <div className="mb-4 flex items-end justify-between gap-3">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Mulai dengan ide</p>
+                        <h3 className="mt-1 text-base font-semibold tracking-tight">Saran untuk dianalisis</h3>
+                      </div>
+                      <Sparkles className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      {PAGE_IDEAS.map((idea) => (
+                        <button
+                          key={idea.category}
+                          type="button"
+                          onClick={() => ask(idea.question)}
+                          className="group flex min-h-36 flex-col justify-between rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+                        >
+                          <span className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground">{idea.category}</span>
+                          <span className="mt-5 text-sm font-medium leading-relaxed text-foreground">{idea.question}</span>
+                          <span className="mt-4 flex justify-end text-muted-foreground transition-colors group-hover:text-primary"><ArrowRight className="h-4 w-4" /></span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              ) : (
                 <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Tanya apa saja tentang data di dasbor ini. Contoh:
-                  </p>
-                  {/* Saran pembuka mengikuti menu yang sedang dibuka —
-                    supaya contohnya relevan, bukan daftar paksa global. */}
-                  {suggestionsForView(activeView).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => ask(s)}
-                      className="block w-full rounded-lg border border-ai-panel-foreground/15 bg-ai-panel-foreground/[0.05] px-3 py-2 text-left text-sm transition-colors hover:bg-primary/10"
-                    >
-                      {s}
-                    </button>
+                  <p className="text-sm text-muted-foreground">Tanya apa saja tentang data di dasbor ini. Contoh:</p>
+                  {suggestionsForView(activeView).map((suggestion) => (
+                    <button key={suggestion} type="button" onClick={() => ask(suggestion)} className="block w-full rounded-lg border border-ai-panel-foreground/15 bg-ai-panel-foreground/[0.05] px-3 py-2 text-left text-sm transition-colors hover:bg-primary/10">{suggestion}</button>
                   ))}
                 </div>
-              )}
+              ))}
 
               {messages.map((message) => (
                 <MessageBubble
@@ -797,64 +930,8 @@ export function AIChat({ activeView }: { activeView?: string }) {
               ))}
             </div>
 
-            {/* Input */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                ask(input);
-              }}
-              className="flex gap-2 border-t border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.04] p-3"
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled={loading}
-                onClick={() => setRememberNext((v) => !v)}
-                title="Simpan pertanyaan ini ke ingatan Midaa"
-                aria-pressed={rememberNext}
-                className={`shrink-0 ${rememberNext ? "text-primary" : "text-muted-foreground"}`}
-              >
-                <Brain
-                  className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`}
-                />
-              </Button>
-              {/* Textarea multi-baris: pertanyaan panjang akhirnya bisa
-                  ditulis utuh. Enter = kirim, Shift+Enter = baris baru —
-                  pola standar aplikasi chat (Slack/WhatsApp). */}
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && !loading) {
-                    e.preventDefault();
-                    ask(input);
-                  }
-                }}
-                rows={1}
-                maxLength={1000}
-                disabled={loading}
-                aria-label="Pertanyaan untuk asisten AI"
-                placeholder={
-                  rememberNext
-                    ? "Ketik yang mau diingat…"
-                    : "Tanya apa saja… (Enter kirim, Shift+Enter baris baru)"
-                }
-                className="max-h-[120px] min-h-[2.25rem] flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
-              />
-              <Button
-                type="submit"
-                size="icon"
-                disabled={loading || !input.trim()}
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
-            </form>
+            {/* Saat percakapan dimulai composer berada di hero; setelah ada pesan ia menetap di bawah. */}
+            {(messages.length > 0 || !isPageMode) && renderComposer(false)}
           </div>
         </div>
       )}

@@ -69,10 +69,6 @@ const TrafficView = dynamic(
   () => import("@/components/organisms/traffic-view").then((m) => m.TrafficView),
   { ssr: false, loading: ViewFallback },
 )
-const AnalisaView = dynamic(
-  () => import("@/components/organisms/analisa-view").then((m) => m.AnalisaView),
-  { ssr: false, loading: ViewFallback },
-)
 import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
 import { daysInMonth } from "@/lib/skr-analytics"
 import { startOfZonedDayMonthsAgo, zonedParts, formatDateMedium } from "@/lib/format"
@@ -103,8 +99,8 @@ const OUTBOUND_COLS = "freight_order,no_polisi,jam_out,jam_in,created_at"
  * fetchSkr/fetchOutbounds di DashboardContent). Analisa memakai keduanya:
  * outbound untuk KPI ritase, SKR untuk KPI sisa kiriman & redelivery.
  */
-const NEEDS_SKR_DATA: View[] = ["skr", "analisa"]
-const NEEDS_OUTBOUND: View[] = ["pengiriman", "analisa"]
+const NEEDS_SKR_DATA: View[] = ["skr"]
+const NEEDS_OUTBOUND: View[] = ["pengiriman"]
 // View ringkasan hasil parsing di database (lihat README / SQL di bawah).
 // Hanya 5 kolom ini yang dibutuhkan dashboard, sehingga payload jauh lebih kecil.
 const SKR_VIEW = 'skr_ringkasan'
@@ -211,6 +207,12 @@ function DashboardContent() {
   const { theme, preference: themePreference, toggleTheme } = useTheme()
   // Jadikan 'dashboard' sebagai view default
   const [activeView, setActiveView] = useState<View>('dashboard')
+
+  useEffect(() => {
+    const pageClass = "analisa-page"
+    document.documentElement.classList.toggle(pageClass, activeView === "analisa")
+    return () => document.documentElement.classList.remove(pageClass)
+  }, [activeView])
 
   const [filters, setFilters] = useState<EquipmentFilters>({})
   const debouncedSearch = useDebounce(filters.search ?? "", 250)
@@ -811,7 +813,7 @@ function DashboardContent() {
     ban: { title: 'Analisa Ban', desc: 'Rincian pengeluaran ban per unit: tren bulanan, unit termahal, catatan setiap penggantian, dan peta ban yang bisa diklik per nopol.' },
     weather: { title: 'Perkiraan Cuaca', desc: 'Kondisi terkini, peluang hujan 24 jam, dan prakiraan 7 hari untuk pool Bagan Batu, Bagansiapiapi, dan 18 kecamatan Rokan Hilir — dengan penilaian risiko perjalanan per daerah.' },
     traffic: { title: 'Monitoring Lalu Lintas', desc: 'Pantau kondisi lalu lintas rute pengiriman armada: status per rute, flag kemacetan, dan peta kondisi jalan.' },
-    analisa: { title: 'Analisa', desc: 'Ringkasan bergaya Head of Transport dari KPI otomatis: biaya transport, redelivery, sisa kiriman, dan ritase — dihitung dari data asli, bukan perkiraan.' },
+    analisa: { title: 'Analisa', desc: 'Asisten AI untuk bertanya dan menggali insight dari data operasional armada.' },
   }
 
   // Placeholder search global di header, mengikuti konteks menu aktif
@@ -841,16 +843,10 @@ function DashboardContent() {
       searchCounts={searchResults.counts}
       onSearchSelect={handleViewChange}
     >
-      {/* Padding bawah lebih besar dari `p-6`: baris paling bawah halaman
-          (kontrol paginasi) berada di kanan bawah, dan tombol mengambang
-          Tanya Midaa juga fixed di sana. Tanpa ruang extra ini, paginasi
-          tidak bisa di-scroll keluar dari bawah tombol — user praktis
-          tidak bisa menekan "Berikutnya".
-          `pb-28` = 7rem, cukup untuk tombol h-12 plus jarak aman. */}
-      <div className="container mx-auto flex flex-col space-y-4 px-6 pt-6 pb-28">
+      <div className="container mx-auto flex flex-col space-y-4 px-6 pt-6 pb-10">
 
         {/* Header Dinamis */}
-        {activeView !== 'about' && (
+        {activeView !== 'about' && activeView !== 'analisa' && (
           <div className="shrink-0">
             <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
               {headerInfo[activeView].title}
@@ -887,6 +883,8 @@ function DashboardContent() {
               serviceLogs={serviceLogs}
               outbounds={outbounds}
               skrDetails={skrDetails}
+              skrError={skrError}
+              outboundError={outboundError}
               isLoading={isLoading}
               onNavigate={handleViewChange}
             />
@@ -988,18 +986,7 @@ function DashboardContent() {
         )}
 
         {activeView === 'analisa' && (
-          // Analisa membaca data yang SUDAH dimuat dashboard (histories,
-          // skr, outbound) — tanpa fetch tambahan, tanpa beban query baru.
-          <AnalisaView
-            equipments={equipments}
-            histories={histories}
-            skrRows={skrDetails}
-            skrPrevRows={skrPrevMonth.length > 0 ? skrPrevMonth : skrDetails}
-            outbounds={outbounds}
-            outboundWindow={outboundRange}
-            isLoading={isLoading}
-            error={error}
-          />
+          <AIChat activeView="analisa" />
         )}
 
         {activeView === 'about' && (
@@ -1008,9 +995,7 @@ function DashboardContent() {
 
       </div>
 
-      {/* Tanya data — hanya muncul setelah sesi terverifikasi lewat AuthGate,
-          jadi tidak pernah bisa diakses pengunjung yang belum login. */}
-      <AIChat activeView={activeView} />
+
     </DashboardLayout>
   )
 }

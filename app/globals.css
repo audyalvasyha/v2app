@@ -204,3 +204,17 @@ pre {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-muted-foreground);
 }
+
+/* Sembunyikan scrollbar pembungkus pada halaman chat Analisa tanpa mematikan scroll. */
+html.analisa-page,
+html.analisa-page body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html.analisa-page::-webkit-scrollbar,
+html.analisa-page body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

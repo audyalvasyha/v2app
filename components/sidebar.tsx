@@ -99,7 +99,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
       </div>
 
       <nav className="flex-1 p-2 space-y-1 flex flex-col overflow-y-auto">
-        <SidebarSectionLabel label="Fleet Management" collapsed={collapsed} />
+        <SidebarSectionLabel label="Fleet" collapsed={collapsed} />
 
         <SidebarButton
           icon={LayoutDashboard}
