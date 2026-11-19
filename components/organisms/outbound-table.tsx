@@ -298,10 +298,12 @@ function OutboundTableImpl({
 
     // ── EXPORT CSV ────────────────────────────────────────────────────────
     const handleExportCsv = () => {
-        const header = ["Freight Order", "No. Polisi", "Jam Out", "Jam In", "Durasi (menit)", "Status"]
+        const header = ["Freight Order", "No. Polisi", "Jam Out", "Jam In", "Durasi (hh:mm:ss)", "Status"]
         const lines = rows.map((row) => {
             const info = outboundStatus(row.jam_out, row.jam_in)
-            const durasi = durationMinutesFromTimestamps(row.jam_out, row.jam_in)
+            // Durasi diekspor dalam hh:mm:ss agar identik dengan kolom tabel;
+            // baris tanpa jam masuk tetap dikosongkan, bukan diberi "—".
+            const durasi = durationSecondsFromTimestamps(row.jam_out, row.jam_in)
             // Escape CSV + netralkan formula injection (= + - @ tab CR) supaya
             // file aman dibuka di Excel/LibreOffice tanpa mengeksekusi formula.
             const escape = (v: string) => {
@@ -313,7 +315,7 @@ function OutboundTableImpl({
                 escape(String(row.no_polisi ?? "")),
                 escape(row.jam_out ?? ""),
                 escape(row.jam_in ?? ""),
-                durasi == null ? "" : String(durasi),
+                durasi == null ? "" : formatClockDuration(durasi),
                 escape(info.label),
             ].join(",")
         })
