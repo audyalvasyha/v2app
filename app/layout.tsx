@@ -6,6 +6,7 @@ import "./globals.css"
 import { Geist_Mono } from 'next/font/google'
 
 import { Toaster } from "@/components/ui/sonner"
+import { Analytics } from "@vercel/analytics/next"
 
 // Font utama saja — inisialisasi font tak terpakai (Source Serif, double Geist Mono)
 // membuat build lebih lambat dan menambah CSS font yang tidak dipakai
@@ -64,6 +65,7 @@ export default function RootLayout({
       <body className={`${geistMono.className} antialiased`}>
         {children}
         <Toaster position="top-center" richColors closeButton />
+        <Analytics />
       </body>
     </html>
   )
