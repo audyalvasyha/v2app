@@ -35,6 +35,8 @@ import {
 } from "@/lib/service-status"
 import {
     durationMinutesFromTimestamps,
+    durationSecondsFromTimestamps,
+    formatClockDuration,
     formatDuration,
     isOutboundLate,
     isOutboundOvernight,
@@ -591,6 +593,7 @@ export function UnitProfileDialog({
                                             {data.unitOutbound.slice(0, 10).map((o, idx) => {
                                                 const info = outboundStatus(o.jam_out, o.jam_in)
                                                 const dur = durationMinutesFromTimestamps(o.jam_out, o.jam_in)
+                                                const durDetik = durationSecondsFromTimestamps(o.jam_out, o.jam_in)
                                                 const menginap = isOutboundOvernight(o.jam_out, o.jam_in)
                                                 return (
                                                     <tr key={`${o.freight_order ?? idx}`} className="hover:bg-muted/30">
@@ -617,8 +620,8 @@ export function UnitProfileDialog({
                                                                 )}
                                                             </span>
                                                         </td>
-                                                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">
-                                                            {formatDuration(dur)}
+                                                        <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
+                                                            {formatClockDuration(durDetik)}
                                                         </td>
                                                     </tr>
                                                 )

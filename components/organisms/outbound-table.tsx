@@ -37,7 +37,9 @@ import { cn } from "@/lib/utils"
 import { APP_TIMEZONE, formatNumber, startOfZonedDay } from "@/lib/format"
 import {
     durationMinutesFromTimestamps,
+    durationSecondsFromTimestamps,
     elapsedHoursSince,
+    formatClockDuration,
     formatDuration,
     isOutboundOvernight,
     outboundStatus,
@@ -542,6 +544,7 @@ function OutboundTableImpl({
                             pageRows.map((row, i) => {
                                 const info = outboundStatus(row.jam_out, row.jam_in)
                                 const durasi = durationMinutesFromTimestamps(row.jam_out, row.jam_in)
+                                const durasiDetik = durationSecondsFromTimestamps(row.jam_out, row.jam_in)
                                 const menginap = isOutboundOvernight(row.jam_out, row.jam_in, now)
                                 const hoursOut = elapsedHoursSince(row.jam_out, now)
                                 return (
@@ -608,7 +611,7 @@ function OutboundTableImpl({
                                             )}
                                         </TableCell>
                                         <TableCell className="py-2.5 text-right font-mono text-sm tabular-nums text-muted-foreground">
-                                            {formatDuration(durasi)}
+                                            {formatClockDuration(durasiDetik)}
                                         </TableCell>
                                         <TableCell className="py-2.5">
                                             <Badge variant="outline" className={cn("shrink-0", info.className)}>

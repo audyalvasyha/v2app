@@ -148,3 +148,33 @@ export function formatDuration(minutes: number | null): string {
     const m = minutes % 60
     return m === 0 ? `${h}j` : `${h}j ${m}m`
 }
+
+/**
+ * Durasi tempuh dalam DETIK dari pasangan timestamp ISO.
+ * Dipakai kolom Durasi berformat hh:mm:ss — menit yang sudah dibulatkan tidak
+ * cukup untuk itu karena detiknya akan selalu 00.
+ */
+export function durationSecondsFromTimestamps(
+    jamOut: string | null | undefined,
+    jamIn: string | null | undefined,
+): number | null {
+    if (!hasJam(jamOut) || !hasJam(jamIn)) return null
+    const out = new Date(jamOut as string).getTime()
+    const inn = new Date(jamIn as string).getTime()
+    if (Number.isNaN(out) || Number.isNaN(inn)) return null
+    const diff = inn - out
+    return diff >= 0 ? Math.round(diff / 1000) : null
+}
+
+/**
+ * Detik → "hh:mm:ss". Jam tidak dipotong ke 24 supaya trip lintas hari tetap
+ * terbaca utuh (mis. 30:15:00).
+ */
+export function formatClockDuration(seconds: number | null): string {
+    if (seconds == null) return "—"
+    const total = Math.max(0, Math.round(seconds))
+    const h = Math.floor(total / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    const s = total % 60
+    return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":")
+}
