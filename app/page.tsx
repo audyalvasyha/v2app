@@ -7,68 +7,74 @@ import { useTheme } from "@/hooks/use-theme"
 import { supabase } from "@/utils/supabase"
 import type { EquipmentFilters } from "@/components/search-bar"
 import type { GlobalSearchItem, GlobalSearchGroupCount } from "@/components/molecules/global-search-dropdown"
-import { Skeleton } from "@/components/ui/skeleton"
+import {
+  AboutPageSkeleton,
+  BanPageSkeleton,
+  BoardPageSkeleton,
+  DashboardPageSkeleton,
+  EquipmentPageSkeleton,
+  MaintenancePageSkeleton,
+  MonitoringPageSkeleton,
+  OutboundPageSkeleton,
+  SkrPageSkeleton,
+  TrafficPageSkeleton,
+  WeatherPageSkeleton,
+} from "@/components/molecules/view-skeleton"
 
 import { DashboardLayout, type View } from "@/components/templates/dashboard-layout"
 import { AuthGate } from "@/components/auth-gate"
 import { buildAlerts } from "@/lib/alerts"
+import { allowedViews, normalizeRole, type AppRole } from "@/lib/roles"
 import { AIChat } from "@/components/molecules/ai-chat"
-// Banner cuaca ringan (tanpa recharts) — statis supaya langsung tampil
-// sebagai elemen pertama dashboard tanpa menunggu chunk chart.
-// sebagai elemen pertama dashboard tanpa menunggu chunk chart.
-import { WeatherBanner } from "@/components/organisms/weather-banner"
 
 // Tiap menu dimuat sebagai chunk terpisah: chart (recharts ≈ 100 KB+) dan tabel
 // besar cuma diunduh saat tabnya dibuka, bukan saat dashboard pertama dimuat.
 // SSR dimatikan karena halaman ini sudah wholly client-side (AuthGate
 // menampilkan skeleton sampai sesi terverifikasi), jadi tidak ada konten
 // yang hilang dari HTML awal.
-const ViewFallback = () => (
-  <div className="space-y-3">
-    <Skeleton className="h-8 w-48" />
-    <Skeleton className="h-64 w-full" />
-  </div>
-)
-
 const DashboardView = dynamic(
   () => import("@/components/organisms/dashboard-view").then((m) => m.DashboardView),
-  { ssr: false, loading: ViewFallback },
+  { ssr: false, loading: DashboardPageSkeleton },
 )
 const EquipmentTable = dynamic(
   () => import("@/components/organisms/equipment-table").then((m) => m.EquipmentTable),
-  { ssr: false, loading: ViewFallback },
+  { ssr: false, loading: EquipmentPageSkeleton },
 )
 const MaintenanceTable = dynamic(
   () => import("@/components/organisms/maintenance-table").then((m) => m.MaintenanceTable),
-  { ssr: false, loading: ViewFallback },
+  { ssr: false, loading: MaintenancePageSkeleton },
 )
 const ServiceMonitoringTable = dynamic(
   () => import("@/components/organisms/service-monitoring-table").then((m) => m.ServiceMonitoringTable),
-  { ssr: false, loading: ViewFallback },
+  { ssr: false, loading: MonitoringPageSkeleton },
 )
 const AboutView = dynamic(() => import("@/components/organisms/about-view").then((m) => m.AboutView), {
   ssr: false,
-  loading: ViewFallback,
+  loading: AboutPageSkeleton,
 })
 const SkrView = dynamic(() => import("@/components/organisms/skr-view").then((m) => m.SkrView), {
   ssr: false,
-  loading: ViewFallback,
+  loading: SkrPageSkeleton,
 })
 const OutboundTable = dynamic(
   () => import("@/components/organisms/outbound-table").then((m) => m.OutboundTable),
-  { ssr: false, loading: ViewFallback },
+  { ssr: false, loading: OutboundPageSkeleton },
+)
+const TaskBoard = dynamic(
+  () => import("@/components/organisms/task-board").then((m) => m.TaskBoard),
+  { ssr: false, loading: BoardPageSkeleton },
 )
 const BanAnalysis = dynamic(
   () => import("@/components/organisms/ban-analysis").then((m) => m.BanAnalysis),
-  { ssr: false, loading: ViewFallback },
+  { ssr: false, loading: BanPageSkeleton },
 )
 const WeatherView = dynamic(
   () => import("@/components/organisms/weather-view").then((m) => m.WeatherView),
-  { ssr: false, loading: ViewFallback },
+  { ssr: false, loading: WeatherPageSkeleton },
 )
 const TrafficView = dynamic(
   () => import("@/components/organisms/traffic-view").then((m) => m.TrafficView),
-  { ssr: false, loading: ViewFallback },
+  { ssr: false, loading: TrafficPageSkeleton },
 )
 import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
 import { daysInMonth } from "@/lib/skr-analytics"
@@ -208,11 +214,24 @@ function DashboardContent() {
   const { theme, preference: themePreference, toggleTheme } = useTheme()
   // Jadikan 'dashboard' sebagai view default
   const [activeView, setActiveView] = useState<View>('dashboard')
+  // Peran user: default paling sempit sampai `app_users` selesai dibaca, supaya
+  // menu admin tidak sempat tampil ke user terbatas. User tanpa baris peran
+  // atau saat tabel belum ada dianggap admin (perilaku lama tetap jalan).
+  const [userRole, setUserRole] = useState<AppRole>('terbatas')
 
   useEffect(() => {
     const pageClass = "analisa-page"
     document.documentElement.classList.toggle(pageClass, activeView === "analisa")
     return () => document.documentElement.classList.remove(pageClass)
+  }, [activeView])
+
+  // Menu adalah halaman terpisah, bukan anchor dalam satu dokumen panjang:
+  // selalu mulai dari atas supaya About tidak terbuka di tengah/bawah konten
+  // karena mewarisi posisi scroll menu sebelumnya.
+  useEffect(() => {
+    const scroller = document.getElementById("app-scroll")
+    if (scroller) scroller.scrollTo({ top: 0, left: 0, behavior: "auto" })
+    else window.scrollTo({ top: 0, left: 0, behavior: "auto" })
   }, [activeView])
 
   const [filters, setFilters] = useState<EquipmentFilters>({})
@@ -242,7 +261,80 @@ function DashboardContent() {
 
   const isRefreshing = useRef(false)
 
+  useEffect(() => {
+    let cancelled = false
+    async function loadRole() {
+      try {
+        const { data } = await supabase.auth.getSession()
+        const email = data.session?.user.email?.toLowerCase()
+        if (!email) return
+        const { data: rows, error: roleError } = await supabase
+          .from('app_users')
+          .select('role')
+          .eq('email', email)
+          .limit(1)
+        if (cancelled) return
+        // Fail-closed: hanya tabel yang memang belum dibuat yang boleh
+        // memakai perilaku lama (semua user admin). Error jaringan, RLS,
+        // atau kolom hilang tidak boleh menaikkan user terbatas jadi admin.
+        if (roleError) {
+          const missingTable =
+            roleError.code === '42P01' ||
+            roleError.code === 'PGRST205' ||
+            /could not find the table/i.test(roleError.message)
+          setUserRole(missingTable ? 'admin' : 'terbatas')
+          return
+        }
+        setUserRole(rows?.[0] ? normalizeRole(rows[0].role) : 'admin')
+      } catch {
+        if (!cancelled) setUserRole('terbatas')
+      }
+    }
+    void loadRole()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  /** Menu yang boleh dibuka peran aktif — dipakai sidebar, search, dan guard. */
+  const permittedViews = useMemo(() => allowedViews(userRole), [userRole])
+
+  // Guard: menu di luar izin (mis. dari shortcut/notifikasi) dipulangkan ke dashboard.
+  useEffect(() => {
+    if (!permittedViews.includes(activeView)) setActiveView('dashboard')
+  }, [permittedViews, activeView])
+
   useKeyboardShortcuts(setActiveView, toggleTheme)
+
+  // Hangatkan chunk menu saat browser benar-benar idle. Tanpa ini,
+  // kunjungan pertama ke menu menunggu unduh/compile chunk dan menampilkan
+  // skeleton lagi padahal datanya mungkin sudah ada di cache. Import ini
+  // memakai modul yang sama dengan dynamic() di atas; timeout 5 detik
+  // menjaga prefetch tidak berebut bandwidth dengan fetch data awal.
+  useEffect(() => {
+    const warm = () => {
+      void import("@/components/organisms/equipment-table")
+      void import("@/components/organisms/maintenance-table")
+      void import("@/components/organisms/service-monitoring-table")
+      void import("@/components/organisms/outbound-table")
+      void import("@/components/organisms/task-board")
+      void import("@/components/organisms/ban-analysis")
+      void import("@/components/organisms/skr-view")
+      void import("@/components/organisms/about-view")
+      void import("@/components/organisms/weather-view")
+      void import("@/components/organisms/traffic-view")
+    }
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+      cancelIdleCallback?: (id: number) => void
+    }
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(warm, { timeout: 5000 })
+      return () => w.cancelIdleCallback?.(id)
+    }
+    const timer = window.setTimeout(warm, 5000)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     // 1. Cache-first: render data terakhir seketika, tanpa menunggu network
@@ -795,8 +887,13 @@ function DashboardContent() {
       })
     }
 
-    return { items, counts }
-  }, [equipments, histories, skrDetails, outbounds, customerById, debouncedSearch])
+    // Role terbatas hanya melihat grup menu yang boleh dibukanya — hasil
+    // Equipment/Histories/Ban tidak boleh muncul sebagai pintasan.
+    return {
+      items: items.filter((item) => permittedViews.includes(item.view)),
+      counts: counts.filter((group) => permittedViews.includes(group.view)),
+    }
+  }, [equipments, histories, skrDetails, outbounds, customerById, debouncedSearch, permittedViews])
 
   const handleViewChange = useCallback((view: View) => {
     setActiveView(view)
@@ -813,22 +910,24 @@ function DashboardContent() {
 
   // Konfigurasi Header Dinamis
   const headerInfo: Record<View, { title: string; desc: string }> = {
-    dashboard: { title: 'Dashboard', desc: 'Ringkasan metrik dan status operasional armada.' },
-    equipment: { title: 'Daftar Equipment', desc: 'Kelola data aset dan pantau riwayat pemeliharaan secara spesifik.' },
-    maintenance: { title: 'Semua Riwayat Maintenance', desc: 'Cari riwayat perbaikan menyeluruh berdasarkan plat nombor atau nama barang.' },
-    monitoring: { title: 'Monitoring Status Servis', desc: 'Pantau jadwal servis unit berdasarkan tanggal dan odometer.' },
+    dashboard: { title: 'Dashboard', desc: 'Ringkasan operasional armada.' },
+    tugas: { title: 'Tugas', desc: 'Follow-up komplain pengiriman.' },
+    equipment: { title: 'Daftar Equipment', desc: 'Aset armada dan riwayat perawatan.' },
+    maintenance: { title: 'Semua Riwayat Maintenance', desc: 'Riwayat perbaikan seluruh unit.' },
+    monitoring: { title: 'Monitoring Status Servis', desc: 'Jadwal servis tiap unit.' },
     about: { title: 'Tentang Aplikasi', desc: 'Kisah di balik pengembangan Fleet Management System v2.' },
-    skr: { title: 'SKR', desc: 'Ringkasan sisa kiriman per armada dan sales, beserta bobot nilai serta alasan POD.' },
-    pengiriman: { title: 'Pengiriman', desc: 'Pantau armada outbound: nomor polisi, jam keluar, jam kembali, dan durasi tempuh.' },
-    ban: { title: 'Analisa Ban', desc: 'Rincian pengeluaran ban per unit: tren bulanan, unit termahal, catatan setiap penggantian, dan peta ban yang bisa diklik per nopol.' },
-    weather: { title: 'Perkiraan Cuaca', desc: 'Kondisi terkini, peluang hujan 24 jam, dan prakiraan 7 hari untuk pool Bagan Batu, Bagansiapiapi, dan 18 kecamatan Rokan Hilir — dengan penilaian risiko perjalanan per daerah.' },
-    traffic: { title: 'Monitoring Lalu Lintas', desc: 'Pantau kondisi lalu lintas rute pengiriman armada: status per rute, flag kemacetan, dan peta kondisi jalan.' },
-    analisa: { title: 'Analisa', desc: 'Asisten AI untuk bertanya dan menggali insight dari data operasional armada.' },
+    skr: { title: 'SKR', desc: 'Sisa kiriman per armada dan sales.' },
+    pengiriman: { title: 'Pengiriman', desc: 'Jam keluar, jam kembali, dan durasi.' },
+    ban: { title: 'Analisa Ban', desc: 'Kondisi ban per unit dari pemeriksaan driver.' },
+    weather: { title: 'Perkiraan Cuaca', desc: 'Cuaca dan risiko perjalanan per daerah.' },
+    traffic: { title: 'Monitoring Lalu Lintas', desc: 'Kondisi lalu lintas rute.' },
+    analisa: { title: 'Analisa', desc: 'Asisten AI data operasional.' },
   }
 
   // Placeholder search global di header, mengikuti konteks menu aktif
   const searchPlaceholder =
-    activeView === 'equipment' ? 'Cari equipment… (ID, deskripsi, nopol)'
+    activeView === 'tugas' ? 'Cari komplain… (sales, plat, delivery, FO, ID/nama toko)'
+    : activeView === 'equipment' ? 'Cari equipment… (ID, deskripsi, nopol)'
     : activeView === 'maintenance' ? 'Cari riwayat perbaikan… (barang/jasa, nopol)'
     : activeView === 'monitoring' ? 'Cari unit untuk monitoring… (ID, nopol)'
     : activeView === 'skr' ? 'Cari SKR… (nopol, salesman, nomor dokumen)'
@@ -859,6 +958,7 @@ function DashboardContent() {
       activeView={activeView}
       onViewChange={handleViewChange}
       equipmentCounts={{ total: filteredEquipments.length, available: availableCount }}
+      allowedViews={permittedViews}
       searchTerm={filters.search ?? ""}
       onSearchChange={handleSearchChange}
       searchPlaceholder={searchPlaceholder}
@@ -866,14 +966,22 @@ function DashboardContent() {
       searchCounts={searchResults.counts}
       onSearchSelect={handleViewChange}
       alerts={alerts}
-      onSelectAlert={handleViewChange}
+      // Lonceng hanya untuk admin: hampir semua peringatan menuju menu Fleet.
+      onSelectAlert={userRole === 'admin' ? handleViewChange : undefined}
     >
-      <div className="container mx-auto flex flex-col space-y-4 px-6 pt-6 pb-10">
+      <div
+        className={
+          activeView === 'analisa'
+            ? "flex min-h-0 w-full flex-1 flex-col overflow-hidden"
+            : "mx-auto flex w-full max-w-[1500px] flex-col space-y-4 px-4 py-5 sm:px-6 lg:px-8 lg:py-6"
+        }
+      >
 
-        {/* Header Dinamis */}
-        {activeView !== 'about' && activeView !== 'analisa' && (
-          <div className="shrink-0">
-            <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+        {/* Header Dinamis — Dashboard punya kepala sendiri di dalam
+            DashboardView supaya tanggal dan aksi tidak tampil dua kali. */}
+        {activeView !== 'about' && activeView !== 'analisa' && activeView !== 'dashboard' && (
+          <div className="shrink-0 pb-1">
+            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
               {headerInfo[activeView].title}
               {/* Menu SKR: pintasan ke sub-app import CSV (subdomain) */}
               {activeView === 'skr' && (
@@ -889,7 +997,7 @@ function DashboardContent() {
                 </a>
               )}
             </h1>
-            <p className="text-muted-foreground mb-4">
+            <p className="mt-1 text-sm text-muted-foreground">
               {headerInfo[activeView].desc}
             </p>
           </div>
@@ -898,9 +1006,6 @@ function DashboardContent() {
         {/* Render Konten Sesuai View */}
         {activeView === 'dashboard' && (
           <>
-            {/* Banner cuaca di paling atas — hal pertama yang dilihat user:
-                kondisi hari ini + beberapa hari ke depan seluruh daerah. */}
-            <WeatherBanner onOpenDetail={() => handleViewChange('weather')} />
             {/* Kita berikan data asli (equipments & histories) agar kalkulasi dashboard mencakup semua data tanpa terpengaruh search bar */}
             <DashboardView
               equipments={equipments}
@@ -914,6 +1019,12 @@ function DashboardContent() {
               onNavigate={handleViewChange}
             />
           </>
+        )}
+
+        {activeView === 'tugas' && (
+          // Papan tugas memakai tabel `tasks` sendiri — tidak menambah query
+          // ke data armada yang sudah dimuat dashboard.
+          <TaskBoard search={filters.search ?? ''} />
         )}
 
         {activeView === 'equipment' && (
@@ -987,12 +1098,10 @@ function DashboardContent() {
         )}
 
         {activeView === 'ban' && (
-          // Data ban tidak punya tabel sendiri: menu ini membaca riwayat
-          // perbaikan yang uraiannya menyebut ban, jadi cukup data yang sudah
-          // dimuat dashboard — tanpa query tambahan. equipments dipakai untuk
+          // Data ban tidak punya tabel sendiri: komponen membaca pemeriksaan
+          // ban langsung, sedangkan equipments dari dashboard dipakai untuk
           // dropdown nopol + tipe kendaraan (4/6 roda) pada peta ban.
           <BanAnalysis
-            histories={histories}
             equipments={equipments}
             isLoading={isLoading}
             error={error}

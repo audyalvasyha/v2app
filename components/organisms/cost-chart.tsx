@@ -15,7 +15,7 @@ interface ChartPoint {
     cost: number
 }
 
-const ACCENT = "#FF3C00"
+const ACCENT = "var(--chart-1)"
 
 // Konfigurasi warna untuk grafik shadcn
 const chartConfig = {
@@ -76,7 +76,7 @@ export default function CostChart({ data }: { data: ChartPoint[] }) {
                     strokeWidth={3}
                     fill="url(#costAreaFill)"
                     dot={{ r: 3, fill: ACCENT, strokeWidth: 0 }}
-                    activeDot={{ r: 6, fill: "#ea580c", stroke: "white", strokeWidth: 2 }}
+                    activeDot={{ r: 6, fill: ACCENT, stroke: "var(--card)", strokeWidth: 2 }}
                 />
             </AreaChart>
         </ChartContainer>

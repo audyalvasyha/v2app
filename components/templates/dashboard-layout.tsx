@@ -6,7 +6,7 @@ import type { ThemePreference } from "@/hooks/use-theme"
 import type { GlobalSearchItem, GlobalSearchGroupCount } from "@/components/molecules/global-search-dropdown"
 import type { AlertView, AppAlert } from "@/lib/alerts"
 
-export type View = 'dashboard' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman' | 'ban' | 'weather' | 'traffic' | 'analisa'
+export type View = 'dashboard' | 'tugas' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman' | 'ban' | 'weather' | 'traffic' | 'analisa'
 
 const SIDEBAR_COLLAPSED_KEY = "fleet-sidebar-collapsed"
 
@@ -17,6 +17,8 @@ export interface DashboardLayoutProps {
   activeView: View;
   onViewChange: (view: View) => void;
   equipmentCounts: { total: number; available: number };
+  /** Menu yang boleh tampil untuk peran user aktif (lihat lib/roles.ts) */
+  allowedViews: View[];
   /** Pencarian global di header — akan dioper ke komponen Header */
   searchTerm: string;
   onSearchChange: (value: string) => void;
@@ -39,6 +41,7 @@ function DashboardLayoutImpl({
   activeView,
   onViewChange,
   equipmentCounts,
+  allowedViews,
   searchTerm,
   onSearchChange,
   searchPlaceholder,
@@ -51,6 +54,9 @@ function DashboardLayoutImpl({
 }: DashboardLayoutProps) {
   // State collapse sidebar — dipulihkan dari localStorage saat mount
   const [collapsed, setCollapsed] = useState(false)
+  // Di layar kecil sidebar tampil sebagai drawer supaya konten tidak
+  // terjepit oleh lebar tetap 256px.
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -66,9 +72,34 @@ function DashboardLayoutImpl({
     })
   }, [])
 
+  const handleViewChange = useCallback((view: View) => {
+    onViewChange(view)
+    setMobileOpen(false)
+  }, [onViewChange])
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [mobileOpen])
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1024px)")
+    const closeOnDesktop = () => {
+      if (desktop.matches) setMobileOpen(false)
+    }
+    desktop.addEventListener("change", closeOnDesktop)
+    return () => desktop.removeEventListener("change", closeOnDesktop)
+  }, [])
+
   return (
-    // Tanpa overflow-hidden: halaman di-scroll lewat scroll utama dokumen (window)
-    <div className="min-h-screen flex flex-col">
+    // Document dikunci setinggi viewport. Scroll konten terjadi di <main>, bukan
+    // di body — ini yang membuat address bar mobile tidak ikut sembunyi saat
+    // halaman About/tabel panjang digulir.
+    <div className="flex h-[100dvh] flex-col overflow-hidden">
       <Header
         theme={theme}
         themePreference={themePreference}
@@ -81,21 +112,35 @@ function DashboardLayoutImpl({
         onSearchSelect={onSearchSelect}
         alerts={alerts}
         onSelectAlert={onSelectAlert}
+        onOpenSidebar={() => setMobileOpen((open) => !open)}
       />
 
-      {/* Sidebar fixed (selalu terlihat di bawah header); konten utama scroll di level dokumen */}
-      <div className="flex flex-1">
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Tutup menu"
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-x-0 bottom-0 top-16 z-30 bg-black/40 backdrop-blur-[1px] lg:hidden"
+        />
+      )}
+
+      {/* Sidebar fixed (selalu terlihat di bawah header); konten utama punya
+          scroll container sendiri supaya body tetap diam. */}
+      <div className="flex min-h-0 flex-1">
         <Sidebar
           activeView={activeView}
-          onViewChange={onViewChange}
+          onViewChange={handleViewChange}
           equipmentCounts={equipmentCounts}
-          collapsed={collapsed}
+          collapsed={mobileOpen ? false : collapsed}
           onToggleCollapsed={handleToggleCollapsed}
+          allowedViews={allowedViews}
+          mobileOpen={mobileOpen}
         />
 
         <main
-          className={`flex-1 min-w-0 flex flex-col bg-background transition-[margin] duration-200 ease-in-out ${
-            collapsed ? 'ml-16' : 'ml-64'
+          id="app-scroll"
+          className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain bg-background transition-[margin] duration-200 ease-in-out ${
+            collapsed ? 'lg:ml-16' : 'lg:ml-64'
           }`}
         >
           {children}

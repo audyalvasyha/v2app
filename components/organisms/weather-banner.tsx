@@ -51,7 +51,7 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
     const desc = focus ? describeWeatherCode(focus.current.code) : null
 
     return (
-        <Card className="overflow-hidden border-border/70 bg-card shadow-sm">
+        <Card className="gap-0 overflow-hidden border-border/70 bg-card py-0 shadow-sm">
             <CardContent className="p-4">
                 {/* Kepala banner */}
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

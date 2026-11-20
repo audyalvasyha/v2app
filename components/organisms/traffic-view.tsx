@@ -304,7 +304,7 @@ export function TrafficView() {
                             )}
                         </div>
                         <p className="mt-1.5 text-sm text-muted-foreground">
-                            {summary ? `${summary.routedGeometries} dari ${summary.totalRoutes} rute digambar di jalan asli` : "Memuat rute…"}
+                            {summary ? `${summary.routedGeometries}/${summary.totalRoutes} rute` : "Memuat rute…"}
                             {data ? ` · diperbarui ${relativeTime(data.generatedAt)}` : ""}
                         </p>
                     </div>
@@ -329,9 +329,8 @@ export function TrafficView() {
                 <div className="flex items-start gap-2 rounded-lg border border-amber-300/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
                     <Info className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
-                        TOMTOM_API_KEY belum diset — seluruh status memakai <strong>estimasi fallback gratis</strong> (jadwal
-                        kepadatan × jarak × cuaca). Garis rute tetap akurat dari OSRM. Isi key di Settings → Environment untuk
-                        data live.
+                        TOMTOM_API_KEY belum diset — status memakai <strong>estimasi</strong> (jadwal × jarak ×
+                        cuaca). Isi key di Settings → Environment untuk data live.
                     </span>
                 </div>
             )}
@@ -340,9 +339,8 @@ export function TrafficView() {
                 <div className="flex items-start gap-2 rounded-lg border border-blue-300/50 bg-blue-500/10 p-3 text-sm text-blue-800 dark:text-blue-300">
                     <Info className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>
-                        Kuota free tier TomTom terbatas — status live tidak tersedia saat ini, jadi aplikasi otomatis beralih
-                        ke <strong>estimasi fallback gratis</strong>. Estimasi dihitung dari pola kepadatan jam rush,
-                        karakteristik jalan, dan cuaca terkini (Open-Meteo), dan tetap berguna untuk perencanaan pengiriman.
+                        Kuota TomTom habis — status memakai <strong>estimasi</strong> dari pola jam, karakter jalan,
+                        dan cuaca.
                     </span>
                 </div>
             )}
@@ -356,40 +354,6 @@ export function TrafficView() {
                     </span>
                 </div>
             )}
-
-            {/* ── KPI ─────────────────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <div className="rounded-xl border border-emerald-300/40 bg-emerald-500/5 p-4">
-                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        <Activity className="h-3.5 w-3.5 text-emerald-600" /> Lancar
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
-                        {loading ? "—" : counts.good}
-                    </p>
-                </div>
-                <div className="rounded-xl border border-amber-300/40 bg-amber-500/5 p-4">
-                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" /> Perlu perhatian
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums text-amber-700 dark:text-amber-400">
-                        {loading ? "—" : counts.warning}
-                    </p>
-                </div>
-                <div className="rounded-xl border border-red-300/40 bg-red-500/5 p-4">
-                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        <AlertTriangle className="h-3.5 w-3.5 text-red-600" /> Macet
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold tabular-nums text-red-700 dark:text-red-400">
-                        {loading ? "—" : counts.critical}
-                    </p>
-                </div>
-                <div className="rounded-xl border bg-card p-4">
-                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        <Truck className="h-3.5 w-3.5" /> Pool utama
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold">Bagan Batu</p>
-                </div>
-            </div>
 
             {/* ── Peta (kiri) + daftar rute & detail (kanan) ──────────────── */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
@@ -438,7 +402,7 @@ export function TrafficView() {
                 {/* Panel kanan: daftar rute compact + detail rute terpilih */}
                 <div className="lg:col-span-1">
                     <div className="flex h-full flex-col rounded-xl border bg-card p-3">
-                        <h2 className="mb-2 flex shrink-0 items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <h2 className="mb-2 flex shrink-0 items-center gap-2 text-xs font-semibold text-muted-foreground">
                             <Navigation className="h-3.5 w-3.5" /> Rute dari Pool Bagan Batu
                         </h2>
 
@@ -497,8 +461,7 @@ export function TrafficView() {
 
                         <p className="mt-2 flex shrink-0 items-start gap-1.5 text-[10px] leading-snug text-muted-foreground">
                             <CloudRain className="mt-0.5 h-3 w-3 shrink-0" />
-                            Estimasi memperhitungkan cuaca (Open-Meteo) &amp; pola jam kepadatan. Warna titik = kondisi
-                            rute; angka = jarak dari pool.
+                            Estimasi memakai cuaca &amp; pola jam. Titik = kondisi rute, angka = jarak dari pool.
                         </p>
 
                         {/* Detail rute terpilih */}
@@ -506,7 +469,7 @@ export function TrafficView() {
                             {!selected ? (
                                 <div className="flex flex-1 flex-col gap-2">
                                     <p className="text-xs text-muted-foreground">
-                                        Klik pin, garis, atau baris di atas untuk membuka detail rute.
+                                        Klik pin atau baris untuk detail rute.
                                     </p>
                                     {counts.unknown > 0 && (
                                         <p className="text-[11px] text-muted-foreground">

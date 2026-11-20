@@ -212,7 +212,10 @@ const HOTSPOTS: Record<string, { x: number; y: number }> = {
 };
 
 const LAYOUT = {
-  aspect: 2,
+  // Sedikit lebih tinggi dari rasio gambar supaya empat panel roda di kolom
+  // kiri tidak saling menempel ketika peta berbagi lebar dengan panel
+  // "Ban perlu tindakan".
+  aspect: 1.8,
   imgW: 52,
 } as const;
 
@@ -289,7 +292,7 @@ function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, health, cl
       aria-pressed={active}
       style={style}
       className={cn(
-        "block w-full rounded-xl border bg-card/95 p-2.5 text-left shadow-sm backdrop-blur transition-all duration-150 relative z-40 cursor-pointer",
+        "relative z-40 block w-full cursor-pointer rounded-xl border bg-background p-2.5 text-left shadow-sm transition-all duration-150",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         active
           ? "border-primary/70 shadow-md ring-2 ring-primary/40"
@@ -659,7 +662,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
 
     // Ban serap: panel di bawah gambar, garis turun vertikal dari rangka.
     if (slot === "SP") {
-      const to = { x: 50, y: 89 };
+      const to = { x: 50, y: 85 };
       const dy = to.y - from.y;
       const cy = from.y + dy * 0.95;
       return {
@@ -759,7 +762,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
         </p>
       </div>
 
-      <div className="rounded-2xl border bg-gradient-to-b from-muted/40 to-muted/10 p-3 sm:p-5">
+      <div className="rounded-2xl border bg-card p-3 sm:p-5">
         {/* Peta desktop: panel di kiri & kanan gambar */}
         <div
           className="relative hidden w-full md:block"
@@ -835,7 +838,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
             className="absolute -translate-x-1/2 -translate-y-1/2 shadow-lg"
             style={{
               left: "50%",
-              top: "89%",
+              top: "85%",
               width: `${BOX_W}%`,
             }}
           />
@@ -929,7 +932,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
               <DialogTitle>
                 Foto ban {data[photoSlot].name} ({data[photoSlot].code})
               </DialogTitle>
-              <DialogDescription>Pasangan foto aktual sidewall dan tread ban posisi ini.</DialogDescription>
+              <DialogDescription>                    Foto sidewall dan tread posisi ini.</DialogDescription>
             </DialogHeader>
             <div className="flex min-h-0 flex-1 flex-col gap-3 pt-8">
               <div className="flex items-center justify-center gap-2">
@@ -947,7 +950,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
               )}
               {activeHistory.length > 1 && (
                 <div className="mx-auto w-full max-w-2xl rounded-xl border border-border/40 bg-background/40 px-3 py-2">
-                  <p className="flex items-center justify-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground">
                     <History className="h-3 w-3" aria-hidden />
                     Riwayat pemeriksaan — {activeHistory.length}× posisi ini
                   </p>
@@ -995,7 +998,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
               <div className="grid min-h-[450px] h-[50vh] flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
                 {(["sidewall", "tread"] as const).map((side) => (
                   <figure key={side} className="flex h-full min-h-0 flex-col gap-2 rounded-xl border border-border/50 bg-muted/10 p-3">
-                    <figcaption className="text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <figcaption className="text-center text-xs font-medium text-muted-foreground">
                       {side === "sidewall" ? "Sidewall — sisi pinggir ban" : "Tread — tapak ban"}
                     </figcaption>
                     <div className="relative flex-1 w-full h-full min-h-0">

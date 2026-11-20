@@ -4,7 +4,7 @@ import React, { Fragment, memo, useEffect, useMemo, useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
+import { EquipmentPageSkeleton } from "@/components/molecules/view-skeleton"
 import {
     Select,
     SelectContent,
@@ -23,8 +23,8 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from "@/components/ui/pagination"
-import { StatTile } from "@/components/molecules/stat-tile"
 import { UnitProfileDialog } from "@/components/organisms/unit-profile-dialog"
+import { FilterChips } from "@/components/molecules/filter-chips"
 // Format & warna status kini dari lib bersama — konsisten dengan menu Dashboard
 import { compactRupiah, formatDateMedium, formatKm, formatRupiah, relativeDayLabel } from "@/lib/format"
 import { unitStatusTone as statusTone } from "@/lib/unit-status"
@@ -35,12 +35,9 @@ import {
     Building2,
     ChevronDown,
     ChevronRight,
-    CircleDollarSign,
     Clock3,
     Hash,
-    ShieldCheck,
     Truck,
-    Wrench,
     X,
 } from "lucide-react"
 
@@ -237,18 +234,6 @@ function EquipmentTableImpl({
         [equipments, statsByUnit, byUnit],
     )
 
-    const stats = useMemo(() => {
-        let available = 0
-        let totalMaintenance = 0
-        let withoutHistory = 0
-        for (const r of rows) {
-            if (r.item.status === "Available") available += 1
-            totalMaintenance += r.stat?.total ?? 0
-            if (!r.stat) withoutHistory += 1
-        }
-        return { total: rows.length, available, attention: rows.length - available, totalMaintenance, withoutHistory }
-    }, [rows])
-
     const maxUnitCost = useMemo(
         () => rows.reduce((m, r) => Math.max(m, r.stat?.total ?? 0), 0),
         [rows],
@@ -321,25 +306,7 @@ function EquipmentTableImpl({
     const activeChip = statusFilter || "all"
 
     if (isLoading) {
-        return (
-            <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="rounded-xl border bg-card px-4 py-3">
-                            <Skeleton className="h-3 w-24" />
-                            <Skeleton className="mt-3 h-5 w-24" />
-                        </div>
-                    ))}
-                </div>
-                <div className="overflow-hidden rounded-xl border bg-card">
-                    <div className="space-y-3 p-4">
-                        {Array.from({ length: 8 }).map((_, i) => (
-                            <Skeleton key={i} className="h-10 w-full" />
-                        ))}
-                    </div>
-                </div>
-            </div>
-        )
+        return <EquipmentPageSkeleton />
     }
 
     // Error fatal hanya jika tidak ada data sama sekali; kalau masih ada cache, tetap tampilkan
@@ -427,37 +394,37 @@ function EquipmentTableImpl({
 
                     <dl className="grid grid-cols-2 gap-x-6 gap-y-4 p-5 sm:grid-cols-4">
                         <div>
-                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Odometer</dt>
+                            <dt className="text-xs text-muted-foreground">Odometer</dt>
                             <dd className="mt-1 font-mono text-sm tabular-nums">{formatKm(it.last_odometer)}</dd>
                         </div>
                         <div>
-                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Tipe</dt>
+                            <dt className="text-xs text-muted-foreground">Tipe</dt>
                             <dd className="mt-1 text-sm">{it.type_vehicle || "—"}</dd>
                         </div>
                         <div>
-                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Tahun</dt>
+                            <dt className="text-xs text-muted-foreground">Tahun</dt>
                             <dd className="mt-1 text-sm tabular-nums">{it.construction_year || "—"}</dd>
                         </div>
                         <div>
-                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Perusahaan</dt>
+                            <dt className="text-xs text-muted-foreground">Perusahaan</dt>
                             <dd className="mt-1 text-sm">{it.company_code || "—"}</dd>
                         </div>
                         <div>
-                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Total perawatan</dt>
+                            <dt className="text-xs text-muted-foreground">Total perawatan</dt>
                             <dd className="mt-1 font-mono text-sm font-semibold tabular-nums text-primary">
                                 {st ? formatRupiah(st.total) : "—"}
                             </dd>
                         </div>
                         <div>
-                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Rata-rata / servis</dt>
+                            <dt className="text-xs text-muted-foreground">Rata-rata / servis</dt>
                             <dd className="mt-1 font-mono text-sm tabular-nums">{avg > 0 ? formatRupiah(avg) : "—"}</dd>
                         </div>
                         <div>
-                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Jumlah servis</dt>
+                            <dt className="text-xs text-muted-foreground">Jumlah servis</dt>
                             <dd className="mt-1 text-sm tabular-nums">{st?.count ?? 0}×</dd>
                         </div>
                         <div>
-                            <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Servis terakhir</dt>
+                            <dt className="text-xs text-muted-foreground">Servis terakhir</dt>
                             <dd className="mt-1 text-sm">{st?.last ? formatDateMedium(st.last) : "Belum pernah"}</dd>
                         </div>
                     </dl>
@@ -550,36 +517,6 @@ function EquipmentTableImpl({
 
     return (
         <div className="space-y-4">
-            {/* RINGKASAN ARMADA */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile
-                    label="Total unit"
-                    value={stats.total.toLocaleString("id-ID")}
-                    hint={stats.withoutHistory > 0 ? `${stats.withoutHistory} unit tanpa riwayat` : "semua unit punya riwayat"}
-                    icon={<Truck className="h-3.5 w-3.5" />}
-                />
-                <StatTile
-                    label="Available"
-                    value={stats.available.toLocaleString("id-ID")}
-                    hint={stats.total > 0 ? `${Math.round((stats.available / stats.total) * 100)}% siap pakai` : "—"}
-                    icon={<ShieldCheck className="h-3.5 w-3.5" />}
-                />
-                <StatTile
-                    label="Perlu perhatian"
-                    value={stats.attention.toLocaleString("id-ID")}
-                    hint="In use / maintenance"
-                    icon={<Wrench className="h-3.5 w-3.5" />}
-                />
-                <StatTile
-                    label="Nilai perawatan"
-                    value={compactRupiah(stats.totalMaintenance)}
-                    hint={formatRupiah(stats.totalMaintenance)}
-                    title={formatRupiah(stats.totalMaintenance)}
-                    icon={<CircleDollarSign className="h-3.5 w-3.5" />}
-                    emphasis
-                />
-            </div>
-
             {error && (
                 <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-muted-foreground">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
@@ -589,22 +526,12 @@ function EquipmentTableImpl({
 
             {/* KONTROL: filter status cepat, urutan, jumlah baris */}
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <div className="flex flex-wrap gap-1.5">
-                    {STATUS_CHIPS.map((chip) => {
-                        const active = activeChip === chip.id
-                        return (
-                            <Button
-                                key={chip.id}
-                                variant={active ? "secondary" : "outline"}
-                                size="sm"
-                                onClick={() => onStatusFilterChange?.(chip.id)}
-                                className={active ? "border-primary/20 bg-primary text-primary-foreground hover:bg-primary/90" : "bg-card"}
-                            >
-                                {chip.label}
-                            </Button>
-                        )
-                    })}
-                </div>
+                <FilterChips
+                    ariaLabel="Filter status armada"
+                    options={STATUS_CHIPS}
+                    value={activeChip}
+                    onChange={(id) => onStatusFilterChange?.(id)}
+                />
 
                 <div className="flex flex-wrap items-center gap-2">
                     <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex">
@@ -742,19 +669,19 @@ function EquipmentTableImpl({
                                                         {/* Detail atribut unit */}
                                                         <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
                                                             <div>
-                                                                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                                                                <dt className="text-xs text-muted-foreground">
                                                                     Deskripsi
                                                                 </dt>
                                                                 <dd className="mt-1 text-sm">{item.description || "—"}</dd>
                                                             </div>
                                                             <div>
-                                                                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                                                                <dt className="text-xs text-muted-foreground">
                                                                     Perusahaan
                                                                 </dt>
                                                                 <dd className="mt-1 text-sm">{item.company_code || "—"}</dd>
                                                             </div>
                                                             <div>
-                                                                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                                                                <dt className="text-xs text-muted-foreground">
                                                                     Tahun konstruksi
                                                                 </dt>
                                                                 <dd className="mt-1 text-sm tabular-nums">
@@ -762,7 +689,7 @@ function EquipmentTableImpl({
                                                                 </dd>
                                                             </div>
                                                             <div>
-                                                                <dt className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                                                                <dt className="text-xs text-muted-foreground">
                                                                     Total perawatan
                                                                 </dt>
                                                                 <dd className="mt-1 text-sm font-medium tabular-nums text-primary">
@@ -852,7 +779,7 @@ function EquipmentTableImpl({
                                     <div className="mx-auto max-w-sm space-y-2">
                                         <p className="text-sm font-medium">Tidak ada equipment yang cocok</p>
                                         <p className="text-xs leading-relaxed text-muted-foreground">
-                                            Coba ubah filter status, kata kunci pencarian, atau urutan tabel.
+                                            Ubah filter status atau kata kunci.
                                         </p>
                                         {activeChip !== "all" && (
                                             <Button

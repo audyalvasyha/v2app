@@ -4,49 +4,46 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(222.2 84% 4.9%);
-  --card: hsl(0 0% 100%);
-  --card-foreground: oklch(0.15 0 0);
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: oklch(0.15 0 0);
-  --primary: hsl(222.2 47.4% 11.2%);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: hsl(210 40% 96%);
-  --secondary-foreground: oklch(0.15 0 0);
-  --muted: hsl(210 40% 96%);
-  --muted-foreground: oklch(0.5 0 0);
-  --accent: hsl(210 40% 96%);
-  --accent-foreground: oklch(0.15 0 0);
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: oklch(0.99 0 0);
-  --border: hsl(214.3 31.8% 91.4%);
-  --input: hsl(214.3 31.8% 91.4%);
-  --ring: hsl(222.2 84% 4.9%);
-  --chart-1: hsl(12 76% 61%);
-  --chart-2: hsl(173 58% 39%);
-  --chart-3: hsl(197 37% 24%);
-  --chart-4: hsl(43 74% 66%);
-  --chart-5: hsl(27 87% 67%);
-  --radius: 8px;
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: oklch(0.15 0 0);
-  --sidebar-primary: oklch(0.55 0.22 263);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.96 0 0);
-  --sidebar-accent-foreground: oklch(0.15 0 0);
-  --sidebar-border: oklch(0.9 0 0);
-  --sidebar-ring: oklch(0.55 0.22 263);
-  /* Permukaan panel Tanya Midaa.
-     Sengaja token sendiri, bukan --muted: di mode terang --muted
-     (hsl 210 40% 96%) nyaris sama dengan --background putih, sehingga
-     panel terlihat seperti lubang di layar, bukan lapisan di atasnya.
-     Nilai di sini dipilih dari pengukuran kontras, bukan dari
-     perkiraan: L=0.9 C=0.045 memberi rasio 1.35:1 terhadap putih —
-     cukup jelas untuk mata, tanpa membuat panel terasa seperti blok
-     biru berat. Teks di atasnya (L=0.21) tetap 12:1. */
-  --ai-panel: oklch(0.9 0.045 266);
-  --ai-panel-foreground: oklch(0.21 0.03 266);
+  /* Palet netral dingin seperti alat kerja: kanvas abu muda, kartu putih,
+     aksi utama grafit. Warna hangat tidak dipakai sebagai latar tema supaya
+     antarmuka tidak jatuh ke gaya krem–oranye yang generik. */
+  --background: #f4f5f7;
+  --foreground: #16181b;
+  --card: #ffffff;
+  --card-foreground: #16181b;
+  --popover: #ffffff;
+  --popover-foreground: #16181b;
+  --primary: #20262e;
+  --primary-foreground: #fbfcfd;
+  --secondary: #eceef1;
+  --secondary-foreground: #20262e;
+  --muted: #eef0f3;
+  --muted-foreground: #646b73;
+  --accent: #f0f2f4;
+  --accent-foreground: #20262e;
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  --border: #e1e4e8;
+  --input: #d6dade;
+  --ring: #4b5563;
+  --chart-1: #b45309;
+  --chart-2: #0f766e;
+  --chart-3: #334155;
+  --chart-4: #0369a1;
+  --chart-5: #be123c;
+  --radius: 10px;
+  --sidebar: #fafbfc;
+  --sidebar-foreground: #16181b;
+  --sidebar-primary: #20262e;
+  --sidebar-primary-foreground: #fbfcfd;
+  --sidebar-accent: #eef0f3;
+  --sidebar-accent-foreground: #20262e;
+  --sidebar-border: #e1e4e8;
+  --sidebar-ring: #6b7280;
+  /* Panel bantuan memakai permukaan netral yang sama dengan popover,
+     bukan tint khusus "AI". */
+  --ai-panel: #fbfbfc;
+  --ai-panel-foreground: #20262e;
   --shadow-x: 0px;
   --shadow-y: 1px;
   --shadow-blur: 2px;
@@ -56,44 +53,42 @@
 }
 
 .dark {
-  --background: oklch(0.1 0 0);
-  --foreground: oklch(0.93 0 0);
-  --card: oklch(0.12 0 0);
-  --card-foreground: oklch(0.93 0 0);
-  --popover: oklch(0.12 0 0);
-  --popover-foreground: oklch(0.93 0 0);
-  --primary: #FF3C00;
-  --primary-foreground: #FCFCFC;
-  --secondary: oklch(0.2 0 0);
-  --secondary-foreground: oklch(0.93 0 0);
-  --muted: oklch(0.2 0 0);
-  --muted-foreground: oklch(0.63 0 0);
-  --accent: oklch(0.2 0 0);
-  --accent-foreground: oklch(0.93 0 0);
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.99 0 0);
-  --border: oklch(0.25 0 0);
-  --input: oklch(0.25 0 0);
-  --ring: oklch(0.6 0.24 263);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.15 0 0);
-  --sidebar-foreground: oklch(0.93 0 0);
-  --sidebar-primary: oklch(0.6 0.24 263);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.2 0 0);
-  --sidebar-accent-foreground: oklch(0.93 0 0);
-  --sidebar-border: oklch(0.25 0 0);
-  --sidebar-ring: oklch(0.6 0.24 263);
-  /* Mode gelap: panel dibuat lebih TERANG dari --background (0.1) dan
-     diberi tint, persis kebalikan dari mode terang. L=0.29 memberi
-     rasio 1.46:1 terhadap latar — jauh lebih jelas daripada --muted
-     lama (0.2) yang hanya 1.05:1, praktis tak terlihat. */
-  --ai-panel: oklch(0.29 0.045 266);
-  --ai-panel-foreground: oklch(0.95 0.012 266);
+  /* Grafit netral, bukan hitam hangat. Kartu satu tingkat lebih terang
+     supaya batas permukaan tetap terbaca tanpa garis yang keras. */
+  --background: #111315;
+  --foreground: #e8eaed;
+  --card: #191b1e;
+  --card-foreground: #e8eaed;
+  --popover: #1c1e21;
+  --popover-foreground: #e8eaed;
+  --primary: #e5e7eb;
+  --primary-foreground: #16181b;
+  --secondary: #25282c;
+  --secondary-foreground: #e8eaed;
+  --muted: #222529;
+  --muted-foreground: #9aa1a9;
+  --accent: #282b30;
+  --accent-foreground: #e8eaed;
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --border: #2b2f34;
+  --input: #34383e;
+  --ring: #8b939c;
+  --chart-1: #f59e0b;
+  --chart-2: #2dd4bf;
+  --chart-3: #94a3b8;
+  --chart-4: #38bdf8;
+  --chart-5: #fb7185;
+  --sidebar: #16181a;
+  --sidebar-foreground: #e8eaed;
+  --sidebar-primary: #e5e7eb;
+  --sidebar-primary-foreground: #16181b;
+  --sidebar-accent: #232629;
+  --sidebar-accent-foreground: #e8eaed;
+  --sidebar-border: #2b2f34;
+  --sidebar-ring: #8b939c;
+  --ai-panel: #1c1e21;
+  --ai-panel-foreground: #e8eaed;
   --shadow-x: 0px;
   --shadow-y: 1px;
   --shadow-blur: 2px;
@@ -210,6 +205,41 @@ html.analisa-page,
 html.analisa-page body {
   scrollbar-width: none;
   -ms-overflow-style: none;
+}
+
+/* Skeleton: satu kilau lembut bergerak, bukan pulse opacity yang membuat
+   seluruh halaman terasa berkedip. Warna diturunkan dari token tema supaya
+   tetap kontras di mode terang maupun gelap. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--muted) 90%, var(--foreground) 10%);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--foreground) 8%, transparent),
+    transparent
+  );
+  animation: skeleton-sheen 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-sheen {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
 }
 
 html.analisa-page::-webkit-scrollbar,

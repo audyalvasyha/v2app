@@ -93,7 +93,7 @@ function MiniStat({
 }) {
     return (
         <div className="rounded-lg border border-border/70 bg-card px-3 py-2.5">
-            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <p className="truncate text-xs font-semibold text-muted-foreground">
                 {label}
             </p>
             <p
@@ -338,7 +338,7 @@ export function UnitProfileDialog({
 
                             <div className="grid gap-3 lg:grid-cols-2">
                                 <div className="rounded-xl border border-border/70 bg-card p-4">
-                                    <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                    <p className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
                                         <Wrench className="h-3.5 w-3.5" /> Jadwal servis
                                     </p>
                                     <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -371,13 +371,13 @@ export function UnitProfileDialog({
                                         </dl>
                                     ) : (
                                         <p className="mt-3 text-xs text-muted-foreground">
-                                            Unit ini belum punya log servis, jadi jadwal berikutnya belum bisa dihitung.
+                                            Belum ada log servis — jadwal berikutnya belum bisa dihitung.
                                         </p>
                                     )}
                                 </div>
 
                                 <div className="rounded-xl border border-border/70 bg-card p-4">
-                                    <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                                    <p className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
                                         <PackageCheck className="h-3.5 w-3.5" /> Pengiriman
                                     </p>
                                     <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
@@ -408,7 +408,7 @@ export function UnitProfileDialog({
                             {data.unitService.length > 0 ? (
                                 <div className="overflow-hidden rounded-lg border border-border/70">
                                     <table className="w-full text-xs">
-                                        <thead className="bg-muted/40 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                                        <thead className="bg-muted/40 text-xs text-muted-foreground">
                                             <tr>
                                                 <th className="px-3 py-2 text-left font-medium">Tgl servis</th>
                                                 <th className="px-3 py-2 text-right font-medium">Odo saat servis</th>
@@ -462,7 +462,7 @@ export function UnitProfileDialog({
                                 <div className="rounded-lg border border-border/70">
                                     <div className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2">
                                         <ReceiptText className="h-3.5 w-3.5 text-muted-foreground" />
-                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                        <p className="text-xs font-semibold text-muted-foreground">
                                             Pengeluaran terbesar
                                         </p>
                                     </div>
@@ -487,7 +487,7 @@ export function UnitProfileDialog({
                             {data.unitHistory.length > 0 && (
                                 <div className="rounded-lg border border-border/70">
                                     <div className="border-b bg-muted/30 px-3 py-2">
-                                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                        <p className="text-xs font-semibold text-muted-foreground">
                                             Entri terakhir
                                         </p>
                                     </div>
@@ -531,7 +531,7 @@ export function UnitProfileDialog({
                             {data.banEntries.length > 0 ? (
                                 <div className="overflow-hidden rounded-lg border border-border/70">
                                     <table className="w-full text-xs">
-                                        <thead className="bg-muted/40 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                                        <thead className="bg-muted/40 text-xs text-muted-foreground">
                                             <tr>
                                                 <th className="px-3 py-2 text-left font-medium">Tanggal</th>
                                                 <th className="px-3 py-2 text-left font-medium">Barang / jasa</th>
@@ -581,7 +581,7 @@ export function UnitProfileDialog({
                             {data.unitOutbound.length > 0 ? (
                                 <div className="overflow-hidden rounded-lg border border-border/70">
                                     <table className="w-full text-xs">
-                                        <thead className="bg-muted/40 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                                        <thead className="bg-muted/40 text-xs text-muted-foreground">
                                             <tr>
                                                 <th className="px-3 py-2 text-left font-medium">Freight order</th>
                                                 <th className="px-3 py-2 text-left font-medium">Keluar</th>
@@ -631,7 +631,7 @@ export function UnitProfileDialog({
                                 </div>
                             ) : (
                                 <EmptyNote>
-                                    Belum ada pengiriman tercatat untuk nopol ini pada rentang data aktif.
+                                    Belum ada pengiriman pada rentang ini.
                                 </EmptyNote>
                             )}
                         </TabsContent>
@@ -641,7 +641,7 @@ export function UnitProfileDialog({
                 <div className="flex shrink-0 items-center justify-between gap-3 border-t bg-muted/20 px-5 py-3">
                     <p className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                         {data.unitHistory.length > 0 ? <FileText className="h-3 w-3" /> : <CircleDot className="h-3 w-3" />}
-                        Data dari riwayat perbaikan, log servis, dan pengiriman yang sudah dimuat.
+                        Data dari riwayat yang sudah dimuat.
                     </p>
                     <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => onOpenChange(false)}>
                         Tutup

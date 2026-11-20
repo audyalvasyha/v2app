@@ -116,7 +116,7 @@ function KpiCell({
     return (
         <div className="flex flex-col bg-card p-5">
             <div className="flex items-start justify-between gap-3">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+                <p className="text-xs font-medium text-muted-foreground">{label}</p>
                 <StatusDot status={status} />
             </div>
             <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{value}</p>
@@ -151,12 +151,12 @@ function BriefingBody({ brief }: { brief: AiBrief }) {
                     <table className="w-full min-w-[560px] text-left text-xs">
                         <thead>
                             <tr className="border-b border-border">
-                                <th className="pb-2 pr-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">KPI</th>
-                                <th className="pb-2 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">30 hari</th>
-                                <th className="pb-2 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Sebelumnya</th>
-                                <th className="pb-2 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Δ</th>
-                                <th className="pb-2 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</th>
-                                <th className="pb-2 pl-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Telaah</th>
+                                <th className="pb-2 pr-3 text-xs font-medium text-muted-foreground">KPI</th>
+                                <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">30 hari</th>
+                                <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">Sebelumnya</th>
+                                <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">Δ</th>
+                                <th className="pb-2 px-3 text-xs font-medium text-muted-foreground">Status</th>
+                                <th className="pb-2 pl-3 text-xs font-medium text-muted-foreground">Telaah</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border/60">
@@ -176,7 +176,7 @@ function BriefingBody({ brief }: { brief: AiBrief }) {
             )}
             {Array.isArray(brief.prioritas) && brief.prioritas.length > 0 && (
                 <div className="mt-5 border-t border-border/60 pt-4">
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Prioritas minggu ini</p>
+                    <p className="text-xs font-medium text-muted-foreground">Prioritas minggu ini</p>
                     <ol className="mt-2.5 space-y-2">
                         {brief.prioritas.map((t, i) => (
                             <li key={i} className="flex gap-3">
@@ -377,7 +377,7 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundW
                                 </p>
                             )}
                             <div className="mt-4 border-t border-border/60 pt-4">
-                                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Prioritas minggu ini</p>
+                                <p className="text-xs font-medium text-muted-foreground">Prioritas minggu ini</p>
                                 <ol className="mt-2.5 space-y-2">
                                     {tasks.map((t, i) => (
                                         <li key={i} className="flex gap-3">
@@ -409,12 +409,12 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundW
                         <table className="w-full min-w-[720px] text-left text-xs">
                             <thead>
                                 <tr className="border-b border-border">
-                                    <th className="pb-2 pr-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">KPI</th>
-                                    <th className="pb-2 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Bobot</th>
-                                    <th className="pb-2 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Target</th>
-                                    <th className="pb-2 px-3 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Aktual 30 hari</th>
-                                    <th className="pb-2 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Status</th>
-                                    <th className="pb-2 pl-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Sumber</th>
+                                    <th className="pb-2 pr-3 text-xs font-medium text-muted-foreground">KPI</th>
+                                    <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">Bobot</th>
+                                    <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">Target</th>
+                                    <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">Aktual 30 hari</th>
+                                    <th className="pb-2 px-3 text-xs font-medium text-muted-foreground">Status</th>
+                                    <th className="pb-2 pl-3 text-xs font-medium text-muted-foreground">Sumber</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/60">
@@ -508,7 +508,7 @@ function UnitCostBars({ top }: { top: [string, number][] }) {
     const max = Math.max(...top.map(([, v]) => v), 1)
     return (
         <div className="mt-3 border-t border-border/60 pt-3">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Penyumbang terbesar</p>
+            <p className="text-xs font-medium text-muted-foreground">Penyumbang terbesar</p>
             <div className="mt-2 space-y-1.5">
                 {top.map(([plate, v]) => (
                     <div key={plate} className="flex items-center gap-2">

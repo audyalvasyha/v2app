@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, Gauge, Layers, ChevronDown, Info, type LucideIcon } from "lucide-react"
+import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, Gauge, Layers, ChevronDown, Info, ListChecks, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/utils/supabase"
 import type { View } from "@/components/templates/dashboard-layout"
@@ -12,6 +12,10 @@ interface SidebarProps {
   equipmentCounts: { total: number; available: number };
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  /** Menu yang boleh tampil untuk peran user aktif (lihat lib/roles.ts) */
+  allowedViews: View[];
+  /** Drawer terbuka di layar kecil — diabaikan pada desktop. */
+  mobileOpen?: boolean;
 }
 
 interface SidebarButtonProps {
@@ -21,24 +25,23 @@ interface SidebarButtonProps {
   collapsed: boolean
   onClick: () => void
   badge?: React.ReactNode
-  pushToBottom?: boolean
 }
 
-function SidebarButton({ icon: Icon, label, active, collapsed, onClick, badge, pushToBottom }: SidebarButtonProps) {
+function SidebarButton({ icon: Icon, label, active, collapsed, onClick, badge }: SidebarButtonProps) {
   return (
     <button
       onClick={onClick}
       title={collapsed ? label : undefined}
       className={`flex items-center w-full rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
         collapsed ? 'justify-center px-0' : 'justify-between'
-      } ${pushToBottom ? 'mt-auto' : ''} ${
+      } ${
         active
-          ? 'bg-secondary text-secondary-foreground'
-          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          ? 'bg-sidebar-accent font-semibold text-sidebar-accent-foreground'
+          : 'text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground'
       }`}
     >
       <div className="flex items-center gap-3">
-        <Icon className="h-4 w-4 shrink-0" />
+        <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-primary' : ''}`} />
         {!collapsed && <span>{label}</span>}
       </div>
       {!collapsed && badge}
@@ -48,16 +51,17 @@ function SidebarButton({ icon: Icon, label, active, collapsed, onClick, badge, p
 
 function SidebarSectionLabel({ label, collapsed }: { label: string; collapsed: boolean }) {
   if (collapsed) {
-    return <div className="mx-2 my-2 border-t border-border" role="presentation" />
+    return <div className="mx-2 my-2 border-t border-sidebar-border" role="presentation" />
   }
   return (
-    <div className="px-3 pt-4 pb-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground/80 select-none">
+    <div className="px-3 pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80 select-none">
       {label}
     </div>
   )
 }
 
-export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, onToggleCollapsed }: SidebarProps) {
+export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, onToggleCollapsed, allowedViews, mobileOpen = false }: SidebarProps) {
+  const can = (view: View) => allowedViews.includes(view)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
   const [fleetOpen, setFleetOpen] = useState(true)
@@ -87,25 +91,30 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
     }
   }
 
+  // Panel tetap setinggi dvh supaya tidak ada celah di bawah, tetapi padding
+  // bawah sebesar selisih dvh−svh menahan footer di tempat yang sama saat
+  // address bar mobile sembunyi. Area tambahan tetap berwarna sidebar.
   return (
     <aside
-      className={`${
-        collapsed ? 'w-16' : 'w-64'
-      } fixed top-16 bottom-0 left-0 z-10 border-r bg-background flex flex-col transition-[width] duration-200 ease-in-out`}
+      className={`fixed left-0 top-16 z-40 flex h-[calc(100dvh-4rem)] w-64 flex-col overflow-visible border-r border-sidebar-border bg-sidebar pb-[calc(100dvh-100svh)] text-sidebar-foreground transition-[width,transform] duration-200 ease-in-out lg:z-10 lg:translate-x-0 ${
+        collapsed ? 'lg:w-16' : 'lg:w-64'
+      } ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}
     >
-      <div className={`p-4 border-b flex items-center ${collapsed ? 'justify-center px-2' : 'justify-between'}`}>
-        {!collapsed && <h2 className="text-sm font-bold uppercase tracking-wider">Menu Utama</h2>}
+      <div className={`flex items-center border-b border-sidebar-border p-4 ${collapsed ? 'justify-center px-2' : 'justify-between'}`}>
+        {!collapsed && <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Menu Utama</h2>}
         <button
           onClick={onToggleCollapsed}
           title={collapsed ? 'Tampilkan menu lengkap' : 'Perkecil menu (icon saja)'}
           aria-label={collapsed ? 'Tampilkan menu lengkap' : 'Perkecil menu (icon saja)'}
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+          className="hidden shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground lg:inline-flex"
         >
           {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </button>
       </div>
 
-      <nav className="flex-1 p-2 space-y-1 flex flex-col overflow-y-auto">
+      {/* Hanya daftar menu yang scroll. Footer About + akun dipaku di bawah
+          supaya tidak ikut naik ke tengah layar saat menu panjang. */}
+      <nav className="flex-1 min-h-0 p-2 space-y-1 flex flex-col overflow-y-auto">
         <SidebarButton
           icon={LayoutDashboard}
           label="Dashboard"
@@ -114,116 +123,151 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           onClick={() => onViewChange('dashboard')}
         />
 
-        {collapsed && <SidebarSectionLabel label="Fleet" collapsed />}
-        <button
-          type="button"
-          onClick={() => setFleetOpen((open) => !open)}
-          title={collapsed ? "Fleet" : undefined}
-          aria-expanded={fleetOpen}
-          className={`flex w-full items-center rounded-md px-3 py-2.5 text-sm font-semibold transition-colors ${
-            collapsed ? "justify-center px-0" : "justify-between"
-          } ${fleetSubmenuActive ? "text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
-        >
-          <span className="flex items-center gap-3">
-            <Layers className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Fleet</span>}
-          </span>
-          {!collapsed && (
-            <ChevronDown className={`h-4 w-4 transition-transform ${fleetOpen ? "rotate-0" : "-rotate-90"}`} />
-          )}
-        </button>
+        {can('tugas') && (
+          <SidebarButton
+            icon={ListChecks}
+            label="Tugas"
+            active={activeView === 'tugas'}
+            collapsed={collapsed}
+            onClick={() => onViewChange('tugas')}
+          />
+        )}
 
-        {fleetOpen && (
-          <div className={`space-y-1 ${collapsed ? "" : "ml-3 border-l border-border pl-2"}`}>
-            <SidebarButton
-              icon={Activity}
-              label="Monitoring Servis"
-              active={activeView === 'monitoring'}
-              collapsed={collapsed}
-              onClick={() => onViewChange('monitoring')}
-            />
-            <SidebarButton
-              icon={Settings}
-              label="Equipment"
-              active={activeView === 'equipment'}
-              collapsed={collapsed}
-              onClick={() => onViewChange('equipment')}
-              badge={
-                <Badge variant="secondary" className="min-w-5">
-                  {equipmentCounts.total}
-                </Badge>
-              }
-            />
-            <SidebarButton
-              icon={History}
-              label="Histories"
-              active={activeView === 'maintenance'}
-              collapsed={collapsed}
-              onClick={() => onViewChange('maintenance')}
-            />
-            <SidebarButton
-              icon={Disc3}
-              label="Analisa Ban"
-              active={activeView === 'ban'}
-              collapsed={collapsed}
-              onClick={() => onViewChange('ban')}
-            />
-          </div>
+        {(can('monitoring') || can('equipment') || can('maintenance') || can('ban')) && (
+          <>
+            {collapsed && <SidebarSectionLabel label="Fleet" collapsed />}
+            <button
+              type="button"
+              onClick={() => setFleetOpen((open) => !open)}
+              title={collapsed ? "Fleet" : undefined}
+              aria-expanded={fleetOpen}
+              className={`flex w-full items-center rounded-md px-3 py-2.5 text-sm font-semibold transition-colors ${
+                collapsed ? "justify-center px-0" : "justify-between"
+              } ${fleetSubmenuActive ? "bg-sidebar-accent/60 text-foreground" : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground"}`}
+            >
+              <span className="flex items-center gap-3">
+                <Layers className="h-4 w-4 shrink-0" />
+                {!collapsed && <span>Fleet</span>}
+              </span>
+              {!collapsed && (
+                <ChevronDown className={`h-4 w-4 transition-transform ${fleetOpen ? "rotate-0" : "-rotate-90"}`} />
+              )}
+            </button>
+
+            {fleetOpen && (
+              <div className={`space-y-1 ${collapsed ? "" : "ml-3 border-l border-border pl-2"}`}>
+                {can('monitoring') && (
+                  <SidebarButton
+                    icon={Activity}
+                    label="Monitoring Servis"
+                    active={activeView === 'monitoring'}
+                    collapsed={collapsed}
+                    onClick={() => onViewChange('monitoring')}
+                  />
+                )}
+                {can('equipment') && (
+                  <SidebarButton
+                    icon={Settings}
+                    label="Equipment"
+                    active={activeView === 'equipment'}
+                    collapsed={collapsed}
+                    onClick={() => onViewChange('equipment')}
+                    badge={
+                      <Badge variant="secondary" className="min-w-5">
+                        {equipmentCounts.total}
+                      </Badge>
+                    }
+                  />
+                )}
+                {can('maintenance') && (
+                  <SidebarButton
+                    icon={History}
+                    label="Histories"
+                    active={activeView === 'maintenance'}
+                    collapsed={collapsed}
+                    onClick={() => onViewChange('maintenance')}
+                  />
+                )}
+                {can('ban') && (
+                  <SidebarButton
+                    icon={Disc3}
+                    label="Analisa Ban"
+                    active={activeView === 'ban'}
+                    collapsed={collapsed}
+                    onClick={() => onViewChange('ban')}
+                  />
+                )}
+              </div>
+            )}
+          </>
         )}
 
         <SidebarSectionLabel label="Ekspedisi" collapsed={collapsed} />
 
-        <SidebarButton
-          icon={Gauge}
-          label="Analisa"
-          active={activeView === 'analisa'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('analisa')}
-        />
+        {can('analisa') && (
+          <SidebarButton
+            icon={Gauge}
+            label="Analisa"
+            active={activeView === 'analisa'}
+            collapsed={collapsed}
+            onClick={() => onViewChange('analisa')}
+          />
+        )}
 
-        <SidebarButton
-          icon={Boxes}
-          label="SKR"
-          active={activeView === 'skr'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('skr')}
-        />
+        {can('skr') && (
+          <SidebarButton
+            icon={Boxes}
+            label="SKR"
+            active={activeView === 'skr'}
+            collapsed={collapsed}
+            onClick={() => onViewChange('skr')}
+          />
+        )}
 
-        <SidebarButton
-          icon={Send}
-          label="Pengiriman"
-          active={activeView === 'pengiriman'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('pengiriman')}
-        />
+        {can('pengiriman') && (
+          <SidebarButton
+            icon={Send}
+            label="Pengiriman"
+            active={activeView === 'pengiriman'}
+            collapsed={collapsed}
+            onClick={() => onViewChange('pengiriman')}
+          />
+        )}
 
-        <SidebarButton
-          icon={CloudSun}
-          label="Perkiraan Cuaca"
-          active={activeView === 'weather'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('weather')}
-        />
+        {can('weather') && (
+          <SidebarButton
+            icon={CloudSun}
+            label="Perkiraan Cuaca"
+            active={activeView === 'weather'}
+            collapsed={collapsed}
+            onClick={() => onViewChange('weather')}
+          />
+        )}
 
-        <SidebarButton
-          icon={MapPin}
-          label="Traffic"
-          active={activeView === 'traffic'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('traffic')}
-        />
+        {can('traffic') && (
+          <SidebarButton
+            icon={MapPin}
+            label="Traffic"
+            active={activeView === 'traffic'}
+            collapsed={collapsed}
+            onClick={() => onViewChange('traffic')}
+          />
+        )}
 
+      </nav>
+
+      {/* Footer sengaja sticky + shrink-0: About dan akun harus tetap di
+          dasar sidebar, bukan ikut tergulung bersama daftar menu. */}
+      <div className="sticky bottom-0 z-20 shrink-0 border-t border-sidebar-border bg-sidebar p-2">
         <SidebarButton
           icon={Info}
           label="About"
           active={activeView === 'about'}
           collapsed={collapsed}
           onClick={() => onViewChange('about')}
-          pushToBottom
         />
-      </nav>
 
-      <div className="relative border-t border-border p-2">
+        <div className="relative mt-1">
         <button
           type="button"
           onClick={() => setAccountOpen((open) => !open)}
@@ -232,7 +276,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           aria-expanded={accountOpen}
           className={`flex w-full min-w-0 items-center overflow-hidden rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
             collapsed ? "justify-center px-0" : "justify-between"
-          } ${accountOpen ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+          } ${accountOpen ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground"}`}
         >
           <span className={`flex items-center gap-3 ${collapsed ? "" : "min-w-0 flex-1"}`}>
             <User className="h-4 w-4 shrink-0" />
@@ -244,18 +288,19 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
         {accountOpen && (
           <div className={collapsed
             ? "absolute bottom-0 left-full z-20 ml-2 w-40 rounded-md border bg-popover p-1 shadow-md"
-            : "mt-1 rounded-md bg-muted/40 p-1"}
+            : "absolute bottom-full left-0 right-0 z-20 mb-1 rounded-md border bg-popover p-1 shadow-md"}
           >
             <button
               type="button"
               onClick={handleSignOut}
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
             >
               <LogOut className="h-4 w-4 shrink-0" />
               <span>Keluar</span>
             </button>
           </div>
         )}
+        </div>
       </div>
     </aside>
   )

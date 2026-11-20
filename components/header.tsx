@@ -3,13 +3,15 @@
 import Image from "next/image"
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
-import { Search, X } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Menu, Search, X } from "lucide-react"
 import type { ThemePreference } from "@/hooks/use-theme"
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog"
 import { NotificationsBell } from "./notifications-bell"
 import { ThemeToggle } from "./theme-toggle"
 import type { AlertView, AppAlert } from "@/lib/alerts"
 import { GlobalSearchDropdown, type GlobalSearchGroupCount, type GlobalSearchItem } from "./molecules/global-search-dropdown"
+import type { View } from "@/components/templates/dashboard-layout"
 
 interface HeaderProps {
   theme: "dark" | "light"
@@ -24,11 +26,13 @@ interface HeaderProps {
   searchItems: GlobalSearchItem[]
   searchCounts: GlobalSearchGroupCount[]
   /** Item hasil dipilih → pindah ke menu tujuan */
-  onSearchSelect: (view: "dashboard" | "equipment" | "maintenance" | "monitoring" | "about" | "skr" | "pengiriman" | "ban" | "weather" | "traffic" | "analisa") => void
+  onSearchSelect: (view: View) => void
   /** Peringatan operasional untuk lonceng notifikasi */
   alerts?: AppAlert[]
   /** Klik notifikasi → buka menu sumbernya */
   onSelectAlert?: (view: AlertView) => void
+  /** Buka drawer sidebar di layar kecil. */
+  onOpenSidebar?: () => void
 }
 
 /**
@@ -38,12 +42,23 @@ interface HeaderProps {
  * disembunyikan dari header. Komponen ExportImportDialog sengaja dibiarkan ada
  * di repo supaya gampang dipasang lagi kalau nanti diperlukan.
  */
-export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSearchChange, searchPlaceholder, searchItems, searchCounts, onSearchSelect, alerts = [], onSelectAlert }: HeaderProps) {
+export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSearchChange, searchPlaceholder, searchItems, searchCounts, onSearchSelect, alerts = [], onSelectAlert, onOpenSidebar }: HeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   return (
-    <header className="border-b border-border bg-background sticky top-0 z-20">
+    <header className="sticky top-0 z-20 shrink-0 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="flex h-16 items-center gap-2 px-4 sm:px-6">
         <div className="flex items-center gap-3">
+          {onOpenSidebar && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onOpenSidebar}
+              aria-label="Menu navigasi"
+              className="h-9 w-9 lg:hidden"
+            >
+              <Menu className="h-4 w-4" />
+            </Button>
+          )}
           <div className="flex items-center gap-2">
             <Image
               src="/icon.svg"
@@ -54,8 +69,8 @@ export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSe
               priority
             />
             <div>
-              <h1 className="text-xl font-bold">Midaa</h1>
-              <p className="hidden text-xs text-muted-foreground sm:block">Transport Management System</p>
+              <h1 className="text-base font-semibold leading-tight tracking-tight">Midaa</h1>
+              <p className="hidden text-[11px] text-muted-foreground sm:block">Transport Management System</p>
             </div>
           </div>
         </div>

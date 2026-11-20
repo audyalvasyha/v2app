@@ -140,7 +140,7 @@ export function DateRangeField({ idPrefix, from, to, onApply, isFetching, classN
             <PopoverContent align="start" className="w-[340px] rounded-xl p-3">
                 <div className="flex items-end gap-2">
                     <div className="min-w-0 flex-1 space-y-1">
-                        <Label htmlFor={fromId} className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                        <Label htmlFor={fromId} className="text-xs text-muted-foreground">
                             Dari
                         </Label>
                         <Input
@@ -159,7 +159,7 @@ export function DateRangeField({ idPrefix, from, to, onApply, isFetching, classN
                     <ArrowRight className="mb-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 
                     <div className="min-w-0 flex-1 space-y-1">
-                        <Label htmlFor={toId} className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                        <Label htmlFor={toId} className="text-xs text-muted-foreground">
                             Sampai
                         </Label>
                         <Input
@@ -189,7 +189,7 @@ export function DateRangeField({ idPrefix, from, to, onApply, isFetching, classN
                 </Button>
 
                 <div className="mt-2.5 border-t pt-2.5">
-                    <p className="mb-1.5 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                    <p className="mb-1.5 text-xs text-muted-foreground">
                         Preset
                     </p>
                     <div className="flex flex-wrap gap-1">

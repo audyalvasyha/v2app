@@ -108,6 +108,18 @@ export function elapsedHoursSince(
     return diff >= 0 ? diff / 3_600_000 : null
 }
 
+/** Detik sejak jam keluar sampai sekarang — untuk durasi berjalan hh:mm:ss. */
+export function elapsedSecondsSince(
+    jamOut: string | null | undefined,
+    now: number = Date.now(),
+): number | null {
+    if (!hasJam(jamOut)) return null
+    const start = new Date(jamOut as string).getTime()
+    if (Number.isNaN(start)) return null
+    const diff = now - start
+    return diff >= 0 ? Math.floor(diff / 1000) : null
+}
+
 /**
  * Trip "menginap": unit keluar sampai 24 jam atau lebih.
  *

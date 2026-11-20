@@ -4,7 +4,7 @@ import React, { memo, useEffect, useMemo, useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { OutboundPageSkeleton } from "@/components/molecules/view-skeleton"
 import {
     Select,
     SelectContent,
@@ -23,22 +23,19 @@ import {
     ArrowUpDown,
     ChevronDown,
     ChevronUp,
-    Clock,
     Download,
-    LogOut,
     Moon,
-    Timer,
-    Truck,
     X,
 } from "lucide-react"
-import { StatTile } from "@/components/molecules/stat-tile"
 import { FilterToolbar } from "@/components/molecules/filter-toolbar"
+import { FilterChips } from "@/components/molecules/filter-chips"
 import { cn } from "@/lib/utils"
 import { APP_TIMEZONE, formatNumber, startOfZonedDay } from "@/lib/format"
 import {
     durationMinutesFromTimestamps,
     durationSecondsFromTimestamps,
     elapsedHoursSince,
+    elapsedSecondsSince,
     formatClockDuration,
     formatDuration,
     isOutboundOvernight,
@@ -92,14 +89,6 @@ function rowKey(row: any, index: number): string {
 function formatFreightOrder(value: any): string {
     if (value == null) return "—"
     return String(value)
-}
-
-/** Menit sejak tengah malam → "14:32" */
-function menitKeJam(totalMinutes: number): string {
-    const normalized = ((totalMinutes % 1440) + 1440) % 1440
-    const h = Math.floor(normalized / 60)
-    const m = normalized % 60
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
 }
 
 /**
@@ -174,11 +163,11 @@ function OutboundTableImpl({
     const [sortKey, setSortKey] = useState<SortKey>("createdDesc")
     const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0])
     const [page, setPage] = useState(1)
-    /** Detak 60 detik supaya hitungan "sudah keluar X jam" ikut berjalan. */
+    /** Detak 1 detik supaya kolom durasi berjalan (hh:mm:ss) ikut hidup. */
     const [now, setNow] = useState(() => Date.now())
 
     useEffect(() => {
-        const id = window.setInterval(() => setNow(Date.now()), 60_000)
+        const id = window.setInterval(() => setNow(Date.now()), 1_000)
         return () => window.clearInterval(id)
     }, [])
 
@@ -213,55 +202,6 @@ function OutboundTableImpl({
         }
         return arr
     }, [filtered, sortKey])
-
-    // 3. Ringkasan rata-rata unit keluar per hari/minggu/bulan dihitung dari
-    //    seluruh data rentang aktif (bukan hanya halaman tampil).
-    const stats = useMemo(() => {
-        let selesai = 0
-        let berjalan = 0
-        let menunggu = 0
-        const jamInMinutes: number[] = []
-        const jamOutMinutes: number[] = []
-        const durations: number[] = []
-
-        for (const row of outbounds) {
-            const info = outboundStatus(row.jam_out, row.jam_in)
-            if (info.status === "selesai") selesai++
-            else if (info.status === "berjalan") berjalan++
-            else menunggu++
-
-            // Rata-rata durasi perjalanan: selisih jam_out → jam_in per mobil selesai
-            const durasi = durationMinutesFromTimestamps(row.jam_out, row.jam_in)
-            if (durasi != null) durations.push(durasi)
-
-            // Rata-rata jam masuk & keluar — memakai helper yang sama dengan
-            // kolom tabel, jadi angkanya tidak bisa meleset dari barisnya.
-            const masuk = menitJakarta(row.jam_in)
-            if (masuk != null) jamInMinutes.push(masuk)
-
-            const keluar = menitJakarta(row.jam_out)
-            if (keluar != null) jamOutMinutes.push(keluar)
-        }
-
-        return {
-            total: outbounds.length,
-            selesai,
-            berjalan,
-            menunggu,
-            avgDurasi: durations.length > 0
-                ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-                : null,
-            durasiCount: durations.length,
-            avgJamIn: jamInMinutes.length > 0
-                ? Math.round(jamInMinutes.reduce((a, b) => a + b, 0) / jamInMinutes.length)
-                : null,
-            jamInCount: jamInMinutes.length,
-            avgJamOut: jamOutMinutes.length > 0
-                ? Math.round(jamOutMinutes.reduce((a, b) => a + b, 0) / jamOutMinutes.length)
-                : null,
-            jamOutCount: jamOutMinutes.length,
-        }
-    }, [outbounds, now])
 
     // Ritase hari ini — jumlah trip yang sudah keluar sejak 00:00 WIB,
     // dikelompokkan per nopol supaya terlihat unit mana yang paling produktif.
@@ -298,12 +238,15 @@ function OutboundTableImpl({
 
     // ── EXPORT CSV ────────────────────────────────────────────────────────
     const handleExportCsv = () => {
-        const header = ["Freight Order", "No. Polisi", "Jam Out", "Jam In", "Durasi (hh:mm:ss)", "Status"]
+        const header = ["Freight Order", "No. Polisi", "Jam Out", "Jam In", "Durasi (hh:mm:ss)", "Durasi berjalan (hh:mm:ss)", "Status"]
         const lines = rows.map((row) => {
             const info = outboundStatus(row.jam_out, row.jam_in)
             // Durasi diekspor dalam hh:mm:ss agar identik dengan kolom tabel;
             // baris tanpa jam masuk tetap dikosongkan, bukan diberi "—".
             const durasi = durationSecondsFromTimestamps(row.jam_out, row.jam_in)
+            const berjalan = info.status === "berjalan"
+                ? elapsedSecondsSince(row.jam_out, now)
+                : null
             // Escape CSV + netralkan formula injection (= + - @ tab CR) supaya
             // file aman dibuka di Excel/LibreOffice tanpa mengeksekusi formula.
             const escape = (v: string) => {
@@ -316,6 +259,7 @@ function OutboundTableImpl({
                 escape(row.jam_out ?? ""),
                 escape(row.jam_in ?? ""),
                 durasi == null ? "" : formatClockDuration(durasi),
+                berjalan == null ? "" : formatClockDuration(berjalan),
                 escape(info.label),
             ].join(",")
         })
@@ -332,25 +276,7 @@ function OutboundTableImpl({
     }
 
     if (isLoading) {
-        return (
-            <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="rounded-xl border bg-card px-4 py-3">
-                            <Skeleton className="h-3 w-24" />
-                            <Skeleton className="mt-3 h-5 w-28" />
-                        </div>
-                    ))}
-                </div>
-                <div className="overflow-hidden rounded-xl border bg-card">
-                    <div className="space-y-3 p-4">
-                        {Array.from({ length: 8 }).map((_, i) => (
-                            <Skeleton key={i} className="h-9 w-full" />
-                        ))}
-                    </div>
-                </div>
-            </div>
-        )
+        return <OutboundPageSkeleton />
     }
 
     if (error) {
@@ -364,41 +290,12 @@ function OutboundTableImpl({
 
     return (
         <div className="space-y-4">
-            {/* RINGKASAN: rata-rata unit keluar per periode */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile
-                    label="Total outbound"
-                    value={formatNumber(stats.total)}
-                    hint={`${formatNumber(stats.selesai)} selesai · ${formatNumber(stats.berjalan)} berjalan · ${formatNumber(stats.menunggu)} menunggu`}
-                    icon={<Truck className="h-3.5 w-3.5" />}
-                    emphasis
-                />
-                <StatTile
-                    label="Rata-rata durasi"
-                    value={formatDuration(stats.avgDurasi)}
-                    hint={`${formatNumber(stats.durasiCount)} perjalanan selesai`}
-                    icon={<Timer className="h-3.5 w-3.5" />}
-                />
-                <StatTile
-                    label="Rata-rata jam masuk"
-                    value={stats.avgJamIn == null ? "—" : menitKeJam(stats.avgJamIn)}
-                    hint={`${formatNumber(stats.jamInCount)} mobil dengan jam in`}
-                    icon={<Clock className="h-3.5 w-3.5" />}
-                />
-                <StatTile
-                    label="Rata-rata jam keluar"
-                    value={stats.avgJamOut == null ? "—" : menitKeJam(stats.avgJamOut)}
-                    hint={`${formatNumber(stats.jamOutCount)} mobil dengan jam out`}
-                    icon={<LogOut className="h-3.5 w-3.5" />}
-                />
-            </div>
-
             {/* Ritase hari ini — produktivitas per unit sejak 00:00 WIB */}
             {ritase.total > 0 && (
                 <div className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            <p className="text-xs font-semibold text-muted-foreground">
                                 Ritase hari ini
                             </p>
                             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -488,34 +385,20 @@ function OutboundTableImpl({
             />
 
             {/* Baris chip status */}
-            <div className="flex flex-wrap items-center gap-1.5">
-                {STATUS_FILTERS.map((opt) => {
-                    const active = statusFilter === opt.id
-                    return (
-                        <Button
-                            key={opt.id}
-                            variant={active ? "secondary" : "outline"}
-                            size="sm"
-                            onClick={() => setStatusFilter(opt.id)}
-                            className={
-                                active
-                                    ? "border-primary/20 bg-primary text-primary-foreground hover:bg-primary/90"
-                                    : "bg-card"
-                            }
-                        >
-                            {opt.label}
-                        </Button>
-                    )
-                })}
-            </div>
+            <FilterChips
+                ariaLabel="Filter status pengiriman"
+                options={STATUS_FILTERS}
+                value={statusFilter}
+                onChange={setStatusFilter}
+            />
 
             {/* TABEL */}
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <Table>
+                <Table className="min-w-[820px] table-fixed">
                     <TableHeader className="bg-muted/40">
                         <TableRow className="hover:bg-transparent">
-                            <TableHead className="w-[56px] text-right text-xs">#</TableHead>
-                            <TableHead className="whitespace-nowrap">
+                            <TableHead className="w-12 text-center text-xs">#</TableHead>
+                            <TableHead className="w-[160px] text-center whitespace-nowrap">
                                 <button
                                     type="button"
                                     onClick={() => setSortKey((k) => (k === "orderAsc" ? "orderDesc" : "orderAsc"))}
@@ -531,14 +414,15 @@ function OutboundTableImpl({
                                     )}
                                 </button>
                             </TableHead>
-                            {/* Lebar nopol & status dipatok supaya kolom tidak bergeser
-                                saat baris menginap memunculkan ikon tambahan. */}
-                            <TableHead className="w-[180px] whitespace-nowrap">No. Polisi</TableHead>
-                            <TableHead className="whitespace-nowrap">Jam Out (WIB)</TableHead>
-                            <TableHead className="whitespace-nowrap">Jam In (WIB)</TableHead>
-                            <TableHead className="whitespace-nowrap">Berjalan</TableHead>
-                            <TableHead className="whitespace-nowrap text-right">Durasi</TableHead>
-                            <TableHead className="w-[104px] whitespace-nowrap">Status</TableHead>
+                            {/* Lebar dipatok supaya kolom tidak bergeser saat baris
+                                menginap memunculkan ikon tambahan, dan tabel tetap
+                                muat tanpa scroll horizontal di desktop. */}
+                            <TableHead className="w-[136px] text-center whitespace-nowrap">No. Polisi</TableHead>
+                            <TableHead className="w-[96px] text-center whitespace-nowrap">Jam Out (WIB)</TableHead>
+                            <TableHead className="w-[96px] text-center whitespace-nowrap">Jam In (WIB)</TableHead>
+                            <TableHead className="w-[124px] text-center whitespace-nowrap">Durasi berjalan</TableHead>
+                            <TableHead className="w-[92px] text-center whitespace-nowrap">Durasi</TableHead>
+                            <TableHead className="w-[104px] text-center whitespace-nowrap">Status</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -547,25 +431,31 @@ function OutboundTableImpl({
                                 const info = outboundStatus(row.jam_out, row.jam_in)
                                 const durasi = durationMinutesFromTimestamps(row.jam_out, row.jam_in)
                                 const durasiDetik = durationSecondsFromTimestamps(row.jam_out, row.jam_in)
+                                const berjalanDetik = info.status === "berjalan"
+                                    ? elapsedSecondsSince(row.jam_out, now)
+                                    : null
                                 const menginap = isOutboundOvernight(row.jam_out, row.jam_in, now)
                                 const hoursOut = elapsedHoursSince(row.jam_out, now)
                                 return (
                                     <TableRow key={rowKey(row, i)} className="transition-colors hover:bg-muted/40">
-                                        <TableCell className="py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                                        <TableCell className="py-2.5 text-center font-mono text-xs tabular-nums text-muted-foreground">
                                             {(currentPage - 1) * pageSize + i + 1}
                                         </TableCell>
-                                        <TableCell className="py-2.5">
-                                            <div className="font-mono text-sm font-medium tabular-nums">
+                                        <TableCell className="py-2.5 text-center">
+                                            <div
+                                                title={formatFreightOrder(row.freight_order)}
+                                                className="truncate font-mono text-sm font-medium tabular-nums"
+                                            >
                                                 {formatFreightOrder(row.freight_order)}
                                             </div>
                                             {row.created_at && (
-                                                <div className="mt-0.5 text-xs text-muted-foreground">
+                                                <div className="mt-0.5 truncate text-xs text-muted-foreground">
                                                     {tanggalWIB(row.created_at)}
                                                 </div>
                                             )}
                                         </TableCell>
-                                        <TableCell className="py-2.5">
-                                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                        <TableCell className="py-2.5 text-center">
+                                            <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
                                                 <span className="text-sm">{row.no_polisi || "—"}</span>
                                                 {/* Penanda menginap menempel di nopol, bukan di
                                                     kolom Status, agar lebar status tidak berubah
@@ -590,32 +480,33 @@ function OutboundTableImpl({
                                                 )}
                                             </div>
                                         </TableCell>
-                                        <TableCell className="py-2.5 font-mono text-sm tabular-nums">
+                                        <TableCell className="py-2.5 text-center font-mono text-sm tabular-nums">
                                             {formatJam(row.jam_out)}
                                         </TableCell>
-                                        <TableCell className="py-2.5 font-mono text-sm tabular-nums">
+                                        <TableCell className="py-2.5 text-center font-mono text-sm tabular-nums">
                                             {formatJam(row.jam_in)}
                                         </TableCell>
-                                        <TableCell className="py-2.5">
+                                        <TableCell className="py-2.5 text-center font-mono text-sm tabular-nums">
                                             {info.status === "berjalan" ? (
                                                 <span
+                                                    title="Durasi sejak jam keluar"
                                                     className={cn(
-                                                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 py-1 text-xs tabular-nums",
+                                                        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-1.5 py-1 text-xs tabular-nums",
                                                         menginap
                                                             ? "bg-amber-500/10 font-medium text-amber-700 dark:text-amber-400"
                                                             : "text-muted-foreground",
                                                     )}
                                                 >
-                                                    {Math.floor(hoursOut ?? 0)} jam
+                                                    {formatClockDuration(berjalanDetik)}
                                                 </span>
                                             ) : (
                                                 <span className="text-xs text-muted-foreground">—</span>
                                             )}
                                         </TableCell>
-                                        <TableCell className="py-2.5 text-right font-mono text-sm tabular-nums text-muted-foreground">
+                                        <TableCell className="py-2.5 text-center font-mono text-sm tabular-nums text-muted-foreground">
                                             {formatClockDuration(durasiDetik)}
                                         </TableCell>
-                                        <TableCell className="py-2.5">
+                                        <TableCell className="py-2.5 text-center">
                                             <Badge variant="outline" className={cn("shrink-0", info.className)}>
                                                 {info.label}
                                             </Badge>
@@ -633,8 +524,8 @@ function OutboundTableImpl({
                                         <p className="text-xs leading-relaxed text-muted-foreground">
                                             {outbounds.length === 0
                                                 ? dateFrom || dateTo
-                                                    ? `Tidak ada outbound pada rentang ${tanggalWIB(dateFrom)} – ${tanggalWIB(dateTo)}. Coba lebarkan rentangnya atau ubah kata pencarian di header.`
-                                                    : "Tidak ada outbound pada seluruh tanggal. Coba ubah kata pencarian di header."
+                                                    ? `Tidak ada data pada rentang ${tanggalWIB(dateFrom)} – ${tanggalWIB(dateTo)}.`
+                                                    : "Tidak ada data pada seluruh tanggal."
                                                 : "Hapus filter status untuk melihat semua baris."}
                                         </p>
                                         {statusFilter !== "all" && (

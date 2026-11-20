@@ -5,7 +5,6 @@ import dynamic from "next/dynamic"
 import {
     Card,
     CardContent,
-    CardDescription,
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
@@ -129,10 +128,7 @@ function LocationDetail({ loc, trafficPattern }: { loc: LocationWeather; traffic
             <CardHeader className="pb-2">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                        <CardTitle className="text-base">{loc.def.name} — 24 Jam & 7 Hari</CardTitle>
-                        <CardDescription>
-                            Peluang hujan (batang) dan intensitas prediksi (garis) per jam · prakiraan harian di bawahnya.
-                        </CardDescription>
+                        <CardTitle className="text-base">{loc.def.name}</CardTitle>
                     </div>
                     <div className="flex items-center gap-2">
                         <WeatherEmoji code={loc.current.code} className="text-2xl" />
@@ -218,9 +214,9 @@ export function WeatherView() {
             {/* Bar status: sumber data + waktu pembaruan + refresh manual */}
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>
-                    Sumber: Open-Meteo · zona waktu WIB · diperbarui {formatTime(updatedAt)}
+                    Open-Meteo · WIB · {formatTime(updatedAt)}
                     {" · "}
-                    <span className="tabular-nums">{WEATHER_LOCATIONS.length} titik pantau Rokan Hilir</span>
+                    <span className="tabular-nums">{WEATHER_LOCATIONS.length} titik pantau</span>
                 </span>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={refresh}>
                     <RefreshCw className="h-3.5 w-3.5" />
@@ -249,12 +245,17 @@ export function WeatherView() {
                         </CardHeader>
                         <CardContent>
                             <Skeleton className="h-[220px] w-full rounded-md" />
+                            <div className="mt-4 grid grid-cols-2 gap-2 border-t pt-4 sm:grid-cols-4 lg:grid-cols-7">
+                                {Array.from({ length: 7 }).map((_, i) => (
+                                    <Skeleton key={i} className="h-20 w-full rounded-lg" />
+                                ))}
+                            </div>
                         </CardContent>
                     </Card>
                 </>
             ) : !hasData ? (
                 <div className="flex h-40 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-                    Belum ada data cuaca — tekan Muat ulang.
+                    Belum ada data cuaca.
                 </div>
             ) : (
                 <>

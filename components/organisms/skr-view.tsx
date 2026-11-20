@@ -3,9 +3,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react"
 import {
     BadgeCheck,
-    Boxes,
     ChevronDown,
-    CircleDollarSign,
     FileText,
     Store,
     TrendingUp,
@@ -13,7 +11,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { StatTile } from "@/components/molecules/stat-tile"
+import { SkrPageSkeleton } from "@/components/molecules/view-skeleton"
 import dynamic from "next/dynamic"
 
 // Grafik ikut boundary bersama dengan grafik dashboard (satu chunk recharts).
@@ -26,6 +24,7 @@ const SkrReasonPie = dynamic(() =>
     { loading: () => <Skeleton className="h-[300px] w-full" /> },
 )
 import { FilterToolbar } from "@/components/molecules/filter-toolbar"
+import { FilterChips } from "@/components/molecules/filter-chips"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
@@ -286,25 +285,7 @@ function SkrViewImpl({
     }, [emptyByFilter, filterLabel, filterRangeLabel])
 
     if (isLoading) {
-        return (
-            <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="rounded-xl border bg-card px-4 py-3">
-                            <Skeleton className="h-3 w-24" />
-                            <Skeleton className="mt-3 h-5 w-28" />
-                        </div>
-                    ))}
-                </div>
-                <div className="overflow-hidden rounded-xl border bg-card">
-                    <div className="space-y-3 p-4">
-                        {Array.from({ length: 8 }).map((_, i) => (
-                            <Skeleton key={i} className="h-9 w-full" />
-                        ))}
-                    </div>
-                </div>
-            </div>
-        )
+        return <SkrPageSkeleton />
     }
 
     if (error) {
@@ -336,8 +317,8 @@ function SkrViewImpl({
 
                         {totalRows === 0 ? (
                             <p className="text-xs leading-relaxed text-muted-foreground">
-                                Query berhasil tetapi tidak ada data sama sekali. Pastikan tabel{" "}
-                                <code className="rounded bg-muted px-1">skr_detail</code> sudah berisi data.
+                                Tabel <code className="rounded bg-muted px-1">skr_detail</code> belum
+                                berisi data.
                             </p>
                         ) : (
                             <>
@@ -410,41 +391,19 @@ function SkrViewImpl({
                 />
 
                 {/* CHIP KATEGORI POD — membantu menyekop jenis dokumen dari hasil */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                    {SKR_CATEGORIES.map((opt) => {
-                        const active = categoryFilter === opt.id
-                        const count =
+                <FilterChips
+                    ariaLabel="Filter kategori POD"
+                    options={SKR_CATEGORIES.map((opt) => ({
+                        id: opt.id,
+                        label: opt.label,
+                        count:
                             opt.id === "all"
                                 ? totals.rows
-                                : totals.categories[opt.id as SkrCategory] ?? 0
-                        return (
-                            <Button
-                                key={opt.id}
-                                variant={active ? "secondary" : "outline"}
-                                size="sm"
-                                onClick={() => setCategoryFilter(opt.id)}
-                                className={
-                                    active
-                                        ? "h-8 border-primary/20 bg-primary text-primary-foreground hover:bg-primary/90"
-                                        : count === 0
-                                            ? "h-8 bg-card text-muted-foreground/60"
-                                            : "h-8 bg-card"
-                                }
-                            >
-                                {opt.label}
-                                <span
-                                    className={
-                                        active
-                                            ? "ml-1.5 font-mono text-xs tabular-nums opacity-80"
-                                            : "ml-1.5 font-mono text-xs tabular-nums text-muted-foreground"
-                                    }
-                                >
-                                    {count.toLocaleString("id-ID")}
-                                </span>
-                            </Button>
-                        )
-                    })}
-                </div>
+                                : totals.categories[opt.id as SkrCategory] ?? 0,
+                    }))}
+                    value={categoryFilter}
+                    onChange={setCategoryFilter}
+                />
 
                 {/* Daftar detail baris — inti mode fokus */}
                 <SearchDetailRows details={filtered} customerById={customerById} />
@@ -485,47 +444,13 @@ function SkrViewImpl({
                         Mode lambat aktif.
                     </span>{" "}
                     <span className="text-muted-foreground">
-                        View <code className="rounded bg-muted px-1">skr_ringkasan</code> belum dibuat di
-                        database, jadi data ditarik penuh lalu difilter di browser. Buat view tersebut di
-                        Supabase → SQL Editor untuk membuat filter tanggal berjalan di server.
+                        View <code className="rounded bg-muted px-1">skr_ringkasan</code> belum ada —
+                        data difilter di browser. Jalankan{" "}
+                        <code className="rounded bg-muted px-1">supabase/sql/skr_ringkasan.sql</code>{" "}
+                        agar filter berjalan di server.
                     </span>
                 </div>
             )}
-
-            {/* RINGKASAN */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile
-                    label="Sisa kiriman"
-                    value={formatQty(totals.qty)}
-                    hint={
-                        noRange
-                            ? `${totals.rows.toLocaleString("id-ID")} baris · tanpa batas tanggal`
-                            : `${totals.rows.toLocaleString("id-ID")} baris · ${isoToTanggal(dateFrom)} – ${isoToTanggal(dateTo)}`
-                    }
-                    icon={<Boxes className="h-3.5 w-3.5" />}
-                    emphasis
-                />
-                <StatTile
-                    label="Total nilai"
-                    value={compactNilai(totals.nilai)}
-                    hint={formatNilai(totals.nilai)}
-                    title={formatNilai(totals.nilai)}
-                    icon={<CircleDollarSign className="h-3.5 w-3.5" />}
-                />
-                <StatTile
-                    label="Toko terlibat"
-                    value={totals.customer.toLocaleString("id-ID")}
-                    hint={`${totals.armada.toLocaleString("id-ID")} armada · ${totals.sales.toLocaleString("id-ID")} sales`}
-                    icon={<Store className="h-3.5 w-3.5" />}
-                />
-                <StatTile
-                    label="Alasan POD terbanyak"
-                    value={reasons[0] ? formatQty(reasons[0].rows, "baris") : "—"}
-                    hint={reasons[0]?.reason ?? "Belum ada data pada rentang ini"}
-                    title={reasons[0]?.reason}
-                    icon={<TrendingUp className="h-3.5 w-3.5" />}
-                />
-            </div>
 
             {/* KONTROL — kiri: rentang tanggal; kanan: reset filter kategori saat aktif */}
             <FilterToolbar
@@ -550,41 +475,19 @@ function SkrViewImpl({
             />
 
             {/* CHIP KATEGORI POD */}
-            <div className="flex flex-wrap items-center gap-1.5">
-                {SKR_CATEGORIES.map((opt) => {
-                    const active = categoryFilter === opt.id
-                    const count =
+            <FilterChips
+                ariaLabel="Filter kategori POD"
+                options={SKR_CATEGORIES.map((opt) => ({
+                    id: opt.id,
+                    label: opt.label,
+                    count:
                         opt.id === "all"
                             ? totals.rows
-                            : totals.categories[opt.id as SkrCategory] ?? 0
-                    return (
-                        <Button
-                            key={opt.id}
-                            variant={active ? "secondary" : "outline"}
-                            size="sm"
-                            onClick={() => setCategoryFilter(opt.id)}
-                            className={
-                                active
-                                    ? "h-8 border-primary/20 bg-primary text-primary-foreground hover:bg-primary/90"
-                                    : count === 0
-                                        ? "h-8 bg-card text-muted-foreground/60"
-                                        : "h-8 bg-card"
-                            }
-                        >
-                            {opt.label}
-                            <span
-                                className={
-                                    active
-                                        ? "ml-1.5 font-mono text-xs tabular-nums opacity-80"
-                                        : "ml-1.5 font-mono text-xs tabular-nums text-muted-foreground"
-                                }
-                            >
-                                {count.toLocaleString("id-ID")}
-                            </span>
-                        </Button>
-                    )
-                })}
-            </div>
+                            : totals.categories[opt.id as SkrCategory] ?? 0,
+                }))}
+                value={categoryFilter}
+                onChange={setCategoryFilter}
+            />
 
             {/* GRAFIK & SEBARAN ALASAN SKR PER KATEGORI */}
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -625,7 +528,7 @@ function SkrViewImpl({
                     <div className="p-4">
                         <div className="grid gap-px bg-border sm:grid-cols-3">
                             <div className="bg-card px-4 py-3">
-                                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                                <p className="text-xs font-medium text-muted-foreground">
                                     {monthWindow.current.label}
                                 </p>
                                 <p className="mt-1 text-lg font-semibold leading-none tabular-nums text-primary">
@@ -633,7 +536,7 @@ function SkrViewImpl({
                                 </p>
                             </div>
                             <div className="bg-card px-4 py-3">
-                                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                                <p className="text-xs font-medium text-muted-foreground">
                                     {monthWindow.previous.label}
                                 </p>
                                 <p className="mt-1 text-lg font-semibold leading-none tabular-nums">
@@ -641,7 +544,7 @@ function SkrViewImpl({
                                 </p>
                             </div>
                             <div className="bg-card px-4 py-3">
-                                <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                                <p className="text-xs font-medium text-muted-foreground">
                                     Selisih
                                 </p>
                                 <p
@@ -911,7 +814,7 @@ function CustomerDetailCard({
                 </p>
             </div>
 
-            <div className="flex items-center gap-2 border-b px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground">
+            <div className="flex items-center gap-2 border-b px-3 py-1 text-[10px] text-muted-foreground">
                 <span className="min-w-0 flex-[3]">Customer</span>
                 <span className="w-10 shrink-0 text-right">Dok</span>
                 <span className="w-14 shrink-0 text-right">Qty</span>

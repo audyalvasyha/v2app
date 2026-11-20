@@ -4,7 +4,7 @@ import React, { Fragment, memo, useMemo, useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
+import { MonitoringPageSkeleton } from "@/components/molecules/view-skeleton"
 import {
     Select,
     SelectContent,
@@ -26,6 +26,7 @@ import {
     Wrench,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { FilterChips } from "@/components/molecules/filter-chips"
 // Aturan status servis & format tanggal kini tinggal di lib bersama
 import { formatDateMedium as formatDateShort } from "@/lib/format"
 import {
@@ -54,44 +55,7 @@ interface Props {
 const PAGE_SIZE = 10
 type SortKey = "urgency" | "dueDate" | "odometer" | "equipmentId"
 
-function KpiCard({
-    label,
-    value,
-    hint,
-    active,
-    onClick,
-}: {
-    label: string
-    value: number
-    hint: string
-    active?: boolean
-    onClick?: () => void
-}) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            aria-pressed={active}
-            className={cn(
-                "flex cursor-pointer flex-col gap-1 rounded-xl border bg-card p-4 text-left shadow-sm transition-colors",
-                "hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                active ? "border-primary/60 ring-1 ring-primary/30" : "border-border/70",
-            )}
-        >
-            <span className="truncate text-sm font-medium text-muted-foreground">
-                {label}
-            </span>
-            <span className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-semibold leading-none tabular-nums">
-                    {value.toLocaleString("id-ID")}
-                </span>
-                <span className="truncate text-xs text-muted-foreground">
-                    {hint}
-                </span>
-            </span>
-        </button>
-    )
-}
+
 
 function ServiceMonitoringTableImpl({
     equipments,
@@ -186,28 +150,7 @@ function ServiceMonitoringTableImpl({
     }
 
     if (isLoading) {
-        return (
-            <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="rounded-xl border bg-card p-3.5">
-                            <Skeleton className="h-3 w-20" />
-                            <Skeleton className="mt-3 h-7 w-12" />
-                        </div>
-                    ))}
-                </div>
-                <div className="rounded-xl border bg-card">
-                    <div className="border-b p-4">
-                        <Skeleton className="h-4 w-32" />
-                    </div>
-                    <div className="space-y-3 p-4">
-                        {Array.from({ length: 6 }).map((_, i) => (
-                            <Skeleton key={i} className="h-11 w-full" />
-                        ))}
-                    </div>
-                </div>
-            </div>
-        )
+        return <MonitoringPageSkeleton />
     }
 
     const chips: { id: string; label: string; count?: number }[] = [
@@ -222,84 +165,14 @@ function ServiceMonitoringTableImpl({
 
     return (
         <div className="space-y-4">
-            {/* KPI — klik untuk filter, sinkron dengan SearchBar */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <KpiCard
-                    label="Total dipantau"
-                    value={counts.total}
-                    hint="unit"
-                    active={activeFilter === "all"}
-                    onClick={() => setFilter("all")}
-                />
-                <KpiCard
-                    label="Aman"
-                    value={counts.safe}
-                    hint="siap pakai"
-                    active={activeFilter === "safe"}
-                    onClick={() => setFilter("safe")}
-                />
-                <KpiCard
-                    label="Segera servis"
-                    value={counts.warning}
-                    hint="≤14 hr / ≤1.000 km"
-                    active={activeFilter === "warning"}
-                    onClick={() => setFilter("warning")}
-                />
-                <KpiCard
-                    label="Terlewat"
-                    value={counts.overdue}
-                    hint="butuh tindakan"
-                    active={activeFilter === "overdue"}
-                    onClick={() => setFilter("overdue")}
-                />
-                <KpiCard
-                    label="Tanpa jadwal"
-                    value={counts.none}
-                    hint="belum ada log"
-                    active={activeFilter === "none"}
-                    onClick={() => setFilter("none")}
-                />
-            </div>
-
             {/* Toolbar: segmented filter + urutan */}
-            <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                <div
-                    role="group"
-                    aria-label="Filter status servis"
-                    className="flex flex-wrap gap-1 rounded-lg bg-muted/50 p-1"
-                >
-                    {chips.map((chip) => {
-                        const active = activeFilter === chip.id
-                        return (
-                            <button
-                                key={chip.id}
-                                type="button"
-                                aria-pressed={active}
-                                onClick={() => setFilter(chip.id)}
-                                className={cn(
-                                    "inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-                                    active
-                                        ? "bg-background text-foreground shadow-sm"
-                                        : "text-muted-foreground hover:text-foreground",
-                                )}
-                            >
-                                {chip.label}
-                                {typeof chip.count === "number" && (
-                                    <span
-                                        className={cn(
-                                            "rounded px-1 py-px text-[10px] tabular-nums",
-                                            active
-                                                ? "bg-muted text-muted-foreground"
-                                                : "text-muted-foreground/70",
-                                        )}
-                                    >
-                                        {chip.count}
-                                    </span>
-                                )}
-                            </button>
-                        )
-                    })}
-                </div>
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <FilterChips
+                    ariaLabel="Filter status servis"
+                    options={chips}
+                    value={activeFilter}
+                    onChange={setFilter}
+                />
 
                 <div className="flex items-center gap-2 sm:shrink-0">
                     <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex">
@@ -340,11 +213,11 @@ function ServiceMonitoringTableImpl({
                     <TableHeader className="bg-muted/30">
                         <TableRow className="border-b-border/60 hover:bg-transparent">
                             <TableHead className="w-[36px]" />
-                            <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-[0.08em]">Unit</TableHead>
-                            <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-[0.08em]">Status</TableHead>
-                            <TableHead className="whitespace-nowrap text-[11px] uppercase tracking-[0.08em]">Jadwal servis</TableHead>
-                            <TableHead className="min-w-[220px] text-[11px] uppercase tracking-[0.08em]">Odometer</TableHead>
-                            <TableHead className="w-[96px] text-right text-[11px] uppercase tracking-[0.08em]">Sisa</TableHead>
+                            <TableHead className="whitespace-nowrap text-xs">Unit</TableHead>
+                            <TableHead className="whitespace-nowrap text-xs">Status</TableHead>
+                            <TableHead className="whitespace-nowrap text-xs">Jadwal servis</TableHead>
+                            <TableHead className="min-w-[220px] text-xs">Odometer</TableHead>
+                            <TableHead className="w-[96px] text-right text-xs">Sisa</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -484,7 +357,7 @@ function ServiceMonitoringTableImpl({
                                                     <div className="border-t border-border/60 px-4 py-4 sm:px-6">
                                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                                             <div className="min-w-0">
-                                                                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                                                <p className="text-xs font-semibold text-muted-foreground">
                                                                     Riwayat servis
                                                                 </p>
                                                                 <p className="mt-1 text-sm font-semibold tracking-tight">
@@ -512,10 +385,10 @@ function ServiceMonitoringTableImpl({
                                                                 <Table>
                                                                     <TableHeader className="bg-muted/30">
                                                                         <TableRow className="hover:bg-transparent">
-                                                                            <TableHead className="h-8 whitespace-nowrap py-1 text-[10px] uppercase tracking-[0.08em]">Tgl servis</TableHead>
-                                                                            <TableHead className="h-8 whitespace-nowrap py-1 text-[10px] uppercase tracking-[0.08em]">Odo saat servis</TableHead>
-                                                                            <TableHead className="h-8 whitespace-nowrap py-1 text-[10px] uppercase tracking-[0.08em]">Jadwal berikut</TableHead>
-                                                                            <TableHead className="h-8 whitespace-nowrap py-1 text-[10px] uppercase tracking-[0.08em]">Odo berikut</TableHead>
+                                                                            <TableHead className="h-8 whitespace-nowrap py-1 text-xs">Tgl servis</TableHead>
+                                                                            <TableHead className="h-8 whitespace-nowrap py-1 text-xs">Odo saat servis</TableHead>
+                                                                            <TableHead className="h-8 whitespace-nowrap py-1 text-xs">Jadwal berikut</TableHead>
+                                                                            <TableHead className="h-8 whitespace-nowrap py-1 text-xs">Odo berikut</TableHead>
                                                                         </TableRow>
                                                                     </TableHeader>
                                                                     <TableBody>
@@ -577,7 +450,7 @@ function ServiceMonitoringTableImpl({
                                         </span>
                                         <p className="text-sm font-semibold">Tidak ada unit yang cocok</p>
                                         <p className="text-xs leading-relaxed text-muted-foreground">
-                                            Coba ganti filter status, urutan, atau kata kunci pencarian di atas.
+                                            Ubah filter status atau kata kunci.
                                         </p>
                                         <Button
                                             variant="outline"

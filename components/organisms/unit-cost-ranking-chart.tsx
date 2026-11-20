@@ -17,8 +17,8 @@ export interface RankedUnit {
     count: number // berapa entri histori yang menyumbang total ini
 }
 
-const topConfig = { totalCost: { label: "Total biaya", color: "#FF3C00" } } satisfies ChartConfig
-const bottomConfig = { totalCost: { label: "Total biaya", color: "hsl(var(--muted-foreground))" } } satisfies ChartConfig
+const topConfig = { totalCost: { label: "Total biaya", color: "var(--chart-1)" } } satisfies ChartConfig
+const bottomConfig = { totalCost: { label: "Total biaya", color: "var(--muted-foreground)" } } satisfies ChartConfig
 
 function RankBar({
     data,
@@ -52,21 +52,20 @@ function RankBar({
     const maxLabelLen = Math.max(...chartData.map((d) => d.label.length), 6)
     const yWidth = Math.min(150, Math.max(84, maxLabelLen * 7.2))
 
-    // Pewarnaan berjenjang: peringkat teratas lebih pekat → lebih pudar (tanpa pelangi)
-    const fills = topStyle
-        ? ["#FF3C00", "#ff5a28", "#ff774f", "#ff936f", "#ffb494"]
-        : // bawah: palet gelap → terang (netral, tidak mencolok)
-          ["hsl(0 0% 72%)", "hsl(0 0% 68%)", "hsl(0 0% 62%)", "hsl(0 0% 56%)", "hsl(0 0% 48%)"]
+    // Satu warna data, kekuatan dibedakan lewat opacity. Tidak ada pelangi
+    // dan tidak ada hex yang mengunci tema terang/gelap.
+    const opacities = topStyle ? [1, 0.82, 0.66, 0.5, 0.36] : [0.55, 0.5, 0.45, 0.4, 0.35]
 
-    // Urutan fill harus selaras dengan visual: bar teratas (peringkat 1) warna paling pekat.
-    // Karena chartData dibalik, indeks 0 = peringkat terbawah dalam grafik (bawah).
-    const fillForIndex = (i: number) => fills[chartData.length - 1 - i] ?? fills[fills.length - 1]
+    // Urutan opacity harus selaras dengan visual: bar peringkat 1 paling pekat.
+    // Karena chartData dibalik, indeks 0 = peringkat terbawah dalam grafik.
+    const fillOpacityForIndex = (i: number) =>
+        opacities[chartData.length - 1 - i] ?? opacities[opacities.length - 1]
 
     return (
         <div className="flex flex-col">
             <div className="flex items-baseline justify-between gap-3">
                 <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                <span className="font-mono text-[10px] text-muted-foreground">
                     6 bulan terakhir
                 </span>
             </div>
@@ -118,7 +117,7 @@ function RankBar({
                             tick={{ fontSize: 11 }}
                         />
                         <ChartTooltip
-                            cursor={{ fill: "hsl(var(--muted) / 0.28)" }}
+                            cursor={{ fill: "var(--muted)", fillOpacity: 0.45 }}
                             content={
                                 <ChartTooltipContent
                                     indicator="line"
@@ -130,7 +129,11 @@ function RankBar({
                         />
                         <Bar dataKey="cost" radius={[0, 4, 4, 0]} barSize={16}>
                             {chartData.map((_, i) => (
-                                <Cell key={`cell-${i}`} fill={fillForIndex(i)} />
+                                <Cell
+                                    key={`cell-${i}`}
+                                    fill={topStyle ? "var(--chart-1)" : "var(--muted-foreground)"}
+                                    fillOpacity={fillOpacityForIndex(i)}
+                                />
                             ))}
                         </Bar>
                     </BarChart>

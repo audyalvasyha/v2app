@@ -1,5 +1,26 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Jangan bocorkan versi framework di header respons.
+  poweredByHeader: false,
+  // Header pertahanan dasar. CSP tidak dipasang di sini karena aplikasi
+  // memakai inline style dari Leaflet/Tailwind; header di bawah aman untuk
+  // semua halaman dan tidak mengubah perilaku UI.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          },
+        ],
+      },
+    ]
+  },
   // Whitelist domain proxy gambar AppSheet (Drive korporat) untuk next/image.
   // Format wajib: /template/gettablefileurl?appName=...&tableName=...&fileName=...
   images: {

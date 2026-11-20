@@ -12,6 +12,9 @@ export interface StatTileProps {
   icon?: React.ReactNode;
   /** Beri penekanan warna aksen untuk metrik utama */
   emphasis?: boolean;
+  /** Versi rapat: padding, ikon, dan angka lebih kecil — untuk deretan KPI
+   *  yang tidak perlu mendominasi halaman (mis. papan tugas). */
+  compact?: boolean;
   className?: string;
 }
 
@@ -31,39 +34,51 @@ export function StatTile({
   title,
   icon,
   emphasis,
+  compact,
   className,
 }: StatTileProps) {
   return (
     <div
       className={cn(
-        "flex h-full flex-col rounded-xl border bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-primary/30",
+        "flex h-full flex-col rounded-xl border bg-card shadow-sm transition-colors hover:border-primary/30",
+        compact ? "px-3 py-2.5" : "px-4 py-3.5",
         className,
       )}
       title={title}
     >
-      {/* Eyebrow: ikon dalam bubble aksen + label kapital — bahasa kartu yang
-          sama dengan header kartu besar (CardHeaderBadge) supaya satu halaman
-          terbaca sebagai satu sistem, bukan kumpulan komponen berbeda gaya. */}
-      <div className="flex items-center gap-2.5">
+      {/* Label datar: ikon dalam bubble aksen + teks kecil netral — tanpa
+          kapital/letter-spacing lebar supaya deretan KPI tidak berisik. */}
+      <div className={cn("flex items-center", compact ? "gap-2" : "gap-2.5")}>
         {icon && (
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary [&_svg]:h-3.5 [&_svg]:w-3.5">
+          <div
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary [&_svg]:h-3.5 [&_svg]:w-3.5",
+              compact ? "h-6 w-6" : "h-7 w-7",
+            )}
+          >
             {icon}
           </div>
         )}
-        <span className="truncate text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="truncate text-xs font-medium text-muted-foreground">
           {label}
         </span>
       </div>
       <div
         className={cn(
-          "mt-3 truncate text-xl font-semibold leading-none tabular-nums",
+          "truncate font-semibold leading-none tabular-nums",
+          compact ? "mt-2 text-lg" : "mt-3 text-xl",
           emphasis && "text-primary",
         )}
       >
         {value}
       </div>
       {hint && (
-        <div className="mt-1.5 text-xs leading-snug text-muted-foreground">
+        <div
+          className={cn(
+            "leading-snug text-muted-foreground",
+            compact ? "mt-1 text-[11px]" : "mt-1.5 text-xs",
+          )}
+        >
           {hint}
         </div>
       )}

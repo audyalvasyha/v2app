@@ -3,13 +3,21 @@ import type { Metadata, Viewport } from "next"
 
 import "./globals.css"
 
-import { Geist_Mono } from 'next/font/google'
+// Font di-host sendiri, bukan next/font/google: Google Fonts kadang membalas
+// URL font tanpa ekstensi dan membuat Turbopack gagal resolve modul font
+// (upstream issue #99114). File ini salinan Geist Mono latin dari Next.
+import localFont from 'next/font/local'
 
 import { Toaster } from "@/components/ui/sonner"
 
 // Font utama saja — inisialisasi font tak terpakai (Source Serif, double Geist Mono)
 // membuat build lebih lambat dan menambah CSS font yang tidak dipakai
-const geistMono = Geist_Mono({ subsets: ["latin"], weight: ["400", "500", "600", "700"], display: "swap" })
+const geistMono = localFont({
+  src: "./fonts/geist-mono-latin.woff2",
+  weight: "100 900",
+  style: "normal",
+  display: "swap",
+})
 
 export const metadata: Metadata = {
   title: "Midaa - Transport Management System",
@@ -28,7 +36,10 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f5f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#111315" },
+  ],
   width: "device-width",
   initialScale: 1,
 }
@@ -43,7 +54,7 @@ export default function RootLayout({
   // klien sudah punya class="dark" sementara hasil render server tidak.
   // Tanpa flag itu React menganggapnya hydration mismatch dan melempar error.
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="id" suppressHydrationWarning>
       <head>
         {/* Terapkan tema sebelum halaman digambar supaya pengguna device dark
             tidak melihat kedipan putih. Logikanya sama dengan hooks/use-theme.ts:

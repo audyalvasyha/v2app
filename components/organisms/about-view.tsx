@@ -90,7 +90,7 @@ const SKILLS = [
 
 export function AboutView() {
   return (
-    <div className="w-full mx-auto pb-16 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="mx-auto w-full overflow-x-clip pb-16">
       {/* Masthead: penanda seksi + versi, dipisah satu garis rambut */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="flex items-center gap-3">
@@ -132,10 +132,10 @@ export function AboutView() {
                 key={spec.label}
                 className="flex items-baseline justify-between gap-6 py-3"
               >
-                <dt className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                <dt className="shrink-0 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                   {spec.label}
                 </dt>
-                <dd className="text-right text-sm text-foreground/90">
+                <dd className="min-w-0 break-words text-right text-sm text-foreground/90">
                   {spec.value}
                 </dd>
               </div>
@@ -179,7 +179,7 @@ export function AboutView() {
         </div>
 
         <div className="mt-8 grid gap-10 md:grid-cols-12">
-          <div className="flex items-start gap-5 md:col-span-4">
+          <div className="flex min-w-0 items-start gap-5 md:col-span-5">
             <img
               src="/IMG_20260929_045219.jpg"
               alt="Audy Al Vasyah"
@@ -187,17 +187,17 @@ export function AboutView() {
               height={112}
               className="h-24 w-24 shrink-0 rounded-lg border border-border object-cover grayscale transition duration-500 hover:grayscale-0 md:h-28 md:w-28"
             />
-            <div className="pt-1">
+            <div className="min-w-0 pt-1">
               <h2 className="text-xl font-semibold tracking-tight">
                 Audy Al Vasyah
               </h2>
-              <p className="mt-1 text-sm text-[#f97316]">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Transport Planner &amp; Operations Tech
               </p>
             </div>
           </div>
 
-          <div className="md:col-span-5 md:col-start-6">
+          <div className="min-w-0 md:col-span-4">
             <p className="text-sm leading-relaxed text-muted-foreground">
               Menggabungkan sisi <i>engineering</i> dengan pengelolaan armada:
               menyusun arsitektur aplikasi, merancang antarmuka, hingga
@@ -208,7 +208,7 @@ export function AboutView() {
             </p>
           </div>
 
-          <div className="md:col-span-2 md:col-start-11">
+          <div className="min-w-0 md:col-span-3">
             <div className="flex flex-col divide-y divide-border border-y border-border">
               <a
                 href="mailto:audialfasha@gmail.com"

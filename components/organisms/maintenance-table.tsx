@@ -3,7 +3,8 @@
 import React, { memo, useEffect, useMemo, useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
+import { MaintenancePageSkeleton } from "@/components/molecules/view-skeleton"
+import { FilterChips } from "@/components/molecules/filter-chips"
 import {
     Select,
     SelectContent,
@@ -23,19 +24,13 @@ import {
     CalendarRange,
     ChevronDown,
     ChevronUp,
-    CircleDollarSign,
-    Hash,
-    Layers,
     TrendingUp,
     X,
 } from "lucide-react"
-import { StatTile } from "@/components/molecules/stat-tile"
 // Format nominal & tanggal kini dari lib bersama (satu sumber untuk semua menu)
 import {
-    compactRupiah,
     formatDateMedium,
     formatRupiah,
-    periodLabel,
     relativeDayLabel,
     startOfZonedDay,
     toDate,
@@ -208,78 +203,19 @@ function MaintenanceTableImpl({ histories, isLoading }: MaintenanceTableProps) {
     }, [pageRows, isDateSort, monthTotals, currentPage, pageSize])
 
     if (isLoading) {
-        return (
-            <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="rounded-xl border bg-card px-4 py-3">
-                            <Skeleton className="h-3 w-24" />
-                            <Skeleton className="mt-3 h-5 w-28" />
-                        </div>
-                    ))}
-                </div>
-                <div className="overflow-hidden rounded-xl border bg-card">
-                    <div className="space-y-3 p-4">
-                        {Array.from({ length: 8 }).map((_, i) => (
-                            <Skeleton key={i} className="h-9 w-full" />
-                        ))}
-                    </div>
-                </div>
-            </div>
-        )
+        return <MaintenancePageSkeleton />
     }
 
     return (
         <div className="space-y-4">
-            {/* RINGKASAN — biar nominal besar langsung terbaca tanpa menjumlah manual */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile
-                    label="Entri riwayat"
-                    value={stats.count.toLocaleString("id-ID")}
-                    hint={range === "all" ? "seluruh rentang data" : `dalam ${RANGE_OPTIONS.find((o) => o.id === range)?.label}`}
-                    icon={<Hash className="h-3.5 w-3.5" />}
-                />
-                <StatTile
-                    label="Total biaya"
-                    value={compactRupiah(stats.total)}
-                    hint={formatRupiah(stats.total)}
-                    title={formatRupiah(stats.total)}
-                    icon={<CircleDollarSign className="h-3.5 w-3.5" />}
-                    emphasis
-                />
-                <StatTile
-                    label="Rata-rata / entri"
-                    value={compactRupiah(stats.average)}
-                    hint={formatRupiah(stats.average)}
-                    title={formatRupiah(stats.average)}
-                    icon={<TrendingUp className="h-3.5 w-3.5" />}
-                />
-                <StatTile
-                    label="Unit terlibat"
-                    value={stats.units.toLocaleString("id-ID")}
-                    hint={periodLabel(stats.min, stats.max)}
-                    icon={<Layers className="h-3.5 w-3.5" />}
-                />
-            </div>
-
             {/* KONTROL: rentang cepat, urutan, jumlah baris */}
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                <div className="flex flex-wrap gap-1.5">
-                    {RANGE_OPTIONS.map((opt) => {
-                        const active = range === opt.id
-                        return (
-                            <Button
-                                key={opt.id}
-                                variant={active ? "secondary" : "outline"}
-                                size="sm"
-                                onClick={() => setRange(opt.id)}
-                                className={active ? "border-primary/20 bg-primary text-primary-foreground hover:bg-primary/90" : "bg-card"}
-                            >
-                                {opt.label}
-                            </Button>
-                        )
-                    })}
-                </div>
+                <FilterChips
+                    ariaLabel="Filter rentang riwayat"
+                    options={RANGE_OPTIONS}
+                    value={range}
+                    onChange={setRange}
+                />
 
                 <div className="flex flex-wrap items-center gap-2">
                     <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex">
@@ -364,7 +300,7 @@ function MaintenanceTableImpl({ histories, isLoading }: MaintenanceTableProps) {
                                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                                     <div className="flex items-center gap-2">
                                                         <CalendarRange className="h-3.5 w-3.5 text-muted-foreground" />
-                                                        <span className="text-xs font-semibold uppercase tracking-[0.14em]">
+                                                        <span className="text-xs font-semibold">
                                                             {item.label}
                                                         </span>
                                                         <span className="text-xs text-muted-foreground">
@@ -435,7 +371,7 @@ function MaintenanceTableImpl({ histories, isLoading }: MaintenanceTableProps) {
                                     <div className="mx-auto max-w-sm space-y-2">
                                         <p className="text-sm font-medium">Tidak ada riwayat pada rentang ini</p>
                                         <p className="text-xs leading-relaxed text-muted-foreground">
-                                            Coba lebarkan rentang waktu, ubah kata kunci pencarian, atau urutkan dengan kriteria lain.
+                                            Lebarkan rentang atau ubah kata kunci.
                                         </p>
                                         {range !== "all" && (
                                             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setRange("all")}>
