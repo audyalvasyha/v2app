@@ -739,16 +739,11 @@ export function AIChat({
           }`}>
             {/* Kepala — judul di kiri, aksi di kanan. Panel halaman tidak
                 lagi memulai dengan deretan tombol tanpa identitas. */}
-            <div className={`flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3 sm:px-6 ${isPageMode ? "border-border/60" : "border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.06]"}`}>
+            <div className={`flex shrink-0 items-center gap-3 px-4 py-2 sm:px-6 ${isPageMode ? "justify-end" : "justify-between border-b border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.06]"}`}>
               {isPageMode ? (
-                <div className="min-w-0">
-                  <h1 className="truncate text-lg font-semibold tracking-tight">
-                    Analisa
-                  </h1>
-                  <p className="truncate text-xs text-muted-foreground">
-                    Tanya Midaa · jawaban dari data armada
-                  </p>
-                </div>
+                // Header halaman Analisa sengaja tanpa judul/subjudul; empty
+                // state di bawah tetap memberi konteks “Tanya Midaa”.
+                <h1 className="sr-only">Analisa</h1>
               ) : (
                 <>
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">

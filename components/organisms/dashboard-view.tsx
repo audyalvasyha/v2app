@@ -112,21 +112,23 @@ function DashboardHeader({ onNavigate }: { onNavigate?: (view: View) => void }) 
           })}
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
         <Button
           size="sm"
-          className="gap-1.5"
+          className="w-full gap-1.5 px-2 text-xs sm:w-auto sm:px-3 sm:text-sm"
           onClick={() => onNavigate?.("analisa")}
         >
-          <MessageSquareText className="h-3.5 w-3.5" /> Tanya Midaa
+          <MessageSquareText className="h-3.5 w-3.5 shrink-0" /> Tanya Midaa
         </Button>
         <Button
           size="sm"
           variant="outline"
-          className="gap-1.5 bg-card"
+          className="w-full gap-1.5 bg-card px-2 text-xs sm:w-auto sm:px-3 sm:text-sm"
           onClick={() => onNavigate?.("monitoring")}
         >
-          <Activity className="h-3.5 w-3.5" /> Monitoring servis
+          <Activity className="h-3.5 w-3.5 shrink-0" />
+          <span className="sm:hidden">Monitoring</span>
+          <span className="hidden sm:inline">Monitoring servis</span>
         </Button>
       </div>
     </header>

@@ -26,6 +26,18 @@ interface WeatherCache {
     locations: LocationWeather[]
 }
 
+function isCachedLocation(value: unknown): value is LocationWeather {
+    if (!value || typeof value !== "object") return false
+    const loc = value as Partial<LocationWeather>
+    return (
+        !!loc.def &&
+        typeof loc.def.id === "string" &&
+        !!loc.current &&
+        Array.isArray(loc.hourly) &&
+        Array.isArray(loc.daily)
+    )
+}
+
 function readCache(): WeatherCache | null {
     if (typeof window === "undefined") return null
     try {
@@ -33,6 +45,9 @@ function readCache(): WeatherCache | null {
         if (!raw) return null
         const parsed = JSON.parse(raw)
         if (!Array.isArray(parsed?.locations) || typeof parsed?.fetchedAt !== "number") return null
+        // Cache dari versi skema lama bisa kehilangan hourly/daily dan membuat
+        // banner crash saat dirender. Abaikan cache seperti itu, lalu fetch baru.
+        if (!parsed.locations.every(isCachedLocation)) return null
         // Cache lebih tua dari sehari dianggap basi — lebih baik tampil loading
         // daripada cuaca seminggu lalu.
         if (Date.now() - parsed.fetchedAt > 24 * 60 * 60 * 1000) return null

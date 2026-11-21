@@ -104,7 +104,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
 
       {/* Hanya daftar menu yang scroll. Footer About + akun dipaku di bawah
           supaya tidak ikut naik ke tengah layar saat menu panjang. */}
-      <nav className="flex-1 min-h-0 p-2 space-y-1 flex flex-col overflow-y-auto">
+      <nav className="flex-1 min-h-0 p-2 space-y-1 flex flex-col overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {can('dashboard') && (
           <SidebarButton
             icon={LayoutDashboard}

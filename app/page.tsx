@@ -986,8 +986,8 @@ function DashboardContent() {
       <div
         className={
           activeView === 'analisa'
-            ? "flex min-h-0 w-full flex-1 flex-col overflow-hidden"
-            : "mx-auto flex w-full max-w-[1500px] flex-col space-y-4 px-4 py-5 sm:px-6 lg:px-8 lg:py-6"
+            ? "mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col overflow-hidden px-3 py-4 sm:px-4 lg:px-5 lg:py-5"
+            : "mx-auto flex w-full max-w-[1500px] flex-col space-y-4 px-3 py-4 sm:px-4 lg:px-5 lg:py-5"
         }
       >
 
