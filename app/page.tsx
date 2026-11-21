@@ -24,7 +24,7 @@ import {
 import { DashboardLayout, type View } from "@/components/templates/dashboard-layout"
 import { AuthGate } from "@/components/auth-gate"
 import { buildAlerts } from "@/lib/alerts"
-import { allowedViews, normalizeRole, type AppRole } from "@/lib/roles"
+import { allowedViews, roleForUser, type AppRole } from "@/lib/roles"
 import { AIChat } from "@/components/molecules/ai-chat"
 
 // Tiap menu dimuat sebagai chunk terpisah: chart (recharts ≈ 100 KB+) dan tabel
@@ -215,9 +215,14 @@ function DashboardContent() {
   // Jadikan 'dashboard' sebagai view default
   const [activeView, setActiveView] = useState<View>('dashboard')
   // Peran user: default paling sempit sampai `app_users` selesai dibaca, supaya
-  // menu admin tidak sempat tampil ke user terbatas. User tanpa baris peran
-  // atau saat tabel belum ada dianggap admin (perilaku lama tetap jalan).
+  // menu admin tidak sempat tampil ke user terbatas. Fail-closed: user tanpa
+  // baris peran — atau saat tabel belum tersedia — tetap terbatas. Hanya baris
+  // eksplisit `role = 'admin'` yang membuka menu admin.
   const [userRole, setUserRole] = useState<AppRole>('terbatas')
+  // Jangan jalankan guard menu sebelum role selesai dibaca: kalau tidak,
+  // admin yang baru membuka app sempat dianggap terbatas dan dipindah ke
+  // Complaint Board sebelum baris `app_users`-nya terbaca.
+  const [roleLoaded, setRoleLoaded] = useState(false)
 
   useEffect(() => {
     const pageClass = "analisa-page"
@@ -274,20 +279,17 @@ function DashboardContent() {
           .eq('email', email)
           .limit(1)
         if (cancelled) return
-        // Fail-closed: hanya tabel yang memang belum dibuat yang boleh
-        // memakai perilaku lama (semua user admin). Error jaringan, RLS,
-        // atau kolom hilang tidak boleh menaikkan user terbatas jadi admin.
+        // Fail-closed untuk semua kegagalan: tabel belum dibuat, RLS, jaringan,
+        // atau baris peran kosong tidak boleh menaikkan user jadi admin.
         if (roleError) {
-          const missingTable =
-            roleError.code === '42P01' ||
-            roleError.code === 'PGRST205' ||
-            /could not find the table/i.test(roleError.message)
-          setUserRole(missingTable ? 'admin' : 'terbatas')
+          setUserRole(roleForUser(email, null))
           return
         }
-        setUserRole(rows?.[0] ? normalizeRole(rows[0].role) : 'admin')
+        setUserRole(roleForUser(email, rows?.[0]?.role))
       } catch {
         if (!cancelled) setUserRole('terbatas')
+      } finally {
+        if (!cancelled) setRoleLoaded(true)
       }
     }
     void loadRole()
@@ -299,10 +301,13 @@ function DashboardContent() {
   /** Menu yang boleh dibuka peran aktif — dipakai sidebar, search, dan guard. */
   const permittedViews = useMemo(() => allowedViews(userRole), [userRole])
 
-  // Guard: menu di luar izin (mis. dari shortcut/notifikasi) dipulangkan ke dashboard.
+  // Guard: menu di luar izin (mis. dari shortcut/notifikasi) dipulangkan ke
+  // dashboard untuk admin, atau menu pertama yang diizinkan untuk role terbatas.
   useEffect(() => {
-    if (!permittedViews.includes(activeView)) setActiveView('dashboard')
-  }, [permittedViews, activeView])
+    if (!roleLoaded || permittedViews.includes(activeView)) return
+    const fallback = permittedViews.includes('dashboard') ? 'dashboard' : permittedViews[0]
+    if (fallback) setActiveView(fallback)
+  }, [roleLoaded, permittedViews, activeView])
 
   useKeyboardShortcuts(setActiveView, toggleTheme)
 

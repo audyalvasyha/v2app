@@ -22,7 +22,7 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -808,7 +808,7 @@ interface TaskSheetProps {
 }
 
 /**
- * Sheet form komplain. Di-mount hanya saat dibuka (lihat TaskBoard), jadi
+ * Modal form komplain. Di-mount hanya saat dibuka (lihat TaskBoard), jadi
  * state-nya selalu mulai dari data yang sedang diedit — tanpa effect
  * sinkronisasi yang rawan nilai basi.
  */
@@ -1108,14 +1108,14 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
     }
 
     return (
-        <Sheet open onOpenChange={(open) => { if (!open) onClose() }}>
-            <SheetContent
-                side="right"
-                className="flex w-full flex-col gap-0 p-0 sm:max-w-lg"
-            >
-                <SheetHeader className="border-b px-5 py-4 pr-12">
-                    <SheetTitle>{task ? "Ubah komplain" : "Komplain baru"}</SheetTitle>
-                </SheetHeader>
+        <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+            <DialogContent className="flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+                <DialogHeader className="shrink-0 border-b px-5 py-4 pr-12 text-left">
+                    <DialogTitle className="text-base">{task ? "Ubah komplain" : "Komplain baru"}</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Detail dan formulir komplain pengiriman.
+                    </DialogDescription>
+                </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -1432,7 +1432,7 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                         </div>
                     </div>
                 </form>
-            </SheetContent>
-        </Sheet>
+            </DialogContent>
+        </Dialog>
     )
 }

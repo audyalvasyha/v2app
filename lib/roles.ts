@@ -15,6 +15,9 @@ import type { View } from "@/components/templates/dashboard-layout"
 
 export type AppRole = "admin" | "terbatas"
 
+/** Satu-satunya akun yang boleh mendapat menu admin. */
+export const PRIMARY_ADMIN_EMAIL = "audyal.vasyah@pekanbaru-dr.com"
+
 export const ROLE_LABEL: Record<AppRole, string> = {
     admin: "Admin",
     terbatas: "Terbatas",
@@ -36,13 +39,13 @@ export const ALL_VIEWS: readonly View[] = [
 ]
 
 /**
- * Menu untuk role "terbatas": operasional harian + follow-up komplain.
- * Sengaja tanpa data bengkel/biaya (Equipment, Histories, Monitoring, Ban)
- * dan tanpa Analisa AI, karena schema AI bisa membaca seluruh tabel.
+ * Menu untuk role "terbatas": operasional harian + follow-up komplain + Analisa.
+ * Sengaja tanpa data bengkel/biaya (Equipment, Histories, Monitoring, Ban).
+ * Dashboard juga tidak termasuk; halaman awal jatuh ke Complaint Board.
  */
 const LIMITED_VIEWS: readonly View[] = [
-    "dashboard",
     "tugas",
+    "analisa",
     "skr",
     "pengiriman",
     "weather",
@@ -52,7 +55,19 @@ const LIMITED_VIEWS: readonly View[] = [
 
 /** Nilai dari database → peran yang dikenal. Nilai aneh jatuh ke yang paling aman. */
 export function normalizeRole(value: unknown): AppRole {
-    return value === "terbatas" ? "terbatas" : "admin"
+    return value === "admin" ? "admin" : "terbatas"
+}
+
+/**
+ * Role efektif user. Baris admin untuk email selain admin utama sengaja
+ * diabaikan — kalau tidak, data role lama bisa membuka menu Fleet/AI ke
+ * user yang seharusnya terbatas. Admin utama tanpa baris tetap admin agar
+ * tidak terkunci saat migrasi app_users belum dijalankan.
+ */
+export function roleForUser(email: string | null | undefined, storedRole: unknown): AppRole {
+    const normalizedEmail = (email ?? "").trim().toLowerCase()
+    if (normalizedEmail !== PRIMARY_ADMIN_EMAIL) return "terbatas"
+    return storedRole == null ? "admin" : normalizeRole(storedRole)
 }
 
 export function allowedViews(role: AppRole): View[] {

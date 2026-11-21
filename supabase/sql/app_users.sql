@@ -6,14 +6,16 @@
 --  membuat user. Tabel ini hanya menyimpan PERAN per email:
 --
 --    admin     → semua menu
---    terbatas  → Dashboard, Complaint Board, SKR, Pengiriman, Cuaca, Traffic,
---                About (tanpa Equipment, Histories, Monitoring,
---                Analisa Ban, dan Analisa AI)
+--    terbatas  → Complaint Board, Analisa, SKR, Pengiriman, Cuaca, Traffic,
+--                About (tanpa Dashboard, Equipment, Histories, Monitoring,
+--                dan Analisa Ban)
 --
---  PENTING: user yang TIDAK punya baris di tabel ini dianggap `admin`
---  — perilaku lama dipertahankan supaya 3 admin yang sudah ada tidak
---  terkunci setelah script ini dijalankan. Jadi untuk user baru yang
---  dibatasi, barisnya WAJIB ditambahkan di bawah.
+--  Aplikasi juga mengunci email: baris admin untuk email selain
+--  audyal.vasyah@pekanbaru-dr.com tetap diperlakukan sebagai terbatas.
+--
+--  PENTING: aplikasi fail-closed. User yang TIDAK punya baris di tabel ini
+--  dianggap `terbatas`; hanya baris dengan role `admin` yang membuka menu
+--  admin. Seed admin utama ada di bagian bawah script ini.
 --
 --  Aplikasi hanya bisa MEMBACA tabel ini (grant select). Insert/update
 --  hanya lewat SQL Editor / service role, sehingga user tidak bisa
@@ -65,15 +67,28 @@ create policy app_users_read on public.app_users
 --   set role = excluded.role,
 --       display_name = excluded.display_name;
 
+-- ── Admin utama & kebijakan satu admin ──────────────────────────
+-- Email ini satu-satunya yang mendapat role admin. Semua user lain
+-- (termasuk yang belum punya baris) otomatis dibatasi aplikasi.
+insert into public.app_users (email, role, display_name)
+values ('audyal.vasyah@pekanbaru-dr.com', 'admin', 'Audy Al Vasyah')
+on conflict (email) do update
+  set role = 'admin',
+      display_name = excluded.display_name;
+
+update public.app_users
+  set role = 'terbatas'
+  where lower(email) <> lower('audyal.vasyah@pekanbaru-dr.com');
+
 -- ── Contoh menaikkan/menurunkan peran user yang sudah terdaftar ──
 -- update public.app_users set role = 'admin'    where email = 'nama@perusahaan.com';
 -- update public.app_users set role = 'terbatas' where email = 'nama@perusahaan.com';
--- delete from public.app_users where email = 'nama@perusahaan.com'; -- kembali jadi admin
+-- delete from public.app_users where email = 'nama@perusahaan.com'; -- kembali jadi terbatas
 
 -- ═══════════════════════════════════════════════════════════════
 --  Verifikasi
---    select email, role from public.app_users order by role, email;
---    → 3 baris role 'terbatas' (atau sesuai yang diisi).
+--    select email, role from public.app_users order by role desc, email;
+--    → satu baris admin untuk audyal.vasyah@pekanbaru-dr.com, sisanya terbatas.
 --
 --    anon HARUS ditolak:
 --    curl "$SUPABASE_URL/rest/v1/app_users?select=email" -H "apikey: <anon-key>"
