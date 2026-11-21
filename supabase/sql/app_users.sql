@@ -29,7 +29,7 @@ create table if not exists public.app_users (
   email        text        primary key,
   role         text        not null default 'terbatas'
                check (role in ('admin', 'terbatas')),
-  -- Nama tampilan untuk catatan admin (tidak dipakai di UI saat ini).
+  -- Nama tampilan yang dirender di sidebar dan atribusi komplain.
   display_name text,
   created_at   timestamptz not null default now()
 );
@@ -48,6 +48,25 @@ drop policy if exists app_users_read on public.app_users;
 create policy app_users_read on public.app_users
   for select to authenticated
   using (lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')));
+
+-- ── Nama tampilan untuk atribusi komplain ────────────────────────
+-- Tugas menyimpan email pelaku; UI perlu nama lintas user. RLS app_users
+-- hanya membolehkan user membaca barisnya sendiri, jadi sediakan RPC
+-- security-definer yang HANYA mengembalikan email + display_name — bukan
+-- role atau data lain.
+create or replace function public.app_user_names()
+returns table (email text, display_name text)
+language sql
+security definer
+set search_path = public
+as $$
+  select lower(u.email) as email,
+         coalesce(nullif(btrim(u.display_name), ''), split_part(lower(u.email), '@', 1)) as display_name
+  from public.app_users u
+$$;
+
+revoke all on function public.app_user_names() from public;
+grant execute on function public.app_user_names() to authenticated;
 
 -- ═══════════════════════════════════════════════════════════════
 --  1) Buat 3 akun di Supabase Dashboard:

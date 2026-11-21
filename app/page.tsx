@@ -223,6 +223,8 @@ function DashboardContent() {
   // admin yang baru membuka app sempat dianggap terbatas dan dipindah ke
   // Complaint Board sebelum baris `app_users`-nya terbaca.
   const [roleLoaded, setRoleLoaded] = useState(false)
+  /** Nama tampilan dari app_users; email tidak pernah dirender ke UI. */
+  const [displayName, setDisplayName] = useState<string | null>(null)
 
   useEffect(() => {
     const pageClass = "analisa-page"
@@ -275,7 +277,7 @@ function DashboardContent() {
         if (!email) return
         const { data: rows, error: roleError } = await supabase
           .from('app_users')
-          .select('role')
+          .select('role,display_name')
           .eq('email', email)
           .limit(1)
         if (cancelled) return
@@ -283,11 +285,17 @@ function DashboardContent() {
         // atau baris peran kosong tidak boleh menaikkan user jadi admin.
         if (roleError) {
           setUserRole(roleForUser(email, null))
+          setDisplayName(null)
           return
         }
-        setUserRole(roleForUser(email, rows?.[0]?.role))
+        const row = rows?.[0]
+        setUserRole(roleForUser(email, row?.role))
+        setDisplayName(String(row?.display_name ?? '').trim() || null)
       } catch {
-        if (!cancelled) setUserRole('terbatas')
+        if (!cancelled) {
+          setUserRole('terbatas')
+          setDisplayName(null)
+        }
       } finally {
         if (!cancelled) setRoleLoaded(true)
       }
@@ -964,6 +972,7 @@ function DashboardContent() {
       onViewChange={handleViewChange}
       equipmentCounts={{ total: filteredEquipments.length, available: availableCount }}
       allowedViews={permittedViews}
+      displayName={displayName}
       searchTerm={filters.search ?? ""}
       onSearchChange={handleSearchChange}
       searchPlaceholder={searchPlaceholder}

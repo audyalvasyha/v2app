@@ -20,12 +20,15 @@ Seluruh aplikasi berada di balik **gerbang login Supabase Auth** — hanya user
 terdaftar yang bisa mengakses:
 
 - Pengunjung yang belum masuk otomatis disodori halaman login; sesi tersimpan
-  dan tetap aktif antar kunjungan sampai tombol **Keluar** ditekan di header
-  (yang juga menampilkan email yang sedang login).
+  dan tetap aktif antar kunjungan sampai tombol **Keluar** ditekan di sidebar
+  (yang juga menampilkan nama tampilan user, bukan email).
 - Akun yang sama dipakai dashboard dan halaman import SKR
   (`skr.transportbaganbatu.com`) — satu login untuk semuanya.
 - **Membuat user baru**: Supabase Dashboard → Authentication → Users →
-  Add user (email + password).
+  Add user (email + password). Isi `display_name` di `public.app_users`
+  supaya sidebar dan atribusi Complaint Board menampilkan nama orang, bukan
+  email. Jalankan ulang `supabase/sql/app_users.sql` untuk membuat RPC
+  `app_user_names` yang dipakai lintas user.
 - **Penting — matikan pendaftaran mandiri**: Authentication → Sign In /
   Providers → Email → matikan "Allow new users to sign up", supaya orang luar
   tidak bisa membuat akun sendiri dan lolos sebagai user terdaftar.

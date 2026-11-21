@@ -17,6 +17,10 @@ const geistMono = localFont({
   weight: "100 900",
   style: "normal",
   display: "swap",
+  // Nama keluarga font hasil generate next/font tidak bisa ditebak dari
+  // string "Geist Mono". Ekspos lewat variable agar CSS memakai keluarga
+  // yang benar-benar dimuat, bukan fallback browser.
+  variable: "--font-geist-mono",
 })
 
 export const metadata: Metadata = {
@@ -54,7 +58,7 @@ export default function RootLayout({
   // klien sudah punya class="dark" sementara hasil render server tidak.
   // Tanpa flag itu React menganggapnya hydration mismatch dan melempar error.
   return (
-    <html lang="id" suppressHydrationWarning>
+    <html lang="id" suppressHydrationWarning className={geistMono.variable}>
       <head>
         {/* Terapkan tema sebelum halaman digambar supaya pengguna device dark
             tidak melihat kedipan putih. Logikanya sama dengan hooks/use-theme.ts:

@@ -112,6 +112,12 @@ function attachmentMime(file: File): "image/png" | "image/jpeg" | null {
     return null
 }
 
+/** Nama tampilan untuk email atribusi; fallback ke bagian sebelum @. */
+function displayNameFor(email: string | null | undefined, names: Record<string, string>): string {
+    if (!email) return "—"
+    return names[email.trim().toLowerCase()] || shortUser(email)
+}
+
 /** Normalisasi customer_id: buang spasi dan nol depan agar lookup konsisten. */
 function customerKey(value: string | null | undefined): string {
     const raw = (value ?? "").trim()
@@ -194,6 +200,8 @@ export function TaskBoard({ search }: TaskBoardProps) {
     const [dragOver, setDragOver] = useState<TaskStatus | null>(null)
     /** Email user login — dipakai untuk atribusi buat / FU / selesaikan */
     const [userEmail, setUserEmail] = useState<string | null>(null)
+    /** email → display_name untuk kartu dan dialog atribusi. */
+    const [userNames, setUserNames] = useState<Record<string, string>>({})
     /** Master untuk autocomplete: sales dari tabel `salesman`, plat dari `equipment` */
     const [salesOptions, setSalesOptions] = useState<{ nik: string; nama: string }[]>([])
     const [plateOptions, setPlateOptions] = useState<string[]>([])
@@ -225,6 +233,32 @@ export function TaskBoard({ search }: TaskBoardProps) {
             // Env Supabase belum siap — atribusi jatuh ke null, papan tetap jalan.
             setUserEmail(null)
         }
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
+    // Nama pelaku lintas user; RPC hanya mengembalikan email + display_name.
+    // Kalau SQL app_users.sql belum dijalankan, fallback ke bagian sebelum @.
+    useEffect(() => {
+        let cancelled = false
+        void supabase
+            .rpc("app_user_names")
+            .then(
+                ({ data, error }) => {
+                    if (cancelled || error) return
+                    const next: Record<string, string> = {}
+                    for (const row of (data ?? []) as { email?: string; display_name?: string }[]) {
+                        const email = String(row.email ?? "").trim().toLowerCase()
+                        const name = String(row.display_name ?? "").trim()
+                        if (email && name) next[email] = name
+                    }
+                    setUserNames(next)
+                },
+                () => {
+                    // Nama tidak tersedia — tampilan memakai fallback lokal.
+                },
+            )
         return () => {
             cancelled = true
         }
@@ -753,7 +787,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                                 </div>
                                                 <span
                                                     className="flex min-w-0 items-center gap-1"
-                                                    title={`${latestAudit.label} ${latestAudit.email ?? "—"}`}
+                                                    title={`${latestAudit.label} ${displayNameFor(latestAudit.email, userNames)}`}
                                                 >
                                                     <LatestAuditIcon
                                                         className="h-3 w-3 shrink-0"
@@ -761,7 +795,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                                     />
                                                     <span className="truncate">
                                                         <span className="font-medium text-foreground">
-                                                            {shortUser(latestAudit.email)}
+                                                            {displayNameFor(latestAudit.email, userNames)}
                                                         </span>
                                                         {latestAudit.at ? ` · ${formatDateShort(latestAudit.at)}` : ""}
                                                     </span>
@@ -790,6 +824,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                     onDelete={removeTask}
                     salesOptions={salesOptions}
                     plateOptions={plateOptions}
+                    userNames={userNames}
                 />
             )}
         </div>
@@ -805,6 +840,8 @@ interface TaskSheetProps {
     salesOptions: { nik: string; nama: string }[]
     /** Daftar nopol dari tabel `equipment` */
     plateOptions: string[]
+    /** email → display_name untuk atribusi di modal. */
+    userNames: Record<string, string>
 }
 
 /**
@@ -812,7 +849,7 @@ interface TaskSheetProps {
  * state-nya selalu mulai dari data yang sedang diedit — tanpa effect
  * sinkronisasi yang rawan nilai basi.
  */
-function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions }: TaskSheetProps) {
+function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions, userNames }: TaskSheetProps) {
     const [title, setTitle] = useState(task?.title ?? "")
     const [description, setDescription] = useState(task?.description ?? "")
     const [status, setStatus] = useState<TaskStatus>(task?.status ?? "todo")
@@ -1363,22 +1400,26 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                         <div className="space-y-1 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
                             <p
                                 className="flex items-start gap-1.5"
-                                title={`Dibuat oleh ${task.created_by ?? "—"}`}
+                                title={`Dibuat oleh ${displayNameFor(task.created_by, userNames)}`}
                             >
                                 <UserPlus className="mt-0.5 h-3 w-3 shrink-0" aria-label="Dibuat oleh" />
                                 <span>
-                                    <span className="font-medium text-foreground">{task.created_by ?? "—"}</span>
+                                    <span className="font-medium text-foreground">
+                                        {displayNameFor(task.created_by, userNames)}
+                                    </span>
                                     {task.created_at ? ` · ${formatDateTimeWIB(task.created_at)}` : ""}
                                 </span>
                             </p>
                             {task.followed_up_by && (
                                 <p
                                     className="flex items-start gap-1.5"
-                                    title={`Di-FU oleh ${task.followed_up_by}`}
+                                    title={`Di-FU oleh ${displayNameFor(task.followed_up_by, userNames)}`}
                                 >
                                     <User className="mt-0.5 h-3 w-3 shrink-0" aria-label="Di-FU oleh" />
                                     <span>
-                                        <span className="font-medium text-foreground">{task.followed_up_by}</span>
+                                        <span className="font-medium text-foreground">
+                                            {displayNameFor(task.followed_up_by, userNames)}
+                                        </span>
                                         {task.followed_up_at ? ` · ${formatDateTimeWIB(task.followed_up_at)}` : ""}
                                     </span>
                                 </p>
@@ -1386,11 +1427,13 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                             {task.resolved_by && (
                                 <p
                                     className="flex items-start gap-1.5"
-                                    title={`Diselesaikan oleh ${task.resolved_by}`}
+                                    title={`Diselesaikan oleh ${displayNameFor(task.resolved_by, userNames)}`}
                                 >
                                     <UserCheck className="mt-0.5 h-3 w-3 shrink-0" aria-label="Diselesaikan oleh" />
                                     <span>
-                                        <span className="font-medium text-foreground">{task.resolved_by}</span>
+                                        <span className="font-medium text-foreground">
+                                            {displayNameFor(task.resolved_by, userNames)}
+                                        </span>
                                         {task.resolved_at ? ` · ${formatDateTimeWIB(task.resolved_at)}` : ""}
                                     </span>
                                 </p>

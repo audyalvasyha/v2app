@@ -14,6 +14,8 @@ interface SidebarProps {
   onToggleCollapsed: () => void;
   /** Menu yang boleh tampil untuk peran user aktif (lihat lib/roles.ts) */
   allowedViews: View[];
+  /** Nama tampilan user aktif — email tidak dirender di sidebar. */
+  displayName?: string | null;
   /** Drawer terbuka di layar kecil — diabaikan pada desktop. */
   mobileOpen?: boolean;
 }
@@ -60,9 +62,8 @@ function SidebarSectionLabel({ label, collapsed }: { label: string; collapsed: b
   )
 }
 
-export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, onToggleCollapsed, allowedViews, mobileOpen = false }: SidebarProps) {
+export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, onToggleCollapsed, allowedViews, displayName, mobileOpen = false }: SidebarProps) {
   const can = (view: View) => allowedViews.includes(view)
-  const [userEmail, setUserEmail] = useState<string | null>(null)
   const [accountOpen, setAccountOpen] = useState(false)
   const [fleetOpen, setFleetOpen] = useState(true)
   const fleetSubmenuActive = ["equipment", "maintenance", "ban", "monitoring"].includes(activeView)
@@ -70,17 +71,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
   useEffect(() => {
     if (fleetSubmenuActive) setFleetOpen(true)
   }, [fleetSubmenuActive])
-
-  useEffect(() => {
-    supabase.auth
-      .getSession()
-      .then(({ data }) => setUserEmail(data.session?.user.email ?? null))
-      .catch(() => setUserEmail(null))
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) =>
-      setUserEmail(session?.user.email ?? null),
-    )
-    return () => sub.subscription.unsubscribe()
-  }, [])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -115,13 +105,15 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
       {/* Hanya daftar menu yang scroll. Footer About + akun dipaku di bawah
           supaya tidak ikut naik ke tengah layar saat menu panjang. */}
       <nav className="flex-1 min-h-0 p-2 space-y-1 flex flex-col overflow-y-auto">
-        <SidebarButton
-          icon={LayoutDashboard}
-          label="Dashboard"
-          active={activeView === 'dashboard'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('dashboard')}
-        />
+        {can('dashboard') && (
+          <SidebarButton
+            icon={LayoutDashboard}
+            label="Dashboard"
+            active={activeView === 'dashboard'}
+            collapsed={collapsed}
+            onClick={() => onViewChange('dashboard')}
+          />
+        )}
 
         {can('tugas') && (
           <SidebarButton
@@ -271,8 +263,8 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
         <button
           type="button"
           onClick={() => setAccountOpen((open) => !open)}
-          title={collapsed ? (userEmail ?? "Akun") : undefined}
-          aria-label={userEmail ? `Akun ${userEmail}` : "Akun"}
+          title={collapsed ? (displayName || "Akun") : undefined}
+          aria-label={displayName ? `Akun ${displayName}` : "Akun"}
           aria-expanded={accountOpen}
           className={`flex w-full min-w-0 items-center overflow-hidden rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
             collapsed ? "justify-center px-0" : "justify-between"
@@ -280,7 +272,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
         >
           <span className={`flex items-center gap-3 ${collapsed ? "" : "min-w-0 flex-1"}`}>
             <User className="h-4 w-4 shrink-0" />
-            {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{userEmail ?? "Akun"}</span>}
+            {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{displayName || "Akun"}</span>}
           </span>
           {!collapsed && <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${accountOpen ? "rotate-180" : ""}`} />}
         </button>

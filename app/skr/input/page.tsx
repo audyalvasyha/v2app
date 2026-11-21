@@ -20,6 +20,7 @@ export default function SkrInputPage() {
     usePageTitle("Import CSV SKR")
     const [checking, setChecking] = useState(true)
     const [session, setSession] = useState<{ email?: string } | null>(null)
+    const [displayName, setDisplayName] = useState<string | null>(null)
 
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
@@ -46,6 +47,32 @@ export default function SkrInputPage() {
         )
         return () => sub.subscription.unsubscribe()
     }, [])
+
+    // Halaman ini pun menampilkan nama, bukan email akun yang login.
+    React.useEffect(() => {
+        const email = session?.email?.trim().toLowerCase()
+        if (!email) {
+            setDisplayName(null)
+            return
+        }
+        let cancelled = false
+        void (async () => {
+            try {
+                const { data, error } = await supabase
+                    .from("app_users")
+                    .select("display_name")
+                    .eq("email", email)
+                    .limit(1)
+                if (cancelled || error) return
+                setDisplayName(String(data?.[0]?.display_name ?? "").trim() || null)
+            } catch {
+                if (!cancelled) setDisplayName(null)
+            }
+        })()
+        return () => {
+            cancelled = true
+        }
+    }, [session?.email])
 
     const handleSignIn = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -184,7 +211,7 @@ export default function SkrInputPage() {
                     <h1 className="text-base font-semibold">Import Data SKR</h1>
                 </div>
                 <div className="flex items-center gap-2">
-                    <span className="hidden text-xs text-muted-foreground sm:block">{session.email}</span>
+                    <span className="hidden text-xs text-muted-foreground sm:block">{displayName || "Akun"}</span>
                     <Button variant="outline" size="sm" className="gap-1.5" onClick={handleSignOut}>
                         <LogOut className="h-3.5 w-3.5" /> Keluar
                     </Button>

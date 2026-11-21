@@ -19,6 +19,8 @@ export interface DashboardLayoutProps {
   equipmentCounts: { total: number; available: number };
   /** Menu yang boleh tampil untuk peran user aktif (lihat lib/roles.ts) */
   allowedViews: View[];
+  /** Nama tampilan user aktif, bukan email. */
+  displayName?: string | null;
   /** Pencarian global di header — akan dioper ke komponen Header */
   searchTerm: string;
   onSearchChange: (value: string) => void;
@@ -42,6 +44,7 @@ function DashboardLayoutImpl({
   onViewChange,
   equipmentCounts,
   allowedViews,
+  displayName,
   searchTerm,
   onSearchChange,
   searchPlaceholder,
@@ -134,6 +137,7 @@ function DashboardLayoutImpl({
           collapsed={mobileOpen ? false : collapsed}
           onToggleCollapsed={handleToggleCollapsed}
           allowedViews={allowedViews}
+          displayName={displayName}
           mobileOpen={mobileOpen}
         />
 
