@@ -31,8 +31,10 @@ export interface Task {
     delivery_no: string | null
     freight_order: string | null
     customer_no: string | null
-    /** Object key lampiran di Cloudflare R2; null bila tidak ada lampiran. */
+    /** Object key foto bukti komplain di Cloudflare R2; null bila tidak ada. */
     attachment_path: string | null
+    /** Object key dokumentasi penyelesaian; wajib saat status `done`. */
+    resolution_attachment_path: string | null
     /** Atribusi otomatis dari sesi Supabase */
     created_by: string | null
     followed_up_by: string | null
@@ -56,10 +58,15 @@ export interface TaskInput {
     freight_order: string | null
     customer_no: string | null
     attachment_path: string | null
+    resolution_attachment_path: string | null
 }
 
 /** Batas lampiran komplain (PNG/JPEG), sama dengan validasi form dan API. */
 export const TASK_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024
+
+/** Pesan validasi saat komplain ditandai selesai tanpa dokumentasi penyelesaian. */
+export const TASK_RESOLUTION_REQUIRED_MESSAGE =
+    "Dokumentasi penyelesaian wajib diunggah saat status Selesai."
 export const TASK_ATTACHMENT_TYPES = ["image/png", "image/jpeg"] as const
 
 export function isTaskAttachmentType(type: string): boolean {

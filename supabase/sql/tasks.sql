@@ -36,8 +36,10 @@ create table if not exists public.tasks (
   delivery_no    text,
   freight_order  text,
   customer_no    text,
-  -- Object key lampiran Cloudflare R2 (PNG/JPEG), mis. complaints/<uid>/<uuid>.jpg.
+  -- Object key foto bukti komplain Cloudflare R2 (PNG/JPEG).
   attachment_path text,
+  -- Object key dokumentasi penyelesaian; wajib diisi saat status selesai.
+  resolution_attachment_path text,
   -- Atribusi user (email dari Supabase Auth).
   created_by      text,
   followed_up_by  text,
@@ -55,6 +57,7 @@ alter table public.tasks
   add column if not exists freight_order  text,
   add column if not exists customer_no    text,
   add column if not exists attachment_path text,
+  add column if not exists resolution_attachment_path text,
   add column if not exists created_by     text,
   add column if not exists followed_up_by text,
   add column if not exists followed_up_at timestamptz,
@@ -63,6 +66,16 @@ alter table public.tasks
 
 -- Tidak ada kolom tenggat: tiket yang belum selesai 3 hari otomatis
 -- ditampilkan prioritas Tinggi, dihitung aplikasi dari created_at.
+-- Status Selesai tidak boleh lolos tanpa dokumentasi penyelesaian. Form
+-- sudah memvalidasi, tetapi constraint ini menjaga jalur tulis langsung ke
+-- tabel/API tetap aman. NOT VALID membuat baris lama tidak memblokir migrasi;
+-- constraint tetap berlaku untuk insert/update berikutnya.
+alter table public.tasks
+  drop constraint if exists tasks_done_requires_resolution;
+alter table public.tasks
+  add constraint tasks_done_requires_resolution
+  check (status <> 'done' or nullif(btrim(resolution_attachment_path), '') is not null) not valid;
+
 create index if not exists tasks_status_created_idx
   on public.tasks (status, created_at);
 drop index if exists public.tasks_status_due_idx;

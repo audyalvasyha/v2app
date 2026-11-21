@@ -106,7 +106,7 @@ export async function POST(request: Request) {
       if (!isTaskAttachmentType(contentType)) {
         return fail("Lampiran harus berupa gambar PNG atau JPEG.")
       }
-      if (!Number.isFinite(size) || size <= 0) {
+      if (!Number.isInteger(size) || size <= 0) {
         return fail("Ukuran lampiran tidak valid.")
       }
       if (size > TASK_ATTACHMENT_MAX_BYTES) {
@@ -121,6 +121,9 @@ export async function POST(request: Request) {
           Bucket: config.bucket,
           Key: key,
           ContentType: contentType,
+          // Ikut ditandatangani: R2 menolak body yang ukurannya berbeda dari
+          // ukuran yang divalidasi server, bukan sekadar percaya klaim client.
+          ContentLength: size,
         }),
         { expiresIn: 5 * 60 },
       )

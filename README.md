@@ -336,7 +336,11 @@ Bucket R2 harus mengizinkan CORS untuk upload langsung dari browser:
 method `PUT, GET, HEAD`, allowed headers `*`, dan origin domain aplikasi
 (atau `*` karena akses file tetap memakai presigned URL berumur pendek).
 File lampiran disimpan di bucket privat; browser menerima presigned URL
-dari `/api/attachments`, bukan access key R2.
+dari `/api/attachments`, bukan access key R2. Complaint Board menyimpan dua
+lampiran terpisah: foto bukti komplain dan dokumentasi penyelesaian — yang
+kedua wajib diunggah saat status diubah ke **Selesai**. Jalankan ulang
+`supabase/sql/tasks.sql` agar constraint database yang menolak status Selesai
+tanpa dokumentasi ikut terpasang.
 
 Variabel cron reminder email (Vercel Cron, `api/cron/service-reminder`):
 

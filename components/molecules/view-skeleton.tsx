@@ -286,32 +286,44 @@ export function SkrPageSkeleton() {
 /** Complaint Board: ringkasan + filter prioritas di atas empat kolom kanban. */
 export function BoardPageSkeleton() {
   return (
-    <div className="space-y-4" role="status" aria-busy="true">
+    <div className="min-w-0 space-y-4" role="status" aria-busy="true">
       <LoadingLabel text="Memuat papan tugas…" />
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <Skeleton className="h-3 w-36" />
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex gap-1.5">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-7 w-16 rounded-md" />
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
+          {/* Bungkus chip mengikuti FilterChips: border + padding + tombol h-8,
+              supaya toolbar tidak bergeser saat papan asli muncul. */}
+          <div className="inline-flex w-full max-w-full flex-wrap items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 sm:w-auto">
+            {[54, 52, 58, 56].map((width, i) => (
+              <Skeleton key={i} className="h-8 rounded-md" style={{ width }} />
             ))}
           </div>
-          <Skeleton className="h-8 w-32 rounded-md" />
+          <Skeleton className="h-8 w-full rounded-md sm:w-32" />
         </div>
       </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex flex-col rounded-xl border border-border/60 bg-background p-2.5">
+          <div key={i} className="flex min-w-0 flex-col rounded-xl border border-border/60 bg-background p-2.5">
             <div className="mb-2 flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5">
-              <Skeleton className="h-3.5 w-24" />
+              <div className="flex items-center gap-1.5">
+                <Skeleton className="h-3.5 w-3.5 rounded-sm" />
+                <Skeleton className="h-3.5 w-20" />
+              </div>
               <Skeleton className="h-3 w-4" />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               {Array.from({ length: i === 3 ? 2 : 3 }).map((_, j) => (
-                <div key={j} className="space-y-2 rounded-lg border border-border/60 bg-card p-3">
-                  <Skeleton className="h-4 w-4/5" />
+                <div key={j} className="space-y-2 rounded-lg border border-t-[3px] border-border/60 bg-card p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <Skeleton className="h-4 w-4/5" />
+                    {i < 3 && <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-sm" />}
+                  </div>
                   <Skeleton className="h-3 w-1/2" />
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-3 w-12" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2">
                     <Skeleton className="h-5 w-16 rounded-full" />
                     <Skeleton className="h-3 w-16" />
                   </div>

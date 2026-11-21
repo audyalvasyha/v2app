@@ -54,6 +54,7 @@ import {
     statusLabel,
     TASK_ATTACHMENT_MAX_BYTES,
     TASK_PRIORITIES,
+    TASK_RESOLUTION_REQUIRED_MESSAGE,
     TASK_STATUSES,
     isTaskAttachmentType,
     withTaskSchemaHint,
@@ -110,6 +111,45 @@ function attachmentMime(file: File): "image/png" | "image/jpeg" | null {
     if (ext === "png") return "image/png"
     if (ext === "jpg" || ext === "jpeg") return "image/jpeg"
     return null
+}
+
+/** Validasi + upload satu lampiran ke R2. Mengembalikan object key bila sukses. */
+async function uploadTaskAttachment(file: File): Promise<{ path: string } | { error: string }> {
+    const mime = attachmentMime(file)
+    if (!mime) return { error: "Lampiran harus berupa gambar PNG atau JPEG." }
+    if (file.size > TASK_ATTACHMENT_MAX_BYTES) {
+        return { error: "Ukuran lampiran maksimal 5 MB." }
+    }
+
+    let ticket: { uploadUrl: string; path: string; headers?: Record<string, string> }
+    try {
+        ticket = await attachmentApi({
+            action: "upload",
+            filename: file.name,
+            contentType: mime,
+            size: file.size,
+        })
+    } catch (uploadError) {
+        return {
+            error: uploadError instanceof Error ? uploadError.message : "Gagal menyiapkan upload lampiran.",
+        }
+    }
+
+    try {
+        const uploadResponse = await fetch(ticket.uploadUrl, {
+            method: "PUT",
+            headers: ticket.headers,
+            body: file,
+        })
+        if (!uploadResponse.ok) {
+            throw new Error(`Upload ke R2 gagal (${uploadResponse.status}).`)
+        }
+    } catch (uploadError) {
+        const detail = uploadError instanceof Error ? uploadError.message : "tidak diketahui"
+        return { error: `Gagal upload lampiran: ${detail}. Periksa konfigurasi CORS bucket R2.` }
+    }
+
+    return { path: ticket.path }
 }
 
 /** Nama tampilan untuk email atribusi; fallback ke bagian sebelum @. */
@@ -196,6 +236,8 @@ export function TaskBoard({ search }: TaskBoardProps) {
     const [priorityFilter, setPriorityFilter] = useState<"all" | TaskPriority>("all")
     /** Komplain yang sedang dibuka di dialog; null = dialog komplain baru */
     const [editing, setEditing] = useState<Task | null>(null)
+    /** Status awal saat dialog dibuka dari aksi "pindah ke Selesai". */
+    const [initialStatus, setInitialStatus] = useState<TaskStatus | null>(null)
     const [sheetOpen, setSheetOpen] = useState(false)
     const [dragOver, setDragOver] = useState<TaskStatus | null>(null)
     /** Email user login — dipakai untuk atribusi buat / FU / selesaikan */
@@ -207,14 +249,18 @@ export function TaskBoard({ search }: TaskBoardProps) {
     const [plateOptions, setPlateOptions] = useState<string[]>([])
     /** customer_id → customer_name, supaya kartu menampilkan nama toko. */
     const [customerNames, setCustomerNames] = useState<Record<string, string>>({})
+    /** ID yang sudah diminta; mencegah effect fetch berulang saat toko tidak ditemukan. */
+    const requestedCustomerIds = useRef<Set<string>>(new Set())
 
     const openCreate = () => {
         setEditing(null)
+        setInitialStatus(null)
         setSheetOpen(true)
     }
 
-    const openEdit = (task: Task) => {
+    const openEdit = (task: Task, status?: TaskStatus) => {
         setEditing(task)
+        setInitialStatus(status ?? null)
         setSheetOpen(true)
     }
 
@@ -356,6 +402,10 @@ export function TaskBoard({ search }: TaskBoardProps) {
 
     // ── Simpan / hapus / geser ────────────────────────────────────────
     const saveTask = async (input: TaskInput, target: Task | null): Promise<string | null> => {
+        // Lapisan kedua: jangan pernah menyimpan status Selesai tanpa dokumentasi.
+        if (input.status === "done" && !input.resolution_attachment_path) {
+            return TASK_RESOLUTION_REQUIRED_MESSAGE
+        }
         const patch = attributionPatch(target, input.status, userEmail)
 
         if (mode === "local") {
@@ -414,6 +464,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
             setTasks(next)
             writeLocalTasks(next)
             if (target.attachment_path) void removeR2Attachment(target.attachment_path)
+            if (target.resolution_attachment_path) void removeR2Attachment(target.resolution_attachment_path)
             return null
         }
 
@@ -422,6 +473,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
             if (deleteError) return deleteError.message
             setTasks((prev) => prev.filter((t) => t.id !== target.id))
             if (target.attachment_path) void removeR2Attachment(target.attachment_path)
+            if (target.resolution_attachment_path) void removeR2Attachment(target.resolution_attachment_path)
             return null
         } catch (e) {
             return e instanceof Error ? e.message : "Gagal menghapus komplain"
@@ -430,6 +482,12 @@ export function TaskBoard({ search }: TaskBoardProps) {
 
     const moveTask = async (task: Task, status: TaskStatus) => {
         if (task.status === status) return
+        // Status Selesai butuh dokumentasi. Buka dialog dengan status itu sudah
+        // terpilih supaya user bisa langsung mengunggah lampirannya.
+        if (status === "done" && !task.resolution_attachment_path) {
+            openEdit(task, "done")
+            return
+        }
         const previous = tasks
         const patch = attributionPatch(task, status, userEmail)
         const next = previous.map((t) => (t.id === task.id ? ({ ...t, status, ...patch } as Task) : t))
@@ -466,8 +524,9 @@ export function TaskBoard({ search }: TaskBoardProps) {
                     .map((task) => customerKey(task.customer_no))
                     .filter((value) => !!value && /^\d+$/.test(value)),
             ),
-        ).filter((id) => !customerNames[id])
+        ).filter((id) => !customerNames[id] && !requestedCustomerIds.current.has(id))
         if (ids.length === 0) return
+        for (const id of ids) requestedCustomerIds.current.add(id)
 
         let cancelled = false
         supabase
@@ -529,7 +588,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
     }
 
     return (
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
             {mode === "local" && (
                 <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs">
                     <Database className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
@@ -547,10 +606,10 @@ export function TaskBoard({ search }: TaskBoardProps) {
             )}
 
             {error && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
-                    <div>
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+                    <div className="min-w-0">
                         <p className="font-medium text-destructive">Gagal memuat papan komplain</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{error}</p>
+                        <p className="mt-0.5 break-words text-xs text-muted-foreground">{error}</p>
                     </div>
                     <Button variant="outline" size="sm" className="h-8 gap-1.5 bg-card" onClick={() => void load()}>
                         <RefreshCw className="h-3.5 w-3.5" /> Coba lagi
@@ -559,12 +618,12 @@ export function TaskBoard({ search }: TaskBoardProps) {
             )}
 
             {/* Kontrol papan */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs tabular-nums text-muted-foreground">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <p className="min-w-0 text-xs tabular-nums text-muted-foreground">
                     {formatNumber(visible.length)} komplain ditampilkan
                     {searchLower || priorityFilter !== "all" ? " (terfilter)" : ""}
                 </p>
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
                     <FilterChips
                         ariaLabel="Filter prioritas"
                         className="w-full sm:w-auto"
@@ -577,14 +636,14 @@ export function TaskBoard({ search }: TaskBoardProps) {
                         value={priorityFilter}
                         onChange={setPriorityFilter}
                     />
-                    <Button size="sm" className="gap-1.5" onClick={openCreate}>
+                    <Button size="sm" className="w-full gap-1.5 sm:w-auto" onClick={openCreate}>
                         <Plus className="h-4 w-4" /> Komplain baru
                     </Button>
                 </div>
             </div>
 
             {/* Papan kanban */}
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {TASK_STATUSES.map((status) => {
                     const Icon = STATUS_ICON[status.id]
                     const column = byStatus[status.id]
@@ -611,7 +670,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                 if (task) void moveTask(task, status.id)
                             }}
                             className={cn(
-                                "flex flex-col rounded-xl border border-border/60 bg-background p-2.5 transition-colors",
+                                "flex min-w-0 flex-col rounded-xl border border-border/60 bg-background p-2.5 transition-colors",
                                 dragOver === status.id && "border-primary/50 bg-primary/5",
                             )}
                         >
@@ -686,7 +745,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                                         openEdit(task)
                                                     }}
                                                     className={cn(
-                                                        "min-w-0 text-left text-sm font-medium leading-snug",
+                                                        "min-w-0 flex-1 break-words text-left text-sm font-medium leading-snug [overflow-wrap:anywhere]",
                                                         task.status === "done" && "text-muted-foreground line-through",
                                                     )}
                                                 >
@@ -709,35 +768,35 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                             </div>
 
                                             {task.description && (
-                                                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                                                <p className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-muted-foreground">
                                                     {task.description}
                                                 </p>
                                             )}
 
                                             {(task.license_plate || task.delivery_no || task.freight_order) && (
-                                                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                                                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                                                     {task.license_plate && (
-                                                        <span title="No. plat mobil">{task.license_plate}</span>
+                                                        <span className="min-w-0 break-words" title="No. plat mobil">{task.license_plate}</span>
                                                     )}
                                                     {task.delivery_no && (
-                                                        <span className="inline-flex items-center gap-1" title="No. delivery">
+                                                        <span className="inline-flex min-w-0 max-w-full items-center gap-1" title="No. delivery">
                                                             <FileText className="h-3 w-3 shrink-0" />
-                                                            {task.delivery_no}
+                                                            <span className="min-w-0 break-words [overflow-wrap:anywhere]">{task.delivery_no}</span>
                                                         </span>
                                                     )}
                                                     {task.freight_order && (
-                                                        <span className="inline-flex items-center gap-1" title="No. freight order">
+                                                        <span className="inline-flex min-w-0 max-w-full items-center gap-1" title="No. freight order">
                                                             <Hash className="h-3 w-3 shrink-0" />
-                                                            {task.freight_order}
+                                                            <span className="min-w-0 break-words [overflow-wrap:anywhere]">{task.freight_order}</span>
                                                         </span>
                                                     )}
                                                 </div>
                                             )}
 
                                             {(task.sales_name || task.customer_no) && (
-                                                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                                                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                                                     {task.sales_name && (
-                                                        <span title="Nama sales">{task.sales_name}</span>
+                                                        <span className="min-w-0 break-words" title="Nama sales">{task.sales_name}</span>
                                                     )}
                                                     {task.sales_name && task.customer_no && (
                                                         <span aria-hidden className="text-muted-foreground/60">
@@ -762,7 +821,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
 
                                             {/* Footer satu baris: prioritas + user terakhir. */}
                                             <div
-                                                className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2 text-xs leading-snug text-muted-foreground"
+                                                className="mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-border/60 pt-2 text-xs leading-snug text-muted-foreground"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
                                                 <div className="flex min-w-0 items-center gap-1.5">
@@ -779,14 +838,20 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                                         {priorityLabel(priority)}
                                                     </Badge>
                                                     {task.attachment_path && (
-                                                        <span title="Ada lampiran">
+                                                        <span title="Ada foto bukti komplain">
                                                             <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />
-                                                            <span className="sr-only">Ada lampiran</span>
+                                                            <span className="sr-only">Ada foto bukti komplain</span>
+                                                        </span>
+                                                    )}
+                                                    {task.resolution_attachment_path && (
+                                                        <span title="Ada dokumentasi penyelesaian">
+                                                            <ImageIcon className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                                            <span className="sr-only">Ada dokumentasi penyelesaian</span>
                                                         </span>
                                                     )}
                                                 </div>
                                                 <span
-                                                    className="flex min-w-0 items-center gap-1"
+                                                    className="flex min-w-0 items-center gap-1 overflow-hidden"
                                                     title={`${latestAudit.label} ${displayNameFor(latestAudit.email, userNames)}`}
                                                 >
                                                     <LatestAuditIcon
@@ -819,6 +884,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
             {sheetOpen && (
                 <TaskSheet
                     task={editing}
+                    initialStatus={initialStatus}
                     onClose={() => setSheetOpen(false)}
                     onSave={saveTask}
                     onDelete={removeTask}
@@ -833,6 +899,8 @@ export function TaskBoard({ search }: TaskBoardProps) {
 
 interface TaskSheetProps {
     task: Task | null
+    /** Status yang langsung terpilih saat dialog dibuka (mis. dari drop ke Selesai). */
+    initialStatus?: TaskStatus | null
     onClose: () => void
     onSave: (input: TaskInput, target: Task | null) => Promise<string | null>
     onDelete: (task: Task) => Promise<string | null>
@@ -849,10 +917,10 @@ interface TaskSheetProps {
  * state-nya selalu mulai dari data yang sedang diedit — tanpa effect
  * sinkronisasi yang rawan nilai basi.
  */
-function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions, userNames }: TaskSheetProps) {
+function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOptions, plateOptions, userNames }: TaskSheetProps) {
     const [title, setTitle] = useState(task?.title ?? "")
     const [description, setDescription] = useState(task?.description ?? "")
-    const [status, setStatus] = useState<TaskStatus>(task?.status ?? "todo")
+    const [status, setStatus] = useState<TaskStatus>(initialStatus ?? task?.status ?? "todo")
     const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "normal")
     const [salesName, setSalesName] = useState(task?.sales_name ?? "")
     const [licensePlate, setLicensePlate] = useState(task?.license_plate ?? "")
@@ -864,6 +932,11 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
     const [existingAttachmentUrl, setExistingAttachmentUrl] = useState<string | null>(null)
     const [removeAttachment, setRemoveAttachment] = useState(false)
     const attachmentInputRef = useRef<HTMLInputElement | null>(null)
+    const [resolutionFile, setResolutionFile] = useState<File | null>(null)
+    const [resolutionPreviewUrl, setResolutionPreviewUrl] = useState<string | null>(null)
+    const [existingResolutionUrl, setExistingResolutionUrl] = useState<string | null>(null)
+    const [removeResolution, setRemoveResolution] = useState(false)
+    const resolutionInputRef = useRef<HTMLInputElement | null>(null)
     const [isSaving, setIsSaving] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -902,6 +975,36 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
         }
     }, [task?.attachment_path])
 
+    // Preview dan signed URL untuk dokumentasi penyelesaian.
+    useEffect(() => {
+        if (!resolutionFile) {
+            setResolutionPreviewUrl(null)
+            return
+        }
+        const url = URL.createObjectURL(resolutionFile)
+        setResolutionPreviewUrl(url)
+        return () => URL.revokeObjectURL(url)
+    }, [resolutionFile])
+
+    useEffect(() => {
+        const path = task?.resolution_attachment_path
+        if (!path) {
+            setExistingResolutionUrl(null)
+            return
+        }
+        let cancelled = false
+        void attachmentApi<{ url?: string }>({ action: "view", path })
+            .then(({ url }) => {
+                if (!cancelled) setExistingResolutionUrl(url ?? null)
+            })
+            .catch(() => {
+                if (!cancelled) setExistingResolutionUrl(null)
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [task?.resolution_attachment_path])
+
     const clearAttachment = () => {
         setAttachmentFile(null)
         setRemoveAttachment(true)
@@ -927,6 +1030,33 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
         setError(null)
         setRemoveAttachment(false)
         setAttachmentFile(file)
+    }
+
+    const clearResolutionAttachment = () => {
+        setResolutionFile(null)
+        setRemoveResolution(true)
+        if (resolutionInputRef.current) resolutionInputRef.current.value = ""
+    }
+
+    const handleResolutionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0] ?? null
+        if (!file) {
+            setResolutionFile(null)
+            return
+        }
+        if (!attachmentMime(file)) {
+            setError("Dokumentasi penyelesaian harus berupa gambar PNG atau JPEG.")
+            e.target.value = ""
+            return
+        }
+        if (file.size > TASK_ATTACHMENT_MAX_BYTES) {
+            setError("Ukuran dokumentasi penyelesaian maksimal 5 MB.")
+            e.target.value = ""
+            return
+        }
+        setError(null)
+        setRemoveResolution(false)
+        setResolutionFile(file)
     }
     const [customerSuggestions, setCustomerSuggestions] = useState<Suggestion[]>([])
     const [customerSearching, setCustomerSearching] = useState(false)
@@ -1048,56 +1178,44 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
             setError("ID pelanggan harus berupa angka — pilih dari daftar yang muncul.")
             return
         }
-        setIsSaving(true)
-        setError(null)
-
         let nextAttachmentPath = task?.attachment_path ?? null
         if (removeAttachment && !attachmentFile) nextAttachmentPath = null
-        let uploadedPath: string | null = null
+        let nextResolutionPath = task?.resolution_attachment_path ?? null
+        if (removeResolution && !resolutionFile) nextResolutionPath = null
+
+        // Dokumentasi penyelesaian adalah syarat status Selesai. Lampiran lama
+        // yang masih tersimpan tetap dihitung; kalau dihapus, wajib ganti baru.
+        if (status === "done" && !resolutionFile && !nextResolutionPath) {
+            setError(TASK_RESOLUTION_REQUIRED_MESSAGE)
+            return
+        }
+
+        setIsSaving(true)
+        setError(null)
+        const uploadedPaths: string[] = []
 
         if (attachmentFile) {
-            const mime = attachmentMime(attachmentFile)
-            if (!mime) {
-                setError("Lampiran harus berupa gambar PNG atau JPEG.")
+            const result = await uploadTaskAttachment(attachmentFile)
+            if ("error" in result) {
+                setError(result.error)
                 setIsSaving(false)
                 return
             }
-            if (attachmentFile.size > TASK_ATTACHMENT_MAX_BYTES) {
-                setError("Ukuran lampiran maksimal 5 MB.")
-                setIsSaving(false)
-                return
-            }
-            let ticket: { uploadUrl: string; path: string; headers?: Record<string, string> }
-            try {
-                ticket = await attachmentApi({
-                    action: "upload",
-                    filename: attachmentFile.name,
-                    contentType: mime,
-                    size: attachmentFile.size,
-                })
-            } catch (uploadError) {
-                setError(uploadError instanceof Error ? uploadError.message : "Gagal menyiapkan upload lampiran.")
-                setIsSaving(false)
-                return
-            }
+            uploadedPaths.push(result.path)
+            nextAttachmentPath = result.path
+        }
 
-            try {
-                const uploadResponse = await fetch(ticket.uploadUrl, {
-                    method: "PUT",
-                    headers: ticket.headers,
-                    body: attachmentFile,
-                })
-                if (!uploadResponse.ok) {
-                    throw new Error(`Upload ke R2 gagal (${uploadResponse.status}).`)
-                }
-            } catch (uploadError) {
-                const detail = uploadError instanceof Error ? uploadError.message : "tidak diketahui"
-                setError(`Gagal upload lampiran: ${detail}. Periksa konfigurasi CORS bucket R2.`)
+        if (resolutionFile) {
+            const result = await uploadTaskAttachment(resolutionFile)
+            if ("error" in result) {
+                // Jangan tinggalkan lampiran komplain yang sudah terlanjur upload.
+                for (const path of uploadedPaths) void removeR2Attachment(path)
+                setError(result.error)
                 setIsSaving(false)
                 return
             }
-            uploadedPath = ticket.path
-            nextAttachmentPath = ticket.path
+            uploadedPaths.push(result.path)
+            nextResolutionPath = result.path
         }
 
         const saveError = await onSave(
@@ -1112,20 +1230,23 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                 freight_order: freightOrder.trim() || null,
                 customer_no: cleanCustomer || null,
                 attachment_path: nextAttachmentPath,
+                resolution_attachment_path: nextResolutionPath,
             },
             task,
         )
         if (saveError) {
             // Jangan tinggalkan file yatim kalau penyimpanan baris gagal.
-            if (uploadedPath) void removeR2Attachment(uploadedPath)
+            for (const path of uploadedPaths) void removeR2Attachment(path)
             setIsSaving(false)
             setError(saveError)
             return
         }
 
-        const oldPath = task?.attachment_path
-        if (oldPath && oldPath !== nextAttachmentPath) {
-            void removeR2Attachment(oldPath)
+        // Hapus objek lama yang diganti/dilepas setelah baris tersimpan.
+        for (const oldPath of [task?.attachment_path, task?.resolution_attachment_path]) {
+            if (oldPath && oldPath !== nextAttachmentPath && oldPath !== nextResolutionPath) {
+                void removeR2Attachment(oldPath)
+            }
         }
         onClose()
     }
@@ -1266,6 +1387,89 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                                         Lampiran akan dihapus saat Simpan.
                                     </p>
                                 )}
+
+                                <div className="space-y-1.5 border-t border-border/60 pt-3">
+                                    <Label htmlFor="task-resolution-attachment">
+                                        Dokumentasi penyelesaian
+                                        {status === "done" && (
+                                            <span aria-hidden className="text-destructive">*</span>
+                                        )}
+                                    </Label>
+                                    <Input
+                                        ref={resolutionInputRef}
+                                        id="task-resolution-attachment"
+                                        type="file"
+                                        accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                                        aria-required={status === "done"}
+                                        onChange={handleResolutionChange}
+                                        className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        {status === "done"
+                                            ? "Wajib diunggah saat status Selesai."
+                                            : "Opsional, jadi wajib begitu status diubah ke Selesai."}{" "}
+                                        PNG atau JPEG, maksimal 5 MB.
+                                    </p>
+                                </div>
+
+                                {resolutionPreviewUrl && resolutionFile && (
+                                    <div className="overflow-hidden rounded-md border bg-muted/30">
+                                        <img
+                                            src={resolutionPreviewUrl}
+                                            alt="Pratinjau dokumentasi penyelesaian"
+                                            className="max-h-44 w-full object-contain"
+                                        />
+                                        <div className="flex items-center justify-between gap-2 border-t px-2.5 py-1.5">
+                                            <span className="min-w-0 truncate text-xs text-muted-foreground">
+                                                {resolutionFile.name}
+                                            </span>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 shrink-0 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                onClick={clearResolutionAttachment}
+                                            >
+                                                <X className="h-3 w-3" /> Hapus
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {!resolutionFile && task?.resolution_attachment_path && !removeResolution && (
+                                    <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-2.5 py-2">
+                                        {existingResolutionUrl ? (
+                                            <a
+                                                href={existingResolutionUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground hover:underline"
+                                            >
+                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                                                <span className="truncate">Lihat dokumentasi penyelesaian</span>
+                                            </a>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" /> Dokumentasi tersimpan
+                                            </span>
+                                        )}
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 shrink-0 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                            onClick={clearResolutionAttachment}
+                                        >
+                                            <X className="h-3 w-3" /> Hapus
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {removeResolution && task?.resolution_attachment_path && !resolutionFile && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Dokumentasi penyelesaian akan dihapus saat Simpan.
+                                    </p>
+                                )}
                             </section>
 
                             <section className="space-y-3 border-t pt-5">
@@ -1359,7 +1563,7 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                     {task && (
                         <div className="space-y-1.5">
                             <Label>Status</Label>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid min-w-0 grid-cols-2 gap-2">
                                 {TASK_STATUSES.map((s) => {
                                     const Icon = STATUS_ICON[s.id]
                                     return (
@@ -1370,7 +1574,7 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                                             variant="outline"
                                             aria-pressed={status === s.id}
                                             className={cn(
-                                                "justify-start gap-1.5",
+                                                "h-auto min-h-8 min-w-0 justify-start gap-1.5 whitespace-normal px-2 py-1.5 text-left text-xs leading-tight [overflow-wrap:anywhere]",
                                                 status === s.id
                                                     ? STATUS_BUTTON_TONE[s.id].active
                                                     : STATUS_BUTTON_TONE[s.id].idle,
@@ -1383,6 +1587,11 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                                     )
                                 })}
                             </div>
+                            {status === "done" && !resolutionFile && (!task?.resolution_attachment_path || removeResolution) && (
+                                <p className="text-xs text-destructive">
+                                    Dokumentasi penyelesaian wajib diunggah di bagian Lampiran.
+                                </p>
+                            )}
                         </div>
                     )}
 
@@ -1446,12 +1655,12 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                     </div>
 
                     {error && (
-                        <p aria-live="polite" className="px-5 pb-2 text-xs text-destructive">
+                        <p aria-live="polite" className="min-w-0 break-words px-5 pb-2 text-xs text-destructive">
                             {error}
                         </p>
                     )}
 
-                    <div className="flex items-center justify-between gap-2 border-t bg-muted/20 px-5 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/20 px-5 py-3">
                         {task ? (
                             <Button
                                 type="button"
@@ -1465,7 +1674,7 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                         ) : (
                             <span />
                         )}
-                        <div className="flex gap-2">
+                        <div className="ml-auto flex gap-2">
                             <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
                                 Batal
                             </Button>
