@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
     Ban,
     CheckCircle2,
@@ -11,11 +11,14 @@ import {
     FileText,
     Flag,
     Hash,
+    ImageIcon,
+    Paperclip,
     Plus,
     RefreshCw,
     User,
     UserCheck,
     UserPlus,
+    X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -49,8 +52,10 @@ import {
     shortUser,
     sortTasks,
     statusLabel,
+    TASK_ATTACHMENT_MAX_BYTES,
     TASK_PRIORITIES,
     TASK_STATUSES,
+    isTaskAttachmentType,
     withTaskSchemaHint,
     writeLocalTasks,
     type Task,
@@ -65,6 +70,46 @@ const STATUS_ICON: Record<TaskStatus, React.ComponentType<{ className?: string }
     progress: Clock,
     blocked: Ban,
     done: CheckCircle2,
+}
+
+/** Request ke route server R2 dengan access token Supabase user aktif. */
+async function attachmentApi<T>(body: Record<string, unknown>): Promise<T> {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) throw new Error("Sesi tidak ditemukan. Silakan masuk ulang.")
+
+    const response = await fetch("/api/attachments", {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+    })
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null
+    if (!response.ok) {
+        throw new Error(payload?.error || `Permintaan lampiran gagal (${response.status}).`)
+    }
+    return payload as T
+}
+
+/** Hapus object R2; kegagalan cleanup tidak boleh menggagalkan simpan/hapus task. */
+async function removeR2Attachment(path: string | null | undefined): Promise<void> {
+    if (!path) return
+    try {
+        await attachmentApi({ action: "delete", path })
+    } catch {
+        // Objek yatim lebih baik daripada memblokir operasi utama user.
+    }
+}
+
+/** MIME yang didukung untuk lampiran; fallback dari ekstensi bila browser kosong. */
+function attachmentMime(file: File): "image/png" | "image/jpeg" | null {
+    if (isTaskAttachmentType(file.type)) return file.type as "image/png" | "image/jpeg"
+    const ext = file.name.split(".").pop()?.toLowerCase()
+    if (ext === "png") return "image/png"
+    if (ext === "jpg" || ext === "jpeg") return "image/jpeg"
+    return null
 }
 
 /** Normalisasi customer_id: buang spasi dan nol depan agar lookup konsisten. */
@@ -143,7 +188,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [priorityFilter, setPriorityFilter] = useState<"all" | TaskPriority>("all")
-    /** Tugas yang sedang dibuka di dialog; null = dialog komplain baru */
+    /** Komplain yang sedang dibuka di dialog; null = dialog komplain baru */
     const [editing, setEditing] = useState<Task | null>(null)
     const [sheetOpen, setSheetOpen] = useState(false)
     const [dragOver, setDragOver] = useState<TaskStatus | null>(null)
@@ -334,6 +379,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
             const next = tasks.filter((t) => t.id !== target.id)
             setTasks(next)
             writeLocalTasks(next)
+            if (target.attachment_path) void removeR2Attachment(target.attachment_path)
             return null
         }
 
@@ -341,6 +387,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
             const { error: deleteError } = await supabase.from("tasks").delete().eq("id", target.id)
             if (deleteError) return deleteError.message
             setTasks((prev) => prev.filter((t) => t.id !== target.id))
+            if (target.attachment_path) void removeR2Attachment(target.attachment_path)
             return null
         } catch (e) {
             return e instanceof Error ? e.message : "Gagal menghapus komplain"
@@ -684,18 +731,26 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                                 className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2 text-xs leading-snug text-muted-foreground"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
-                                                <Badge
-                                                    variant="outline"
-                                                    title={
-                                                        escalated
-                                                            ? `Otomatis Tinggi — belum selesai ${ESCALATION_DAYS} hari+`
-                                                            : "Prioritas"
-                                                    }
-                                                    className={cn("shrink-0 gap-1 px-1.5 py-0 text-xs", priorityClass(priority))}
-                                                >
-                                                    <Flag className="h-2.5 w-2.5" />
-                                                    {priorityLabel(priority)}
-                                                </Badge>
+                                                <div className="flex min-w-0 items-center gap-1.5">
+                                                    <Badge
+                                                        variant="outline"
+                                                        title={
+                                                            escalated
+                                                                ? `Otomatis Tinggi — belum selesai ${ESCALATION_DAYS} hari+`
+                                                                : "Prioritas"
+                                                        }
+                                                        className={cn("shrink-0 gap-1 px-1.5 py-0 text-xs", priorityClass(priority))}
+                                                    >
+                                                        <Flag className="h-2.5 w-2.5" />
+                                                        {priorityLabel(priority)}
+                                                    </Badge>
+                                                    {task.attachment_path && (
+                                                        <span title="Ada lampiran">
+                                                            <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                                            <span className="sr-only">Ada lampiran</span>
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <span
                                                     className="flex min-w-0 items-center gap-1"
                                                     title={`${latestAudit.label} ${latestAudit.email ?? "—"}`}
@@ -767,12 +822,75 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
     const [deliveryNo, setDeliveryNo] = useState(task?.delivery_no ?? "")
     const [freightOrder, setFreightOrder] = useState(task?.freight_order ?? "")
     const [customerNo, setCustomerNo] = useState(task?.customer_no ?? "")
+    const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
+    const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(null)
+    const [existingAttachmentUrl, setExistingAttachmentUrl] = useState<string | null>(null)
+    const [removeAttachment, setRemoveAttachment] = useState(false)
+    const attachmentInputRef = useRef<HTMLInputElement | null>(null)
     const [isSaving, setIsSaving] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     /** Pelanggan yang dipilih/terdeteksi — nama toko hanya ditampilkan, bukan input. */
     const [pickedCustomer, setPickedCustomer] = useState<{ id: string; name: string } | null>(null)
+
+    // Preview lokal untuk file baru; URL dibersihkan saat file diganti/ditutup.
+    useEffect(() => {
+        if (!attachmentFile) {
+            setAttachmentPreviewUrl(null)
+            return
+        }
+        const url = URL.createObjectURL(attachmentFile)
+        setAttachmentPreviewUrl(url)
+        return () => URL.revokeObjectURL(url)
+    }, [attachmentFile])
+
+    // Lampiran lama ada di bucket privat, jadi tampilkan lewat signed URL.
+    useEffect(() => {
+        const path = task?.attachment_path
+        if (!path) {
+            setExistingAttachmentUrl(null)
+            return
+        }
+        let cancelled = false
+        void attachmentApi<{ url?: string }>({ action: "view", path })
+            .then(({ url }) => {
+                if (!cancelled) setExistingAttachmentUrl(url ?? null)
+            })
+            .catch(() => {
+                if (!cancelled) setExistingAttachmentUrl(null)
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [task?.attachment_path])
+
+    const clearAttachment = () => {
+        setAttachmentFile(null)
+        setRemoveAttachment(true)
+        if (attachmentInputRef.current) attachmentInputRef.current.value = ""
+    }
+
+    const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0] ?? null
+        if (!file) {
+            setAttachmentFile(null)
+            return
+        }
+        if (!attachmentMime(file)) {
+            setError("Lampiran harus berupa gambar PNG atau JPEG.")
+            e.target.value = ""
+            return
+        }
+        if (file.size > TASK_ATTACHMENT_MAX_BYTES) {
+            setError("Ukuran lampiran maksimal 5 MB.")
+            e.target.value = ""
+            return
+        }
+        setError(null)
+        setRemoveAttachment(false)
+        setAttachmentFile(file)
+    }
     const [customerSuggestions, setCustomerSuggestions] = useState<Suggestion[]>([])
     const [customerSearching, setCustomerSearching] = useState(false)
     const [customerSearchFailed, setCustomerSearchFailed] = useState(false)
@@ -895,6 +1013,56 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
         }
         setIsSaving(true)
         setError(null)
+
+        let nextAttachmentPath = task?.attachment_path ?? null
+        if (removeAttachment && !attachmentFile) nextAttachmentPath = null
+        let uploadedPath: string | null = null
+
+        if (attachmentFile) {
+            const mime = attachmentMime(attachmentFile)
+            if (!mime) {
+                setError("Lampiran harus berupa gambar PNG atau JPEG.")
+                setIsSaving(false)
+                return
+            }
+            if (attachmentFile.size > TASK_ATTACHMENT_MAX_BYTES) {
+                setError("Ukuran lampiran maksimal 5 MB.")
+                setIsSaving(false)
+                return
+            }
+            let ticket: { uploadUrl: string; path: string; headers?: Record<string, string> }
+            try {
+                ticket = await attachmentApi({
+                    action: "upload",
+                    filename: attachmentFile.name,
+                    contentType: mime,
+                    size: attachmentFile.size,
+                })
+            } catch (uploadError) {
+                setError(uploadError instanceof Error ? uploadError.message : "Gagal menyiapkan upload lampiran.")
+                setIsSaving(false)
+                return
+            }
+
+            try {
+                const uploadResponse = await fetch(ticket.uploadUrl, {
+                    method: "PUT",
+                    headers: ticket.headers,
+                    body: attachmentFile,
+                })
+                if (!uploadResponse.ok) {
+                    throw new Error(`Upload ke R2 gagal (${uploadResponse.status}).`)
+                }
+            } catch (uploadError) {
+                const detail = uploadError instanceof Error ? uploadError.message : "tidak diketahui"
+                setError(`Gagal upload lampiran: ${detail}. Periksa konfigurasi CORS bucket R2.`)
+                setIsSaving(false)
+                return
+            }
+            uploadedPath = ticket.path
+            nextAttachmentPath = ticket.path
+        }
+
         const saveError = await onSave(
             {
                 title: cleanTitle,
@@ -906,12 +1074,23 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                 delivery_no: deliveryNo.trim() || null,
                 freight_order: freightOrder.trim() || null,
                 customer_no: cleanCustomer || null,
+                attachment_path: nextAttachmentPath,
             },
             task,
         )
-        setIsSaving(false)
-        if (saveError) setError(saveError)
-        else onClose()
+        if (saveError) {
+            // Jangan tinggalkan file yatim kalau penyimpanan baris gagal.
+            if (uploadedPath) void removeR2Attachment(uploadedPath)
+            setIsSaving(false)
+            setError(saveError)
+            return
+        }
+
+        const oldPath = task?.attachment_path
+        if (oldPath && oldPath !== nextAttachmentPath) {
+            void removeR2Attachment(oldPath)
+        }
+        onClose()
     }
 
     const handleDelete = async () => {
@@ -974,6 +1153,82 @@ function TaskSheet({ task, onClose, onSave, onDelete, salesOptions, plateOptions
                                         </p>
                                     )}
                                 </div>
+                            </section>
+
+                            <section className="space-y-3 border-t pt-5">
+                                <h3 className="text-xs font-medium text-muted-foreground">Lampiran</h3>
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="task-attachment">Foto bukti komplain</Label>
+                                    <Input
+                                        ref={attachmentInputRef}
+                                        id="task-attachment"
+                                        type="file"
+                                        accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                                        onChange={handleAttachmentChange}
+                                        className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
+                                    />
+                                    <p className="text-xs text-muted-foreground">PNG atau JPEG, maksimal 5 MB.</p>
+                                </div>
+
+                                {attachmentPreviewUrl && attachmentFile && (
+                                    <div className="overflow-hidden rounded-md border bg-muted/30">
+                                        {/* Preview lokal sebelum file diunggah saat Simpan. */}
+                                        <img
+                                            src={attachmentPreviewUrl}
+                                            alt="Pratinjau lampiran"
+                                            className="max-h-44 w-full object-contain"
+                                        />
+                                        <div className="flex items-center justify-between gap-2 border-t px-2.5 py-1.5">
+                                            <span className="min-w-0 truncate text-xs text-muted-foreground">
+                                                {attachmentFile.name}
+                                            </span>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 shrink-0 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                onClick={clearAttachment}
+                                            >
+                                                <X className="h-3 w-3" /> Hapus
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {!attachmentFile && task?.attachment_path && !removeAttachment && (
+                                    <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-2.5 py-2">
+                                        {existingAttachmentUrl ? (
+                                            <a
+                                                href={existingAttachmentUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground hover:underline"
+                                            >
+                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                                                <span className="truncate">Lihat lampiran</span>
+                                            </a>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" /> Lampiran tersimpan
+                                            </span>
+                                        )}
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 shrink-0 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                            onClick={clearAttachment}
+                                        >
+                                            <X className="h-3 w-3" /> Hapus
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {removeAttachment && task?.attachment_path && !attachmentFile && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Lampiran akan dihapus saat Simpan.
+                                    </p>
+                                )}
                             </section>
 
                             <section className="space-y-3 border-t pt-5">

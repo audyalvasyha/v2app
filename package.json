@@ -10,6 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1175.0",
+    "@aws-sdk/s3-request-presigner": "^3.1175.0",
     "@radix-ui/react-dialog": "1.1.4",
     "@radix-ui/react-label": "2.1.1",
     "@radix-ui/react-popover": "1.1.4",

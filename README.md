@@ -320,7 +320,20 @@ GOOGLE_API_KEY=<gemini-api-key>
 # tidak tersedia untuk key baru (balas 404). Default memakai alias
 # gemini-flash-latest yang selalu menunjuk ke flash terbaru.
 GEMINI_MODEL=gemini-flash-latest
+
+# Cloudflare R2 — lampiran Complaint Board. Server-only, JANGAN pakai prefix
+# NEXT_PUBLIC_. Buat bucket privat + API token R2 dengan izin Object Read & Write.
+R2_ACCOUNT_ID=<cloudflare-account-id>
+R2_ACCESS_KEY_ID=<r2-access-key-id>
+R2_SECRET_ACCESS_KEY=<r2-secret-access-key>
+R2_BUCKET_NAME=<bucket-name>
 ```
+
+Bucket R2 harus mengizinkan CORS untuk upload langsung dari browser:
+method `PUT, GET, HEAD`, allowed headers `*`, dan origin domain aplikasi
+(atau `*` karena akses file tetap memakai presigned URL berumur pendek).
+File lampiran disimpan di bucket privat; browser menerima presigned URL
+dari `/api/attachments`, bukan access key R2.
 
 Variabel cron reminder email (Vercel Cron, `api/cron/service-reminder`):
 

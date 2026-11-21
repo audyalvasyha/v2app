@@ -911,7 +911,7 @@ function DashboardContent() {
   // Konfigurasi Header Dinamis
   const headerInfo: Record<View, { title: string; desc: string }> = {
     dashboard: { title: 'Dashboard', desc: 'Ringkasan operasional armada.' },
-    tugas: { title: 'Tugas', desc: 'Follow-up komplain pengiriman.' },
+    tugas: { title: 'Complaint Board', desc: 'Follow-up komplain pengiriman.' },
     equipment: { title: 'Daftar Equipment', desc: 'Aset armada dan riwayat perawatan.' },
     maintenance: { title: 'Semua Riwayat Maintenance', desc: 'Riwayat perbaikan seluruh unit.' },
     monitoring: { title: 'Monitoring Status Servis', desc: 'Jadwal servis tiap unit.' },

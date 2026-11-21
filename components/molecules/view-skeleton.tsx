@@ -283,7 +283,7 @@ export function SkrPageSkeleton() {
   )
 }
 
-/** Tugas: ringkasan + filter prioritas di atas empat kolom kanban. */
+/** Complaint Board: ringkasan + filter prioritas di atas empat kolom kanban. */
 export function BoardPageSkeleton() {
   return (
     <div className="space-y-4" role="status" aria-busy="true">

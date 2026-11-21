@@ -126,7 +126,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
         {can('tugas') && (
           <SidebarButton
             icon={ListChecks}
-            label="Tugas"
+            label="Complaint Board"
             active={activeView === 'tugas'}
             collapsed={collapsed}
             onClick={() => onViewChange('tugas')}

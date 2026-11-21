@@ -6,7 +6,7 @@
 --  membuat user. Tabel ini hanya menyimpan PERAN per email:
 --
 --    admin     → semua menu
---    terbatas  → Dashboard, Tugas, SKR, Pengiriman, Cuaca, Traffic,
+--    terbatas  → Dashboard, Complaint Board, SKR, Pengiriman, Cuaca, Traffic,
 --                About (tanpa Equipment, Histories, Monitoring,
 --                Analisa Ban, dan Analisa AI)
 --

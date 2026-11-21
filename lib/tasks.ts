@@ -1,5 +1,5 @@
 /**
- * Model & aturan papan komplain pengiriman (menu Tugas).
+ * Model & aturan papan komplain pengiriman (menu Complaint Board).
  *
  * Satu baris = satu komplain kekurangan dari toko, mis. "kurang turun 1 box
  * Mie Sedap Soto". Papan memantau progresnya: baru masuk → sedang di-FU →
@@ -31,6 +31,8 @@ export interface Task {
     delivery_no: string | null
     freight_order: string | null
     customer_no: string | null
+    /** Object key lampiran di Cloudflare R2; null bila tidak ada lampiran. */
+    attachment_path: string | null
     /** Atribusi otomatis dari sesi Supabase */
     created_by: string | null
     followed_up_by: string | null
@@ -53,6 +55,15 @@ export interface TaskInput {
     delivery_no: string | null
     freight_order: string | null
     customer_no: string | null
+    attachment_path: string | null
+}
+
+/** Batas lampiran komplain (PNG/JPEG), sama dengan validasi form dan API. */
+export const TASK_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024
+export const TASK_ATTACHMENT_TYPES = ["image/png", "image/jpeg"] as const
+
+export function isTaskAttachmentType(type: string): boolean {
+    return (TASK_ATTACHMENT_TYPES as readonly string[]).includes(type)
 }
 
 export const TASK_STATUSES: { id: TaskStatus; label: string }[] = [

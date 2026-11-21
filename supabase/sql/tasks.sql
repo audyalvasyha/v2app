@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
---  tasks — papan follow-up komplain pengiriman (menu Tugas)
+--  tasks — papan follow-up komplain pengiriman (menu Complaint Board)
 --
 --  Satu baris = satu komplain kekurangan dari toko. Kolom identitas
 --  pengiriman (sales, plat, delivery, freight order, pelanggan) dipakai
@@ -12,7 +12,7 @@
 --  DIBACA & DITULIS OLEH: browser dengan sesi user terdaftar (menu ada
 --  di balik AuthGate). RLS: hanya role `authenticated`.
 --
---  Jika script ini BELUM dijalankan: menu Tugas tetap terbuka dalam
+--  Jika script ini BELUM dijalankan: menu Complaint Board tetap terbuka dalam
 --  mode lokal (localStorage browser itu) dan UI menampilkan penanda.
 --
 --  Aman diulang, termasuk pada tabel versi pertama (kolom baru
@@ -36,6 +36,8 @@ create table if not exists public.tasks (
   delivery_no    text,
   freight_order  text,
   customer_no    text,
+  -- Object key lampiran Cloudflare R2 (PNG/JPEG), mis. complaints/<uid>/<uuid>.jpg.
+  attachment_path text,
   -- Atribusi user (email dari Supabase Auth).
   created_by      text,
   followed_up_by  text,
@@ -52,6 +54,7 @@ alter table public.tasks
   add column if not exists delivery_no    text,
   add column if not exists freight_order  text,
   add column if not exists customer_no    text,
+  add column if not exists attachment_path text,
   add column if not exists created_by     text,
   add column if not exists followed_up_by text,
   add column if not exists followed_up_at timestamptz,
@@ -84,6 +87,11 @@ create policy tasks_read   on public.tasks for select to authenticated using (tr
 create policy tasks_insert on public.tasks for insert to authenticated with check (true);
 create policy tasks_update on public.tasks for update to authenticated using (true) with check (true);
 create policy tasks_delete on public.tasks for delete to authenticated using (true);
+
+-- ── Lampiran (Cloudflare R2) ────────────────────────────────────
+-- File tidak disimpan di Supabase Storage. Browser upload langsung ke
+-- bucket privat R2 lewat presigned URL dari /api/attachments; kolom di
+-- atas hanya menyimpan object key-nya.
 
 -- ═══════════════════════════════════════════════════════════════
 --  Verifikasi
