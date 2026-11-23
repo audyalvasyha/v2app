@@ -234,6 +234,8 @@ export function TaskBoard({ search }: TaskBoardProps) {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [priorityFilter, setPriorityFilter] = useState<"all" | TaskPriority>("all")
+    /** Tab status yang sedang dibuka di mobile; desktop tetap menampilkan semua kolom. */
+    const [mobileStatus, setMobileStatus] = useState<TaskStatus>("todo")
     /** Komplain yang sedang dibuka di dialog; null = dialog komplain baru */
     const [editing, setEditing] = useState<Task | null>(null)
     /** Status awal saat dialog dibuka dari aksi "pindah ke Selesai". */
@@ -642,7 +644,41 @@ export function TaskBoard({ search }: TaskBoardProps) {
                 </div>
             </div>
 
-            {/* Papan kanban */}
+            {/* Navigasi status khusus mobile: satu kolom per tab. */}
+            <div
+                role="tablist"
+                aria-label="Kategori komplain"
+                className="grid grid-cols-4 gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 md:hidden"
+            >
+                {TASK_STATUSES.map((status) => {
+                    const Icon = STATUS_ICON[status.id]
+                    const active = mobileStatus === status.id
+                    return (
+                        <button
+                            key={status.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            aria-controls={`task-panel-${status.id}`}
+                            onClick={() => setMobileStatus(status.id)}
+                            className={cn(
+                                "flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] font-medium leading-tight transition-colors",
+                                active
+                                    ? "bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground",
+                            )}
+                        >
+                            <Icon className={cn("h-3 w-3 shrink-0", STATUS_HEADER_TONE[status.id].text)} />
+                            <span className="w-full text-center">{status.label}</span>
+                            <span className="text-[10px] tabular-nums opacity-60">
+                                {byStatus[status.id].length}
+                            </span>
+                        </button>
+                    )
+                })}
+            </div>
+
+            {/* Papan kanban — semua kolom hanya di desktop; mobile mengikuti tab. */}
             <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {TASK_STATUSES.map((status) => {
                     const Icon = STATUS_ICON[status.id]
@@ -650,6 +686,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                     return (
                         <section
                             key={status.id}
+                            id={`task-panel-${status.id}`}
                             aria-label={`Kolom ${status.label}`}
                             onDragOver={(e) => {
                                 e.preventDefault()
@@ -671,6 +708,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                             }}
                             className={cn(
                                 "flex min-w-0 flex-col rounded-xl border border-border/60 bg-background p-2.5 transition-colors",
+                                mobileStatus !== status.id && "hidden md:flex",
                                 dragOver === status.id && "border-primary/50 bg-primary/5",
                             )}
                         >

@@ -7,14 +7,6 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,10 +14,8 @@ import { StatTile } from "@/components/molecules/stat-tile";
 import { WeatherBanner } from "@/components/organisms/weather-banner";
 import {
   compactRupiah,
-  formatDateMedium,
   formatNumber,
   formatRupiah,
-  relativeDayLabel,
   startOfZonedDay,
   startOfZonedDayMonthsAgo,
   APP_TIMEZONE,
@@ -56,7 +46,6 @@ import {
   ListChecks,
   MessageSquareText,
   PackageCheck,
-  PieChart,
   ReceiptText,
   ShieldCheck,
   TrendingUp,
@@ -96,12 +85,12 @@ const DAY_MS = 86_400_000;
 function DashboardHeader({ onNavigate }: { onNavigate?: (view: View) => void }) {
   const today = useMemo(() => new Date(), []);
   return (
-    <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
       <div className="min-w-0 space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight lg:text-[1.75rem]">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl lg:text-[1.75rem]">
           Dashboard
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground sm:text-sm">
           Ringkasan operasional armada ·{" "}
           {today.toLocaleDateString("id-ID", {
             weekday: "long",
@@ -147,7 +136,7 @@ function DashboardViewImpl({
   onNavigate,
 }: DashboardViewProps) {
   return (
-    <div className="flex flex-col gap-4 pb-2 lg:gap-5">
+    <div className="flex flex-col gap-3 pb-2 sm:gap-4 lg:gap-5">
       <DashboardHeader onNavigate={onNavigate} />
       {/* Cuaca punya fetch sendiri; tampil lebih dulu tanpa menunggu armada. */}
       <WeatherBanner onOpenDetail={() => onNavigate?.("weather")} />
@@ -172,10 +161,10 @@ function DashboardViewImpl({
 // Skeleton isi dashboard — kepala dan cuaca sudah tampil nyata di atasnya.
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-4 lg:gap-5" role="status" aria-busy="true">
+    <div className="flex flex-col gap-3 sm:gap-4 lg:gap-5" role="status" aria-busy="true">
       {/* Kesiapan armada */}
-      <div className="rounded-xl border bg-card p-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="rounded-xl border bg-card p-4 sm:p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3 sm:gap-4">
           <div className="space-y-2">
             <Skeleton className="h-3 w-24" />
             <Skeleton className="h-9 w-56" />
@@ -183,16 +172,19 @@ function DashboardSkeleton() {
           </div>
           <Skeleton className="h-2.5 w-full max-w-xl" />
         </div>
-        <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 w-full rounded-lg" />
+            <Skeleton
+              key={i}
+              className={`h-16 w-full rounded-lg sm:h-20 ${i === 2 ? "col-span-2 sm:col-span-1" : ""}`}
+            />
           ))}
         </div>
       </div>
       {/* KPI */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-xl border bg-card px-4 py-3.5">
+          <div key={i} className="rounded-xl border bg-card px-3 py-3 sm:px-4 sm:py-3.5">
             <Skeleton className="h-3 w-28" />
             <Skeleton className="mt-3 h-6 w-24" />
             <Skeleton className="mt-2 h-3 w-32" />
@@ -200,14 +192,14 @@ function DashboardSkeleton() {
         ))}
       </div>
       {/* Tren + pengiriman */}
-      <div className="grid gap-4 lg:grid-cols-12">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-12">
         <Card className="lg:col-span-8">
           <CardHeader>
             <Skeleton className="h-5 w-44" />
             <Skeleton className="h-3 w-60" />
           </CardHeader>
           <CardContent>
-            <Skeleton className="h-[250px] w-full rounded-md" />
+            <Skeleton className="h-[190px] w-full rounded-md sm:h-[220px]" />
           </CardContent>
         </Card>
         <Card className="lg:col-span-4">
@@ -227,21 +219,9 @@ function DashboardSkeleton() {
           </CardContent>
         </Card>
       </div>
-      {/* Komposisi + tindakan */}
-      <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="lg:col-span-5">
-          <CardHeader>
-            <Skeleton className="h-5 w-44" />
-            <Skeleton className="h-3 w-64" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Skeleton className="h-2.5 w-full" />
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-5 w-full" />
-            ))}
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-7">
+      {/* Tindakan + SKR */}
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-12">
+        <Card className="lg:col-span-7 xl:col-span-8">
           <CardHeader>
             <Skeleton className="h-5 w-56" />
             <Skeleton className="h-3 w-64" />
@@ -252,35 +232,10 @@ function DashboardSkeleton() {
             ))}
           </CardContent>
         </Card>
-      </div>
-      {/* Peringkat */}
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-5 w-52" />
-          <Skeleton className="h-3 w-72" />
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-10 lg:grid-cols-2 lg:gap-8">
-            <Skeleton className="h-[264px] w-full rounded-md" />
-            <Skeleton className="h-[264px] w-full rounded-md" />
-          </div>
-        </CardContent>
-      </Card>
-      {/* Riwayat + SKR */}
-      <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="lg:col-span-8">
-          <CardHeader>
-            <Skeleton className="h-5 w-52" />
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-4">
+        <Card className="lg:col-span-5 xl:col-span-4">
           <CardHeader>
             <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-3 w-48" />
           </CardHeader>
           <CardContent className="space-y-3">
             <Skeleton className="h-8 w-20" />
@@ -290,6 +245,16 @@ function DashboardSkeleton() {
           </CardContent>
         </Card>
       </div>
+      {/* Peringkat */}
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-52" />
+          <Skeleton className="h-3 w-72" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-[130px] w-full rounded-md sm:h-[150px]" />
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -360,6 +325,7 @@ function HeroSignal({
   icon,
   tone = "neutral",
   onClick,
+  className,
 }: {
   label: string;
   value: string;
@@ -367,6 +333,7 @@ function HeroSignal({
   icon: React.ReactNode;
   tone?: "danger" | "warning" | "neutral";
   onClick?: () => void;
+  className?: string;
 }) {
   const valueTone =
     tone === "danger"
@@ -379,21 +346,24 @@ function HeroSignal({
     <button
       type="button"
       onClick={onClick}
-      className="group rounded-lg border border-border/70 bg-background/60 p-3 text-left transition-colors hover:border-primary/30 hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      className={cn(
+        "group rounded-lg border border-border/70 bg-background/60 p-2.5 text-left transition-colors hover:border-primary/30 hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 sm:p-3",
+        className,
+      )}
     >
-      <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground [&_svg]:h-3 [&_svg]:w-3 sm:gap-1.5 sm:text-xs sm:[&_svg]:h-3.5 sm:[&_svg]:w-3.5">
         {icon}
         <span className="truncate">{label}</span>
       </span>
       <span
         className={cn(
-          "mt-2 block text-lg font-semibold leading-none tabular-nums",
+          "mt-1.5 block text-base font-semibold leading-none tabular-nums sm:mt-2 sm:text-lg",
           valueTone,
         )}
       >
         {value}
       </span>
-      <span className="mt-1 block truncate text-[11px] text-muted-foreground">
+      <span className="mt-0.5 block truncate text-[10px] text-muted-foreground sm:mt-1 sm:text-[11px]">
         {hint}
       </span>
     </button>
@@ -448,13 +418,6 @@ function DashboardContent({
 
     const byDay3m = new Map<string, number>();
     const byUnit6m = new Map<string, { totalCost: number; count: number }>();
-    // Komposisi biaya per jenis perbaikan (6 bulan) — nama dinormalisasi
-    // (huruf kecil + spasi tunggal) supaya "Ganti Oli" dan "ganti  oli"
-    // tidak tercatat sebagai dua kategori berbeda.
-    const byCategory6m = new Map<string, { label: string; total: number; count: number }>();
-    // cost6m khusus kategori (hanya entri bernama); total biaya 6 bulan
-    // dihitung terpisah supaya KPI tidak kehilangan entri tanpa uraian.
-    let cost6m = 0;
     let cost6mTotal = 0;
     let entries6m = 0;
 
@@ -493,18 +456,6 @@ function DashboardContent({
       if (time >= cutoff6m.getTime()) {
         cost6mTotal += cost;
         entries6m += 1;
-        const rawName = String(h.nama_barang_atau_jasa ?? "").trim();
-        if (rawName) {
-          const key = rawName.toLowerCase().replace(/\s+/g, " ");
-          cost6m += cost;
-          const prevCat = byCategory6m.get(key);
-          if (prevCat) {
-            prevCat.total += cost;
-            prevCat.count += 1;
-          } else {
-            byCategory6m.set(key, { label: rawName, total: cost, count: 1 });
-          }
-        }
       }
     }
 
@@ -620,12 +571,6 @@ function DashboardContent({
         outMenunggu += 1;
       }
     }
-    // Komposisi kategori biaya terbesar.
-    const composition = Array.from(byCategory6m.values())
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 5)
-      .map((c) => ({ ...c, share: cost6m > 0 ? (c.total / cost6m) * 100 : 0 }));
-
     // ── SKR: sisa kiriman yang belum tuntas ──
     let skrQty = 0;
     let skrNilai = 0;
@@ -639,7 +584,6 @@ function DashboardContent({
     }
 
     const totalUnits = equipments.length;
-    const entryCount = histories.length;
 
     return {
       trend,
@@ -670,14 +614,8 @@ function DashboardContent({
       outTotal: outbounds.length,
       outAverageDuration: outDurationCount > 0 ? outDurationTotal / outDurationCount : null,
       outLongestDuration: outDurationMax > 0 ? outDurationMax : null,
-      composition,
-      cost6m,
       cost6mTotal,
       entries6m,
-      compositionTopShare:
-        cost6m > 0
-          ? (composition.reduce((s, c) => s + c.total, 0) / cost6m) * 100
-          : 0,
       skrDocs: skrDetails.length,
       skrQty,
       skrNilai,
@@ -685,25 +623,17 @@ function DashboardContent({
       overdueCount,
       warningCount,
       withoutLog,
-      entryCount,
-      recent: [...histories]
-        .sort(
-          (a, b) =>
-            new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime(),
-        )
-        .slice(0, 6),
-      averageEntry: entryCount > 0 ? totalCost / entryCount : 0,
     };
   }, [equipments, histories, serviceLogs, outbounds, skrDetails, today]);
 
   return (
-    <div className="flex flex-col gap-4 lg:gap-5">
+    <div className="flex flex-col gap-3 sm:gap-4 lg:gap-5">
       {/* ── HERO: satu pandangan tentang kondisi hari ini ─────────── */}
       <section
         aria-label="Kondisi armada hari ini"
-        className="rounded-xl border border-border/80 bg-card p-4 shadow-sm lg:p-5"
+        className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm sm:p-4 lg:p-5"
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:gap-4">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
               <Activity className="h-3.5 w-3.5" /> Kesiapan armada
@@ -722,8 +652,8 @@ function DashboardContent({
             </p>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] xl:items-center">
-            <div className="space-y-3">
+          <div className="grid gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] xl:items-center">
+            <div className="space-y-2.5 sm:space-y-3">
               <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
                 {analytics.statusBreakdown.map(({ status, count }) => {
                   if (count <= 0 || analytics.totalUnits <= 0) return null;
@@ -756,7 +686,7 @@ function DashboardContent({
               </div>
             </div>
 
-            <div className="grid gap-2.5 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5">
               <HeroSignal
                 label="Terlewat servis"
                 value={formatNumber(analytics.overdueCount)}
@@ -779,6 +709,7 @@ function DashboardContent({
                 tone={analytics.outBerjalan > 0 ? "warning" : "neutral"}
                 icon={<PackageCheck className="h-3.5 w-3.5" />}
                 onClick={() => onNavigate?.("pengiriman")}
+                className="col-span-2 sm:col-span-1"
               />
             </div>
           </div>
@@ -788,7 +719,7 @@ function DashboardContent({
       {/* ── KPI: hanya angka yang tidak diulang hero maupun kartu lain.
           Urgensi servis sudah hidup di sinyal hero + kartu Perlu Tindakan;
           total FO pengiriman sudah ada di kartu Operasional Pengiriman. ── */}
-      <section aria-label="Metrik pendukung" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="Metrik pendukung" className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
         <StatTile
           label="Biaya Perbaikan · 30 Hari"
           value={compactRupiah(analytics.cost30)}
@@ -824,9 +755,9 @@ function DashboardContent({
       </section>
 
       {/* TREN BIAYA + OPERASIONAL PENGIRIMAN */}
-      <div className="grid gap-4 lg:grid-cols-12">
-      <Card className="overflow-hidden border-border/70 gap-4 py-5 shadow-sm lg:col-span-7 xl:col-span-8">
-        <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-1">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-12">
+      <Card className="overflow-hidden border-border/70 gap-3 py-4 shadow-sm sm:gap-4 sm:py-5 lg:col-span-7 xl:col-span-8">
+        <CardHeader className="flex flex-row items-start gap-2.5 space-y-0 sm:gap-3 pb-1">
           <CardHeaderBadge icon={<TrendingUp className="h-4 w-4" />} />
           <div>
             <CardTitle>Tren Biaya Perbaikan</CardTitle>
@@ -837,11 +768,11 @@ function DashboardContent({
           {analytics.trend.length > 0 ? (
             <>
               <Suspense
-                fallback={<Skeleton className="h-[240px] w-full rounded-md lg:h-[210px]" />}
+                fallback={<Skeleton className="h-[190px] w-full rounded-md sm:h-[220px] lg:h-[210px]" />}
               >
                 <LazyCostChart data={analytics.trend} />
               </Suspense>
-              <dl className="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-3">
+              <dl className="mt-3 grid gap-2.5 border-t pt-3 sm:mt-4 sm:gap-4 sm:pt-4 sm:grid-cols-3">
                 <div>
                   <dt className="text-xs text-muted-foreground">
                     Total 3 bulan
@@ -874,15 +805,15 @@ function DashboardContent({
               </dl>
             </>
           ) : (
-            <div className="flex h-[240px] items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground lg:h-[210px]">
+            <div className="flex h-[190px] items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground sm:h-[220px] lg:h-[210px]">
               Belum ada data pengeluaran dalam 3 bulan terakhir.
             </div>
           )}
         </CardContent>
       </Card>
 
-        <Card className="overflow-hidden border-border/70 gap-4 py-5 shadow-sm lg:col-span-5 xl:col-span-4">
-          <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
+        <Card className="overflow-hidden border-border/70 gap-3 py-4 shadow-sm sm:gap-4 sm:py-5 lg:col-span-5 xl:col-span-4">
+          <CardHeader className="flex flex-row items-start gap-2.5 space-y-0 sm:gap-3 pb-2">
             <CardHeaderBadge icon={<PackageCheck className="h-4 w-4" />} />
             <div>
               <CardTitle>Operasional Pengiriman</CardTitle>
@@ -905,7 +836,7 @@ function DashboardContent({
                     <p className="text-xs text-muted-foreground">
                       Sedang berjalan
                     </p>
-                    <p className="mt-1 text-2xl font-semibold leading-none tabular-nums">
+                    <p className="mt-1 text-xl font-semibold leading-none tabular-nums sm:text-2xl">
                       {formatNumber(analytics.outBerjalan)}
                     </p>
                   </div>
@@ -992,57 +923,11 @@ function DashboardContent({
         </Card>
       </div>
 
-      {/* KOMPOSISI BIAYA + PERLU TINDAKAN — dua panel pendukung yang
-          berbagi satu baris supaya tidak menumpuk selebar halaman. */}
-      <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="overflow-hidden border-border/70 gap-4 py-5 shadow-sm lg:col-span-5">
-          <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
-            <CardHeaderBadge icon={<PieChart className="h-4 w-4" />} />
-            <div>
-              <CardTitle>Komposisi Biaya</CardTitle>
-              <CardDescription>
-                6 bulan terakhir · per jenis perbaikan · Top 5 mencakup{" "}
-                {analytics.compositionTopShare.toFixed(0)}% total
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {analytics.composition.length > 0 ? (
-              <ul className="space-y-2.5">
-                {analytics.composition.map((c) => (
-                  <li key={c.label}>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="min-w-0 flex-1 truncate text-xs font-medium" title={`${c.label} · ${formatNumber(c.count)} entri`}>
-                        {c.label}
-                      </span>
-                      <span className="shrink-0 font-mono text-xs tabular-nums">
-                        {compactRupiah(c.total)}
-                        <span className="ml-1.5 text-[11px] text-muted-foreground">
-                          {c.share.toFixed(0)}%
-                        </span>
-                      </span>
-                    </div>
-                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary/70"
-                        style={{ width: `${Math.max(c.share, 2)}%` }}
-                      />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="rounded-lg border border-dashed bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">
-                Belum ada rincian biaya 6 bulan terakhir.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-      {/* PERLU TINDAKAN — distribusi status tidak lagi di sini karena angkanya
-          sudah tampil di badge hero (bar kapasitas + per-status). */}
-        <Card className="overflow-hidden border-border/70 gap-4 py-5 shadow-sm lg:col-span-7">
-          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-2">
+      {/* PERLU TINDAKAN + SISA KIRIMAN — dua panel yang butuh perhatian,
+          berbagi satu baris agar dashboard tidak memanjang tanpa guna. */}
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-12">
+        <Card className="overflow-hidden border-border/70 gap-3 py-4 shadow-sm sm:gap-4 sm:py-5 lg:col-span-7 xl:col-span-8">
+          <CardHeader className="flex flex-row items-start justify-between gap-2.5 space-y-0 pb-2 sm:gap-4">
             <div className="flex items-start gap-3">
               <CardHeaderBadge icon={<ListChecks className="h-4 w-4" />} />
               <div>
@@ -1068,7 +953,7 @@ function DashboardContent({
                   <div
                     key={String(equipment.id ?? equipment.equipment_id)}
                     className={cn(
-                      "flex items-center justify-between gap-4 rounded-lg border py-2.5 pl-3 pr-3.5 transition-colors hover:bg-muted/30 lg:py-2",
+                      "flex items-center justify-between gap-2 rounded-lg border py-2 pl-2.5 pr-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:py-2.5 sm:pl-3 sm:pr-3.5 lg:py-2",
                       status.tone.accent,
                       status.id === "overdue"
                         ? "border-l-2 border-l-destructive bg-destructive/[0.04] hover:bg-destructive/[0.07]"
@@ -1127,7 +1012,7 @@ function DashboardContent({
               </div>
             )}
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 sm:mt-4 sm:gap-3 sm:pt-4">
               <p className="text-xs text-muted-foreground">
                 {analytics.urgentTotal > 0
                   ? `${analytics.urgentTotal} unit perlu perhatian`
@@ -1148,168 +1033,8 @@ function DashboardContent({
           </CardContent>
         </Card>
 
-      </div>
-
-      {/* PERINGKAT BIAYA PER UNIT — 6 bulan (Top 5 / Bottom 5).
-          Diletakkan setelah panel tindakan supaya hal yang butuh
-          keputusan tidak terkubur di bawah grafik referensi. */}
-      <Card className="overflow-hidden border-border/70 gap-4 py-5 shadow-sm">
-        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-2">
-          <div className="flex items-start gap-3">
-            <CardHeaderBadge icon={<BarChart3 className="h-4 w-4" />} />
-            <div>
-              <CardTitle>Peringkat Biaya Unit</CardTitle>
-              <CardDescription>
-                6 bulan terakhir · top 5 & bottom 5
-              </CardDescription>
-            </div>
-          </div>
-          {analytics.top5[0] && (
-            <Badge
-              variant="outline"
-              title={`Paling boros: ${analytics.top5[0].label}`}
-              className="hidden shrink-0 items-center gap-1.5 border-primary/25 bg-primary/10 sm:inline-flex"
-            >
-              <Truck className="h-3 w-3" />
-              {analytics.top5[0].label}
-              <span className="text-muted-foreground">·</span>
-              <span className="tabular-nums">
-                {compactRupiah(analytics.top5[0].totalCost)}
-              </span>
-            </Badge>
-          )}
-        </CardHeader>
-        <CardContent>
-          <Suspense
-            fallback={<Skeleton className="h-[150px] w-full rounded-md lg:h-[130px]" />}
-          >
-            <LazyUnitCostRankingChart
-              top5={analytics.top5}
-              bottom5={analytics.bottom5}
-            />
-          </Suspense>
-        </CardContent>
-      </Card>
-
-      {/* RIWAYAT TERBARU + SISA KIRIMAN — kartu Ringkasan 30 Hari dihapus:
-          cost30/delta/entri/rata-rata sudah tampil di tile KPI di atas. */}
-      <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="overflow-hidden border-border/70 gap-4 py-5 shadow-sm lg:col-span-7 xl:col-span-8">
-          <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
-            <CardHeaderBadge icon={<Wrench className="h-4 w-4" />} />
-            <div>
-              <CardTitle>Riwayat Maintenance Terbaru</CardTitle>
-              <CardDescription>
-                6 pengeluaran terakhir.
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-1 flex-col">
-            {/* TaBLE-FIXED WAJIB di kartu ini: Table/TableCell bawaan punya
-                whitespace-nowrap di semua kolom, dan dalam auto-layout nama
-                "Barang / Jasa" yang panjang memaksa tabel melebar melebihi
-                kartu (overflow kolom lg:col-span-4). Dengan fixed layout +
-                lebar kolom eksplisit, truncate benar-benar mengunci sel dan
-                tabel menyesuaikan lebar kartu. */}
-            <Table className="table-fixed">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[24%] text-xs">
-                    Tanggal
-                  </TableHead>
-                  <TableHead className="w-[18%] text-xs">
-                    Unit
-                  </TableHead>
-                  <TableHead className="text-xs">
-                    Barang / Jasa
-                  </TableHead>
-                  <TableHead className="w-[20%] text-right text-xs">
-                    Biaya
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {analytics.recent.length > 0 ? (
-                  analytics.recent.map((hist) => {
-                    const cost = Number(hist.jumlah_harga) || 0;
-                    const isOutlier =
-                      analytics.averageEntry > 0 &&
-                      cost >= analytics.averageEntry * 2;
-                    return (
-                      <TableRow key={hist.id} className="transition-colors hover:bg-muted/40">
-                        <TableCell className="whitespace-nowrap py-2.5">
-                          <div className="text-xs tabular-nums">
-                            {formatDateMedium(hist.tanggal)}
-                          </div>
-                          <div className="mt-0.5 text-[11px] text-muted-foreground">
-                            {relativeDayLabel(hist.tanggal)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="overflow-hidden py-2.5">
-                          <div className="truncate text-xs font-medium">
-                            {hist.equipment_id}
-                          </div>
-                          <div className="mt-1 truncate">
-                            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                              {hist.license_plate || "—"}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell
-                          className="overflow-hidden py-2.5 text-xs [&>span]:truncate"
-                          title={hist.nama_barang_atau_jasa || ""}
-                        >
-                          {hist.nama_barang_atau_jasa || "—"}
-                        </TableCell>
-                        <TableCell className="overflow-hidden py-2.5 text-right">
-                          <span
-                            className={cn(
-                              "inline-flex max-w-full items-center gap-1.5 overflow-hidden rounded px-1.5 py-0.5 font-mono text-xs font-medium tabular-nums",
-                              isOutlier && "bg-primary/10 text-primary",
-                            )}
-                          >
-                            {isOutlier && (
-                              <TrendingUp
-                                className="h-3.5 w-3.5"
-                                aria-label="Dua kali di atas rata-rata"
-                              />
-                            )}
-                            {formatRupiah(cost)}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={4}
-                      className="h-24 text-center text-xs text-muted-foreground"
-                    >
-                      Belum ada riwayat perbaikan.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-
-            <div className="mt-auto flex justify-end pt-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 text-muted-foreground hover:text-foreground"
-                onClick={() => onNavigate?.("maintenance")}
-              >
-                Lihat semua riwayat
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="flex flex-col gap-4 lg:col-span-5 xl:col-span-4">
-        <Card className="h-full overflow-hidden border-border/70 gap-4 py-5 shadow-sm">
-          <CardHeader className="flex flex-row items-start gap-3 space-y-0 pb-2">
+        <Card className="h-full overflow-hidden border-border/70 gap-3 py-4 shadow-sm sm:gap-4 sm:py-5 lg:col-span-5 xl:col-span-4">
+          <CardHeader className="flex flex-row items-start gap-2.5 space-y-0 pb-2 sm:gap-3">
             <CardHeaderBadge icon={<FileText className="h-4 w-4" />} />
             <div>
               <CardTitle>Sisa Kiriman (SKR)</CardTitle>
@@ -1329,10 +1054,8 @@ function DashboardContent({
               <>
                 <div className="flex items-end justify-between gap-3">
                   <div>
-                    <p className="text-xs text-muted-foreground">
-                      Dokumen
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold leading-none tabular-nums">
+                    <p className="text-xs text-muted-foreground">Dokumen</p>
+                    <p className="mt-1 text-xl font-semibold leading-none tabular-nums sm:text-2xl">
                       {formatNumber(analytics.skrDocs)}
                     </p>
                   </div>
@@ -1375,8 +1098,48 @@ function DashboardContent({
             )}
           </CardContent>
         </Card>
-        </div>
       </div>
+
+      {/* PERINGKAT BIAYA PER UNIT — 6 bulan (Top 5 / Bottom 5).
+          Diletakkan setelah panel tindakan supaya hal yang butuh
+          keputusan tidak terkubur di bawah grafik referensi. */}
+      <Card className="overflow-hidden border-border/70 gap-3 py-4 shadow-sm sm:gap-4 sm:py-5">
+        <CardHeader className="flex flex-row items-start justify-between gap-2.5 space-y-0 pb-2 sm:gap-4">
+          <div className="flex items-start gap-3">
+            <CardHeaderBadge icon={<BarChart3 className="h-4 w-4" />} />
+            <div>
+              <CardTitle>Peringkat Biaya Unit</CardTitle>
+              <CardDescription>
+                6 bulan terakhir · top 5 & bottom 5
+              </CardDescription>
+            </div>
+          </div>
+          {analytics.top5[0] && (
+            <Badge
+              variant="outline"
+              title={`Paling boros: ${analytics.top5[0].label}`}
+              className="hidden shrink-0 items-center gap-1.5 border-primary/25 bg-primary/10 sm:inline-flex"
+            >
+              <Truck className="h-3 w-3" />
+              {analytics.top5[0].label}
+              <span className="text-muted-foreground">·</span>
+              <span className="tabular-nums">
+                {compactRupiah(analytics.top5[0].totalCost)}
+              </span>
+            </Badge>
+          )}
+        </CardHeader>
+        <CardContent>
+          <Suspense
+            fallback={<Skeleton className="h-[130px] w-full rounded-md sm:h-[150px] lg:h-[130px]" />}
+          >
+            <LazyUnitCostRankingChart
+              top5={analytics.top5}
+              bottom5={analytics.bottom5}
+            />
+          </Suspense>
+        </CardContent>
+      </Card>
 
     </div>
   );

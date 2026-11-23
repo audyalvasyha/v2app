@@ -176,6 +176,36 @@ body {
   color: var(--color-foreground);
 }
 
+/* Di ponsel, rapatkan skala teks tanpa mengubah skala spacing/ukuran tombol.
+   Hanya variabel ukuran font yang di-override, jadi padding dan tap target
+   tetap seperti desain desktop. */
+@media (max-width: 639px) {
+  :root {
+    --text-xs: 0.6875rem;
+    --text-sm: 0.8125rem;
+    --text-base: 0.875rem;
+    --text-lg: 1rem;
+    --text-xl: 1.125rem;
+    --text-2xl: 1.25rem;
+    --text-3xl: 1.5rem;
+    --text-4xl: 2rem;
+    --text-5xl: 2.25rem;
+    --text-6xl: 2.75rem;
+  }
+
+  /* Teks yang tidak memakai utility ukuran tetap ikut lebih rapat. */
+  body {
+    font-size: 0.875rem;
+  }
+
+  /* Safari iOS auto-zoom saat fokus bila ukuran control form di bawah 16px. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 code,
 pre {
   font-family: var(--font-mono);

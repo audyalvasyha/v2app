@@ -52,15 +52,12 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
 
     return (
         <Card className="gap-0 overflow-hidden border-border/70 bg-card py-0 shadow-sm">
-            <CardContent className="p-4">
-                {/* Kepala banner */}
-                <div className="mb-3 flex items-start justify-between gap-2 sm:items-center">
-                    <h2 className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-semibold">
+            <CardContent className="p-3 sm:p-4">
+                {/* Kepala banner: timestamp pindah ke footer agar tidak makan satu baris. */}
+                <div className="mb-2 flex items-start justify-between gap-2 sm:mb-3 sm:items-center">
+                    <h2 className="flex min-w-0 flex-1 items-center gap-x-2 text-sm font-semibold">
                         <CloudSun className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
                         <span>Cuaca Rokan Hilir</span>
-                        <span className="w-full text-[11px] font-normal text-muted-foreground sm:w-auto">
-                            · diperbarui {formatTime(updatedAt)} WIB
-                        </span>
                     </h2>
                     <Button
                         variant="ghost"
@@ -76,12 +73,12 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
                 </div>
 
                 {isLoading && !hasData ? (
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                         <Skeleton className="h-9 w-full max-w-64" />
                         <Skeleton className="h-14 w-full" />
                     </div>
                 ) : !focus || !focusRisk || !outlook ? (
-                    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-center">
+                    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-center">
                         <CloudSun className="h-6 w-6 text-muted-foreground" />
                         <div className="min-w-0">
                             <p className="text-sm font-medium">Cuaca belum tersedia</p>
@@ -96,17 +93,17 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
                 ) : (
                     <>
                         {/* Kondisi pool + risiko wilayah */}
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                             <div className="flex min-w-0 items-center gap-2">
-                                <WeatherEmoji code={focus.current.code} className="shrink-0 text-3xl leading-none" />
+                                <WeatherEmoji code={focus.current.code} className="shrink-0 text-2xl leading-none sm:text-3xl" />
                                 <div className="min-w-0">
                                     <div className="flex flex-wrap items-baseline gap-x-1.5">
-                                        <span className="text-2xl font-semibold tabular-nums">
+                                        <span className="text-xl font-semibold tabular-nums sm:text-2xl">
                                             {focus.current.temperature != null ? `${Math.round(focus.current.temperature)}°C` : "—"}
                                         </span>
-                                        <span className="text-sm text-muted-foreground">{desc?.label}</span>
+                                        <span className="text-xs text-muted-foreground sm:text-sm">{desc?.label}</span>
                                     </div>
-                                    <p className="truncate text-xs text-muted-foreground">{focus.def.name}</p>
+                                    <p className="truncate text-[11px] text-muted-foreground sm:text-xs">{focus.def.name}</p>
                                 </div>
                             </div>
                             <Badge variant="outline" className={cn("gap-1.5", RISK_TONE[focusRisk.level].badge)}>
@@ -126,11 +123,11 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
 
                         {/* Strip 7 hari ke depan (pool): 4 kolom di ponsel supaya
                             tiap hari tetap terbaca, 7 kolom mulai layar sm. */}
-                        <div className="mt-3 flex flex-wrap justify-center gap-2 border-t pt-3 sm:grid sm:max-w-xl sm:grid-cols-7 sm:gap-1.5">
+                        <div className="mt-2.5 flex flex-wrap justify-center gap-1.5 border-t pt-2.5 sm:grid sm:max-w-xl sm:grid-cols-7 sm:gap-1.5 sm:pt-3">
                             {focus.daily.map((d, i) => (
-                                <div key={d.date} className="flex w-[calc(25%-0.5rem)] min-w-0 flex-col items-center gap-0.5 rounded-md bg-muted/30 px-1 py-1.5 sm:w-auto">
+                                <div key={d.date} className="flex w-[calc(25%-0.5rem)] min-w-0 flex-col items-center gap-0.5 rounded-md bg-muted/30 px-1 py-1 sm:w-auto sm:py-1.5">
                                     <span className="w-full truncate text-center text-[10px] font-medium text-muted-foreground">{dayLabel(d.date, i)}</span>
-                                    <WeatherEmoji code={d.code} className="text-lg leading-tight" />
+                                    <WeatherEmoji code={d.code} className="text-base leading-tight sm:text-lg" />
                                     <span
                                         className={cn(
                                             "text-[10px] tabular-nums",
@@ -146,7 +143,7 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
                         </div>
 
                         {/* Ringkasan seluruh daerah */}
-                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-xs">
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs sm:mt-3">
                             {summary.worst && (
                                 <Badge variant="outline" className={cn("gap-1.5", RISK_TONE[summary.worst.level].badge)}>
                                     <RiskDot level={summary.worst.level} />
@@ -172,16 +169,24 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
 
                         {/* Error non-intrusif bila data berasal dari cache */}
                         {error && (
-                            <p className="mt-2 text-[11px] text-muted-foreground">
+                            <p className="mt-1.5 text-[11px] text-muted-foreground">
                                 Menampilkan data cache — pembaruan gagal: {error}
                             </p>
                         )}
                     </>
                 )}
 
-                {/* Aksi detail selalu di kaki kartu, setelah semua ringkasan. */}
-                <div className="mt-3 flex justify-end border-t pt-3">
-                    <Button variant="outline" size="sm" className="h-8 w-full gap-0.5 text-xs sm:h-7 sm:w-auto" onClick={onOpenDetail}>
+                {/* Timestamp + aksi detail dalam satu kaki kartu yang ringkas. */}
+                <div className="mt-2.5 flex items-center justify-between gap-2 border-t pt-2.5 sm:mt-3 sm:pt-3">
+                    <span className="min-w-0 truncate text-[10px] text-muted-foreground sm:text-[11px]">
+                        Diperbarui {formatTime(updatedAt)} WIB
+                    </span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 shrink-0 gap-0.5 px-2 text-[11px]"
+                        onClick={onOpenDetail}
+                    >
                         Detail cuaca
                         <ChevronRight className="h-3.5 w-3.5" />
                     </Button>

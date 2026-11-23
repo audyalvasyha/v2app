@@ -22,6 +22,9 @@ interface FilterChipsProps<T extends string> {
  * Grup filter tunggal untuk semua menu. Bentuknya segmented control netral:
  * item aktif memakai permukaan card, sisanya muted. Dipakai supaya tombol
  * filter di SKR, Pengiriman, Armada, Histories, Monitoring, dan Ban identik.
+ *
+ * Di ponsel chip tidak dipaksa wrap: satu baris bisa digeser horizontal,
+ * jadi toolbar tidak memakan tinggi dan tombol tetap berukuran sentuh.
  */
 export function FilterChips<T extends string>({
     options,
@@ -35,7 +38,7 @@ export function FilterChips<T extends string>({
             role="group"
             aria-label={ariaLabel}
             className={cn(
-                "inline-flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1",
+                "inline-flex min-w-0 max-w-full touch-pan-x items-center gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain rounded-lg border border-border/60 bg-muted/40 p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible",
                 className,
             )}
         >

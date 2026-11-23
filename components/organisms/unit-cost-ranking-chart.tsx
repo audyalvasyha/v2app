@@ -92,7 +92,7 @@ function RankBar({
             <div className="mt-4">
                 {/* Tinggi dikecilkan: kartu ini hanya konteks sekunder di bawah
                     daftar peringkat bernomor — bukan papan utama */}
-                <ChartContainer config={config} className="h-[150px] w-full lg:h-[130px]">
+                <ChartContainer config={config} className="h-[130px] w-full sm:h-[150px] lg:h-[130px]">
                     <BarChart
                         data={chartData}
                         layout="vertical"
