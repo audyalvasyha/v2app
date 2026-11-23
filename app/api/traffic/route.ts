@@ -235,17 +235,26 @@ export async function GET(request: Request) {
     (l) => l.trafficFlow && l.trafficFlow.level !== "unknown",
   ).length;
 
-  return NextResponse.json({
-    configured: hasTomTomKey(),
-    generatedAt: new Date().toISOString(),
-    summary: {
-      totalRoutes: locations.length,
-      routedGeometries: locations.filter((l) => l.geometry).length,
-      liveCount,
-      trafficCount,
-      estimatedCount,
-      badCount,
+  return NextResponse.json(
+    {
+      configured: hasTomTomKey(),
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalRoutes: locations.length,
+        routedGeometries: locations.filter((l) => l.geometry).length,
+        liveCount,
+        trafficCount,
+        estimatedCount,
+        badCount,
+      },
+      locations,
     },
-    locations,
-  });
+    {
+      // Respons sama untuk semua user dan data live berumur pendek. Cache di
+      // edge/CDN meredam lonjakan refresh tanpa membekukan data terlalu lama.
+      headers: {
+        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=90",
+      },
+    },
+  );
 }

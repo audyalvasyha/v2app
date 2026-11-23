@@ -65,7 +65,7 @@ export function EquipmentPageSkeleton() {
     <div className="space-y-4" role="status" aria-busy="true">
       <LoadingLabel text="Memuat daftar equipment…" />
       <FilterBarSkeleton chips={5} selectWidths={["190px", "112px"]} />
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="overflow-hidden rounded-xl border bg-card">
         <TableHeaderSkeleton columns={["16px", "90px", "96px", "80px", "120px", "72px"]} />
         <div className="divide-y divide-border/60">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -99,7 +99,7 @@ export function MaintenancePageSkeleton() {
     <div className="space-y-4" role="status" aria-busy="true">
       <LoadingLabel text="Memuat riwayat maintenance…" />
       <FilterBarSkeleton chips={4} selectWidths={["170px", "112px"]} />
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="overflow-hidden rounded-xl border bg-card">
         <TableHeaderSkeleton columns={["20px", "72px", "72px", "110px", "64px"]} />
         <div className="divide-y divide-border/60">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -125,13 +125,13 @@ export function MaintenancePageSkeleton() {
   )
 }
 
-/** Monitoring servis: chip status, select urutan, panel daftar unit. */
+/** Servis rutin: chip status, select urutan, panel daftar unit. */
 export function MonitoringPageSkeleton() {
   return (
     <div className="space-y-4" role="status" aria-busy="true">
-      <LoadingLabel text="Memuat monitoring servis…" />
+      <LoadingLabel text="Memuat servis rutin…" />
       <FilterBarSkeleton chips={5} selectWidths={["180px"]} />
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/20 px-4 py-3">
           <div className="space-y-1.5">
             <Skeleton className="h-4 w-28" />
@@ -168,7 +168,7 @@ export function OutboundPageSkeleton() {
   return (
     <div className="space-y-4" role="status" aria-busy="true">
       <LoadingLabel text="Memuat pengiriman…" />
-      <div className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm">
+      <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1.5">
             <Skeleton className="h-3.5 w-28" />
@@ -194,7 +194,7 @@ export function OutboundPageSkeleton() {
           <Skeleton key={i} className="h-7 w-20 rounded-md" />
         ))}
       </div>
-      <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
+      <div className="overflow-x-auto rounded-xl border bg-card">
         <div className="min-w-[820px]">
           <TableHeaderSkeleton columns={["24px", "96px", "80px", "72px", "72px", "88px", "64px", "64px"]} />
           <div className="divide-y divide-border/60">
@@ -231,7 +231,7 @@ export function SkrPageSkeleton() {
           <Skeleton key={i} className="h-7 w-20 rounded-md" />
         ))}
       </div>
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="overflow-hidden rounded-xl border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-3">
           <div className="flex items-center gap-2">
             <Skeleton className="h-4 w-24" />
@@ -242,28 +242,31 @@ export function SkrPageSkeleton() {
             <Skeleton className="h-7 w-14 rounded-md" />
           </div>
         </div>
-        <div className="grid lg:grid-cols-2">
-          <div className="border-b p-4 lg:border-b-0 lg:border-r">
-            <div className="grid gap-px overflow-hidden bg-border sm:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="space-y-2 bg-card px-4 py-3">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-5 w-20" />
-                </div>
-              ))}
-            </div>
-            <Skeleton className="mt-3 h-[230px] w-full rounded-md" />
+        <div className="p-4">
+          <div className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="space-y-2 bg-card px-4 py-3">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-5 w-20" />
+              </div>
+            ))}
           </div>
-          <div className="p-4">
-            <div className="mb-3 flex items-center justify-between border-b border-border/50 pb-2">
-              <Skeleton className="h-4 w-44" />
-              <Skeleton className="h-3 w-24" />
-            </div>
-            <Skeleton className="h-[230px] w-full rounded-md" />
+          <div className="mt-4 grid gap-4 lg:grid-cols-[65fr_35fr]">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="overflow-hidden rounded-lg border bg-card">
+                <div className="flex min-h-10 items-center justify-between border-b px-3 py-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+                <div className="p-4">
+                  <Skeleton className="h-[420px] w-full rounded-md" />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="overflow-hidden rounded-xl border bg-card">
         <div className="flex items-center justify-between border-b bg-muted/20 px-4 py-3">
           <Skeleton className="h-4 w-40" />
           <Skeleton className="h-3 w-24" />
@@ -283,7 +286,7 @@ export function SkrPageSkeleton() {
   )
 }
 
-/** Complaint Board: ringkasan + filter prioritas di atas empat kolom kanban. */
+/** Complaint Board: kontrol, tab mobile, lalu tiga kolom kanban netral. */
 export function BoardPageSkeleton() {
   return (
     <div className="min-w-0 space-y-4" role="status" aria-busy="true">
@@ -291,8 +294,7 @@ export function BoardPageSkeleton() {
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <Skeleton className="h-3 w-36" />
         <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
-          {/* Bungkus chip mengikuti FilterChips: border + padding + tombol h-8,
-              supaya toolbar tidak bergeser saat papan asli muncul. */}
+          {/* Bentuk toolbar mengikuti FilterChips + tombol Komplain baru. */}
           <div className="inline-flex w-full max-w-full flex-wrap items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 sm:w-auto">
             {[54, 52, 58, 56].map((width, i) => (
               <Skeleton key={i} className="h-8 rounded-md" style={{ width }} />
@@ -301,22 +303,33 @@ export function BoardPageSkeleton() {
           <Skeleton className="h-8 w-full rounded-md sm:w-32" />
         </div>
       </div>
-      <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex min-w-0 flex-col rounded-xl border border-border/60 bg-background p-2.5">
-            <div className="mb-2 flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5">
+
+      {/* Tab status mobile — hanya satu kolom yang tampil di layar kecil. */}
+      <div className="grid grid-cols-3 gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 md:hidden">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 rounded-md" />
+        ))}
+      </div>
+
+      <div className="grid min-w-0 gap-3 md:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div
+            key={i}
+            className={`flex min-w-0 flex-col rounded-xl border border-border/60 bg-muted/20 p-2.5 ${i > 0 ? "hidden md:flex" : ""}`}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2 border-b border-border/60 px-1 pb-2">
               <div className="flex items-center gap-1.5">
-                <Skeleton className="h-3.5 w-3.5 rounded-sm" />
+                <Skeleton className="h-3.5 w-3.5 rounded-full" />
                 <Skeleton className="h-3.5 w-20" />
               </div>
               <Skeleton className="h-3 w-4" />
             </div>
             <div className="flex flex-col gap-2">
-              {Array.from({ length: i === 3 ? 2 : 3 }).map((_, j) => (
-                <div key={j} className="space-y-2 rounded-lg border border-t-[3px] border-border/60 bg-card p-3">
+              {Array.from({ length: i === 2 ? 2 : 3 }).map((_, j) => (
+                <div key={j} className="space-y-2 rounded-lg border border-border/60 bg-card p-3">
                   <div className="flex items-start justify-between gap-2">
                     <Skeleton className="h-4 w-4/5" />
-                    {i < 3 && <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-sm" />}
+                    <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-sm" />
                   </div>
                   <Skeleton className="h-3 w-1/2" />
                   <div className="flex items-center gap-2">
@@ -324,7 +337,7 @@ export function BoardPageSkeleton() {
                     <Skeleton className="h-3 w-20" />
                   </div>
                   <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2">
-                    <Skeleton className="h-5 w-16 rounded-full" />
+                    <Skeleton className="h-6 w-16 rounded-full" />
                     <Skeleton className="h-3 w-16" />
                   </div>
                 </div>
@@ -427,7 +440,7 @@ export function TrafficPageSkeleton() {
   return (
     <div className="space-y-4" role="status" aria-busy="true">
       <LoadingLabel text="Memuat lalu lintas…" />
-      <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
+      <div className="rounded-2xl border border-border/70 bg-card p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <Skeleton className="h-8 w-8 rounded-lg" />
@@ -539,109 +552,105 @@ export function AboutPageSkeleton() {
   )
 }
 
-/** Dashboard: kepala, cuaca, hero kesiapan, KPI, lalu grid kartu analitik. */
+/** Dashboard: kepala, strip armada, panel tindakan, tiga kartu, lalu cuaca. */
 export function DashboardPageSkeleton() {
   return (
-    <div className="flex flex-col gap-4 pb-2 lg:gap-5" role="status" aria-busy="true">
+    <div className="flex flex-col gap-3 pb-2 sm:gap-4" role="status" aria-busy="true">
       <LoadingLabel text="Memuat dashboard…" />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-2">
-          <Skeleton className="h-7 w-44" />
-          <Skeleton className="h-3 w-72 max-w-full" />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+        <div className="min-w-0 space-y-1.5">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-3 w-64 max-w-full" />
         </div>
-        <div className="flex gap-2">
-          <Skeleton className="h-8 w-32 rounded-md" />
-          <Skeleton className="h-8 w-36 rounded-md" />
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+          <Skeleton className="h-8 w-full rounded-md sm:w-32" />
+          <Skeleton className="h-8 w-full rounded-md sm:w-24" />
         </div>
       </div>
-      <div className="rounded-xl border bg-card p-4">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-4 w-52" />
-          <div className="flex gap-1.5">
-            <Skeleton className="h-7 w-20 rounded-md" />
-            <Skeleton className="h-7 w-24 rounded-md" />
+
+      {/* Armada hari ini */}
+      <div className="overflow-hidden rounded-xl border bg-card">
+        <div className="flex min-h-12 items-center justify-between gap-3 border-b px-4 py-2.5">
+          <div className="space-y-1.5">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-3 w-56 max-w-full" />
           </div>
+          <Skeleton className="h-3 w-14" />
         </div>
-        <Skeleton className="mt-3 h-10 w-64" />
-        <Skeleton className="mt-3 h-14 w-full rounded-lg" />
-      </div>
-      <div className="rounded-xl border bg-card p-5">
-        <Skeleton className="h-3 w-24" />
-        <Skeleton className="mt-2 h-9 w-56" />
-        <Skeleton className="mt-4 h-2.5 w-full" />
-        <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 w-full rounded-lg" />
+        <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-card px-3 py-2.5 sm:px-4 sm:py-3">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="mt-2 h-6 w-12" />
+              <Skeleton className="mt-1.5 h-2.5 w-20 max-w-full" />
+            </div>
           ))}
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="space-y-2 rounded-xl border bg-card px-4 py-3.5">
-            <Skeleton className="h-3 w-28" />
-            <Skeleton className="h-6 w-24" />
-            <Skeleton className="h-3 w-32 max-w-full" />
+
+      {/* Perlu tindakan */}
+      <div className="overflow-hidden rounded-xl border bg-card">
+        <div className="flex min-h-12 items-center justify-between gap-3 border-b px-4 py-2.5">
+          <div className="space-y-1.5">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-52 max-w-full" />
+          </div>
+          <Skeleton className="h-6 w-20 rounded-full" />
+        </div>
+        <div className="grid gap-px bg-border sm:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-card px-4 py-3">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="mt-2 h-3 w-32 max-w-full" />
+              <Skeleton className="mt-2 h-5 w-6" />
+            </div>
+          ))}
+        </div>
+        <div className="border-t px-4 py-2.5">
+          <Skeleton className="h-3 w-28" />
+          <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-6 w-full rounded-md" />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Pengiriman, sisa kiriman, biaya perbaikan */}
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="overflow-hidden rounded-xl border bg-card">
+            <div className="flex min-h-12 items-center justify-between gap-3 border-b px-4 py-2.5">
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-3 w-36 max-w-full" />
+              </div>
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </div>
+            <div className="grid grid-cols-2 gap-px bg-border">
+              {Array.from({ length: 2 }).map((_, j) => (
+                <div key={j} className="bg-card px-4 py-3">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="mt-2 h-6 w-12" />
+                  <Skeleton className="mt-1.5 h-2.5 w-20 max-w-full" />
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between gap-2 border-t px-4 py-2.5">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-14" />
+            </div>
           </div>
         ))}
       </div>
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className="rounded-xl border bg-card p-5 lg:col-span-7 xl:col-span-8">
-          <Skeleton className="h-5 w-44" />
-          <Skeleton className="mt-2 h-3 w-56" />
-          <Skeleton className="mt-4 h-[250px] w-full rounded-md" />
-        </div>
-        <div className="space-y-3 rounded-xl border bg-card p-5 lg:col-span-5 xl:col-span-4">
-          <Skeleton className="h-5 w-40" />
-          <Skeleton className="h-8 w-20" />
-          <Skeleton className="h-2.5 w-full" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-full" />
-        </div>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className="rounded-xl border bg-card p-5 lg:col-span-5">
-          <Skeleton className="h-5 w-36" />
-          <Skeleton className="mt-3 h-3 w-56" />
-          <div className="mt-4 space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-5 w-full" />
-            ))}
-          </div>
-        </div>
-        <div className="rounded-xl border bg-card p-5 lg:col-span-7">
-          <Skeleton className="h-5 w-44" />
-          <Skeleton className="mt-3 h-3 w-64" />
-          <div className="mt-4 space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full rounded-lg" />
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="rounded-xl border bg-card p-5">
-        <Skeleton className="h-5 w-52" />
-        <Skeleton className="mt-2 h-3 w-72 max-w-full" />
-        <div className="mt-4 grid gap-8 lg:grid-cols-2">
-          <Skeleton className="h-[240px] w-full rounded-md" />
-          <Skeleton className="h-[240px] w-full rounded-md" />
-        </div>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className="rounded-xl border bg-card p-5 lg:col-span-7 xl:col-span-8">
-          <Skeleton className="h-5 w-52" />
-          <div className="mt-4 space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
-        </div>
-        <div className="space-y-3 rounded-xl border bg-card p-5 lg:col-span-5 xl:col-span-4">
-          <Skeleton className="h-5 w-40" />
-          <Skeleton className="h-8 w-20" />
-          <Skeleton className="h-2.5 w-full" />
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-5 w-32" />
-        </div>
+
+      {/* Strip cuaca */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3">
+        <Skeleton className="h-6 w-16 rounded-full" />
+        <Skeleton className="h-6 w-32" />
+        <Skeleton className="h-6 w-24 rounded-full" />
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="ml-auto h-8 w-16 rounded-md" />
       </div>
     </div>
   )

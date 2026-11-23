@@ -50,6 +50,7 @@
   --shadow-spread: 0px;
   --shadow-opacity: 0.05;
   --shadow-color: #000000;
+  --skeleton-sheen: rgb(255 255 255 / 0.55);
 }
 
 .dark {
@@ -95,6 +96,7 @@
   --shadow-spread: 0px;
   --shadow-opacity: 0.05;
   --shadow-color: #000000;
+  --skeleton-sheen: rgb(255 255 255 / 0.08);
 }
 
 @theme inline {
@@ -181,12 +183,14 @@ body {
    tetap seperti desain desktop. */
 @media (max-width: 639px) {
   :root {
-    --text-xs: 0.6875rem;
-    --text-sm: 0.8125rem;
-    --text-base: 0.875rem;
-    --text-lg: 1rem;
-    --text-xl: 1.125rem;
-    --text-2xl: 1.25rem;
+    /* Tetap lebih rapat dari desktop, tetapi tidak di bawah ambang nyaman
+       membaca di ponsel. */
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 0.9375rem;
+    --text-lg: 1.0625rem;
+    --text-xl: 1.1875rem;
+    --text-2xl: 1.3125rem;
     --text-3xl: 1.5rem;
     --text-4xl: 2rem;
     --text-5xl: 2.25rem;
@@ -195,7 +199,7 @@ body {
 
   /* Teks yang tidak memakai utility ukuran tetap ikut lebih rapat. */
   body {
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
   }
 
   /* Safari iOS auto-zoom saat fokus bila ukuran control form di bawah 16px. */
@@ -237,13 +241,18 @@ html.analisa-page body {
   -ms-overflow-style: none;
 }
 
-/* Skeleton: satu kilau lembut bergerak, bukan pulse opacity yang membuat
-   seluruh halaman terasa berkedip. Warna diturunkan dari token tema supaya
-   tetap kontras di mode terang maupun gelap. */
+/* Skeleton: permukaan bertingkat yang tenang dengan satu kilau lembut.
+   Bukan pulse opacity yang membuat seluruh halaman berkedip. Warna tetap
+   diturunkan dari token tema supaya kontras di terang maupun gelap. */
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: color-mix(in oklab, var(--muted) 90%, var(--foreground) 10%);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--muted) 78%, var(--card)) 0%,
+      color-mix(in oklab, var(--muted) 92%, var(--foreground) 8%) 100%
+    );
 }
 
 .skeleton::after {
@@ -252,12 +261,12 @@ html.analisa-page body {
   inset: 0;
   transform: translateX(-100%);
   background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in oklab, var(--foreground) 8%, transparent),
-    transparent
+    100deg,
+    transparent 24%,
+    var(--skeleton-sheen) 46%,
+    transparent 68%
   );
-  animation: skeleton-sheen 1.5s ease-in-out infinite;
+  animation: skeleton-sheen 1.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 @keyframes skeleton-sheen {

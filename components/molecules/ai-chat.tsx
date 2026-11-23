@@ -96,10 +96,10 @@ const VIEW_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
   equipment: "Equipment",
   maintenance: "Histories",
-  monitoring: "Monitoring",
+  monitoring: "Servis Rutin",
   skr: "SKR",
   pengiriman: "Pengiriman",
-  ban: "Analisa Ban",
+  ban: "Ban",
   weather: "Cuaca",
   traffic: "Lalu Lintas",
   analisa: "Analisa",
@@ -734,7 +734,7 @@ export function AIChat({
         >
           <div className={`pointer-events-auto flex w-full flex-col overflow-hidden ${
             isPageMode
-              ? "mx-auto h-full min-h-0 max-w-5xl bg-background text-foreground"
+              ? "mx-auto h-full min-h-0 w-full max-w-none bg-background text-foreground"
               : "h-[min(70vh,42rem)] min-w-[20rem] max-w-[min(70vw,60rem)] rounded-2xl border border-ai-panel-foreground/15 bg-ai-panel text-ai-panel-foreground shadow-xl duration-200 animate-in fade-in-0 zoom-in-95"
           }`}>
             {/* Kepala — judul di kiri, aksi di kanan. Panel halaman tidak
@@ -911,7 +911,7 @@ export function AIChat({
               className={`min-h-0 flex-1 overflow-y-auto py-5 ${isPageMode ? "px-4 sm:px-8 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" : "px-4"}`}
             >
               {messages.length === 0 && (isPageMode ? (
-                <div className="mx-auto flex min-h-full max-w-3xl flex-col items-center justify-center py-10 text-center">
+                <div className="mx-auto flex min-h-full max-w-5xl flex-col items-center justify-center py-10 text-center">
                   <p className="text-xs font-medium text-muted-foreground">
                     Tanya Midaa
                   </p>
@@ -944,7 +944,7 @@ export function AIChat({
                 </div>
               ))}
 
-              <div className={isPageMode ? "mx-auto w-full max-w-3xl space-y-5" : "space-y-5"}>
+              <div className={isPageMode ? "mx-auto w-full max-w-5xl space-y-5" : "space-y-5"}>
               {messages.map((message, index) => {
                 // Pertanyaan user yang memicu jawaban ini: pesan user
                 // terakhir sebelum pesan asisten — dipakai untuk menilai
@@ -975,7 +975,7 @@ export function AIChat({
                 di panel pop-up ia hanya muncul setelah percakapan dimulai. */}
             {isPageMode ? (
               <div className="shrink-0 border-t border-border/70 bg-background px-3 py-3 sm:px-6">
-                <div className="mx-auto w-full max-w-3xl">{renderComposer(true)}</div>
+                <div className="mx-auto w-full max-w-5xl">{renderComposer(true)}</div>
               </div>
             ) : (
               renderComposer(false)

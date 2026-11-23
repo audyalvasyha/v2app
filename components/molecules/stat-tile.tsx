@@ -1,5 +1,6 @@
 import React from "react";
 
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export interface StatTileProps {
@@ -38,50 +39,51 @@ export function StatTile({
   className,
 }: StatTileProps) {
   return (
-    <div
+    <Card
       className={cn(
-        "flex h-full flex-col rounded-xl border bg-card shadow-sm transition-colors hover:border-primary/30",
-        compact ? "px-3 py-2.5" : "px-3 py-3 sm:px-4 sm:py-3.5",
+        "h-full gap-0 py-0 shadow-sm transition-colors hover:border-primary/30",
         className,
       )}
       title={title}
     >
-      {/* Label datar: ikon dalam bubble aksen + teks kecil netral — tanpa
-          kapital/letter-spacing lebar supaya deretan KPI tidak berisik. */}
-      <div className={cn("flex items-center", compact ? "gap-2" : "gap-2.5")}>
-        {icon && (
-          <div
-            className={cn(
-              "flex shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary [&_svg]:h-3.5 [&_svg]:w-3.5",
-              compact ? "h-6 w-6" : "h-6 w-6 sm:h-7 sm:w-7",
-            )}
-          >
-            {icon}
-          </div>
-        )}
-        <span className="truncate text-xs font-medium text-muted-foreground">
-          {label}
-        </span>
-      </div>
-      <div
+      <CardContent
         className={cn(
-          "truncate font-semibold leading-none tabular-nums",
-          compact ? "mt-2 text-lg" : "mt-2 text-lg sm:mt-3 sm:text-xl",
-          emphasis && "text-primary",
+          "flex h-full flex-col",
+          compact ? "px-3 py-2.5" : "px-3 py-3 sm:px-4 sm:py-3.5",
         )}
       >
-        {value}
-      </div>
-      {hint && (
+        {/* Ikon datar tanpa bubble aksen — KPI tetap punya penanda visual
+            tanpa terlihat seperti deretan kartu starter dashboard. */}
+        <div className={cn("flex items-center", compact ? "gap-2" : "gap-2.5")}>
+          {icon && (
+            <span className="shrink-0 text-muted-foreground [&_svg]:h-3.5 [&_svg]:w-3.5">
+              {icon}
+            </span>
+          )}
+          <span className="truncate text-xs font-medium text-muted-foreground">
+            {label}
+          </span>
+        </div>
         <div
           className={cn(
-            "leading-snug text-muted-foreground",
-            compact ? "mt-1 text-[11px]" : "mt-1 text-[11px] sm:mt-1.5 sm:text-xs",
+            "truncate font-semibold leading-none tabular-nums",
+            compact ? "mt-2 text-lg" : "mt-2 text-lg sm:mt-3 sm:text-xl",
+            emphasis && "text-primary",
           )}
         >
-          {hint}
+          {value}
         </div>
-      )}
-    </div>
+        {hint && (
+          <div
+            className={cn(
+              "leading-snug text-muted-foreground",
+              compact ? "mt-1 text-[11px]" : "mt-1 text-[11px] sm:mt-1.5 sm:text-xs",
+            )}
+          >
+            {hint}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -25,7 +25,6 @@ import { DashboardLayout, type View } from "@/components/templates/dashboard-lay
 import { AuthGate } from "@/components/auth-gate"
 import { buildAlerts } from "@/lib/alerts"
 import { allowedViews, roleForUser, type AppRole } from "@/lib/roles"
-import { AIChat } from "@/components/molecules/ai-chat"
 
 // Tiap menu dimuat sebagai chunk terpisah: chart (recharts ≈ 100 KB+) dan tabel
 // besar cuma diunduh saat tabnya dibuka, bukan saat dashboard pertama dimuat.
@@ -75,6 +74,17 @@ const WeatherView = dynamic(
 const TrafficView = dynamic(
   () => import("@/components/organisms/traffic-view").then((m) => m.TrafficView),
   { ssr: false, loading: TrafficPageSkeleton },
+)
+// Chat AI tidak perlu ikut chunk awal. Setelah pertama dibuka, komponen tetap
+// ter-mount (hidden) supaya proses jawaban tidak terputus saat pindah menu.
+const AIChat = dynamic(
+  () => import("@/components/molecules/ai-chat").then((m) => m.AIChat),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="p-6 text-sm text-muted-foreground">Menyiapkan Midaa…</div>
+    ),
+  },
 )
 import { parseNilai, podDateToIso, type SkrDateBounds } from "@/lib/skr-status"
 import { daysInMonth } from "@/lib/skr-analytics"
@@ -214,6 +224,7 @@ function DashboardContent() {
   const { theme, preference: themePreference, toggleTheme } = useTheme()
   // Jadikan 'dashboard' sebagai view default
   const [activeView, setActiveView] = useState<View>('dashboard')
+  const [aiChatMounted, setAiChatMounted] = useState(false)
   // Peran user: default paling sempit sampai `app_users` selesai dibaca, supaya
   // menu admin tidak sempat tampil ke user terbatas. Fail-closed: user tanpa
   // baris peran — atau saat tabel belum tersedia — tetap terbatas. Hanya baris
@@ -319,23 +330,33 @@ function DashboardContent() {
 
   useKeyboardShortcuts(setActiveView, toggleTheme)
 
+  // Lazy-mount sekali; sesudah itu tetap hidup di latar agar jawaban panjang
+  // tidak hilang ketika user pindah menu.
+  useEffect(() => {
+    if (activeView === 'analisa') setAiChatMounted(true)
+  }, [activeView])
+
   // Hangatkan chunk menu saat browser benar-benar idle. Tanpa ini,
   // kunjungan pertama ke menu menunggu unduh/compile chunk dan menampilkan
   // skeleton lagi padahal datanya mungkin sudah ada di cache. Import ini
   // memakai modul yang sama dengan dynamic() di atas; timeout 5 detik
   // menjaga prefetch tidak berebut bandwidth dengan fetch data awal.
   useEffect(() => {
+    if (!roleLoaded) return
+    const allowed = new Set(permittedViews)
     const warm = () => {
-      void import("@/components/organisms/equipment-table")
-      void import("@/components/organisms/maintenance-table")
-      void import("@/components/organisms/service-monitoring-table")
-      void import("@/components/organisms/outbound-table")
-      void import("@/components/organisms/task-board")
-      void import("@/components/organisms/ban-analysis")
-      void import("@/components/organisms/skr-view")
-      void import("@/components/organisms/about-view")
-      void import("@/components/organisms/weather-view")
-      void import("@/components/organisms/traffic-view")
+      // Hanya chunk menu yang memang boleh dibuka role ini. User terbatas
+      // tidak perlu mengunduh tabel equipment/maintenance/ban yang besar.
+      if (allowed.has("equipment")) void import("@/components/organisms/equipment-table")
+      if (allowed.has("maintenance")) void import("@/components/organisms/maintenance-table")
+      if (allowed.has("monitoring")) void import("@/components/organisms/service-monitoring-table")
+      if (allowed.has("pengiriman")) void import("@/components/organisms/outbound-table")
+      if (allowed.has("tugas")) void import("@/components/organisms/task-board")
+      if (allowed.has("ban")) void import("@/components/organisms/ban-analysis")
+      if (allowed.has("skr")) void import("@/components/organisms/skr-view")
+      if (allowed.has("about")) void import("@/components/organisms/about-view")
+      if (allowed.has("weather")) void import("@/components/organisms/weather-view")
+      if (allowed.has("traffic")) void import("@/components/organisms/traffic-view")
     }
     const w = window as Window & {
       requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
@@ -347,9 +368,22 @@ function DashboardContent() {
     }
     const timer = window.setTimeout(warm, 5000)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [roleLoaded, permittedViews])
 
   useEffect(() => {
+    // Jangan menarik data admin sebelum peran selesai dibaca. User terbatas
+    // tidak boleh menerima payload equipment/histories/service logs sama
+    // sekali — pembatasan menu saja bukan pengamanan data.
+    if (!roleLoaded) return
+    if (userRole !== 'admin') {
+      setEquipments([])
+      setHistories([])
+      setServiceLogs([])
+      setError(null)
+      setIsLoading(false)
+      return
+    }
+
     // 1. Cache-first: render data terakhir seketika, tanpa menunggu network
     const cached = readCache()
     if (cached) {
@@ -368,7 +402,10 @@ function DashboardContent() {
       try {
         const [eqResponse, histResponse, serviceResponse] = await Promise.all([
           supabase.from('equipment').select(equipmentCols()).order('created_at', { ascending: false }),
-          supabase.from('maintenance_histories').select(HISTORY_COLS).order('tanggal', { ascending: false }),
+          // Batas atas menjaga payload tetap wajar. Histories tetap bisa
+          // difilter di UI; query tanpa limit adalah jalur OOM/lambat saat
+          // data bertambah.
+          supabase.from('maintenance_histories').select(HISTORY_COLS).order('tanggal', { ascending: false }).limit(20000),
           supabase.from('service_logs').select(SERVICE_LOG_COLS).order('service_date', { ascending: false }),
         ])
 
@@ -411,7 +448,7 @@ function DashboardContent() {
       }
     }
     fetchData()
-  }, [])
+  }, [roleLoaded, userRole])
 
   //_Nama toko untuk menu SKR — hanya id + nama yang diambil, lewat view
   //customers_ringkas supaya telephone_number & nik_salesman tidak ikut
@@ -787,8 +824,8 @@ function DashboardContent() {
   }, [equipments, searchLower, filters.status])
 
   const availableCount = useMemo(
-    () => filteredEquipments.filter(item => item.status === 'Available').length,
-    [filteredEquipments]
+    () => equipments.filter(item => item.status === 'Available').length,
+    [equipments]
   );
 
   const filteredGlobalHistories = useMemo(() => {
@@ -923,15 +960,15 @@ function DashboardContent() {
 
   // Konfigurasi Header Dinamis
   const headerInfo: Record<View, { title: string; desc: string }> = {
-    dashboard: { title: 'Dashboard', desc: 'Ringkasan operasional armada.' },
+    dashboard: { title: 'Dashboard', desc: 'Prioritas harian armada dan pengiriman.' },
     tugas: { title: 'Complaint Board', desc: 'Follow-up komplain pengiriman.' },
     equipment: { title: 'Daftar Equipment', desc: 'Aset armada dan riwayat perawatan.' },
     maintenance: { title: 'Semua Riwayat Maintenance', desc: 'Riwayat perbaikan seluruh unit.' },
-    monitoring: { title: 'Monitoring Status Servis', desc: 'Jadwal servis tiap unit.' },
+    monitoring: { title: 'Servis Rutin', desc: 'Jadwal servis rutin tiap unit.' },
     about: { title: 'Tentang Aplikasi', desc: 'Kisah di balik pengembangan Fleet Management System v2.' },
     skr: { title: 'SKR', desc: 'Sisa kiriman per armada dan sales.' },
     pengiriman: { title: 'Pengiriman', desc: 'Jam keluar, jam kembali, dan durasi.' },
-    ban: { title: 'Analisa Ban', desc: 'Kondisi ban per unit dari pemeriksaan driver.' },
+    ban: { title: 'Ban', desc: 'Kondisi ban per unit dari pemeriksaan driver.' },
     weather: { title: 'Perkiraan Cuaca', desc: 'Cuaca dan risiko perjalanan per daerah.' },
     traffic: { title: 'Monitoring Lalu Lintas', desc: 'Kondisi lalu lintas rute.' },
     analisa: { title: 'Analisa', desc: 'Asisten AI data operasional.' },
@@ -942,7 +979,7 @@ function DashboardContent() {
     activeView === 'tugas' ? 'Cari komplain… (sales, plat, delivery, FO, ID/nama toko)'
     : activeView === 'equipment' ? 'Cari equipment… (ID, deskripsi, nopol)'
     : activeView === 'maintenance' ? 'Cari riwayat perbaikan… (barang/jasa, nopol)'
-    : activeView === 'monitoring' ? 'Cari unit untuk monitoring… (ID, nopol)'
+    : activeView === 'monitoring' ? 'Cari unit untuk servis rutin… (ID, nopol)'
     : activeView === 'skr' ? 'Cari SKR… (nopol, salesman, nomor dokumen)'
     : activeView === 'pengiriman' ? 'Cari pengiriman… (nopol, freight order)'
     : 'Cari data… (equipment, riwayat, SKR, pengiriman)'
@@ -970,7 +1007,7 @@ function DashboardContent() {
       onToggleTheme={toggleTheme}
       activeView={activeView}
       onViewChange={handleViewChange}
-      equipmentCounts={{ total: filteredEquipments.length, available: availableCount }}
+      equipmentCounts={{ total: equipments.length, available: availableCount }}
       allowedViews={permittedViews}
       displayName={displayName}
       searchTerm={filters.search ?? ""}
@@ -1046,7 +1083,6 @@ function DashboardContent() {
             equipments={filteredEquipments}
             histories={histories}
             serviceLogs={serviceLogs}
-            outbounds={outbounds}
             isLoading={isLoading}
             error={error}
             statusFilter={filters.status || 'all'}
@@ -1137,7 +1173,7 @@ function DashboardContent() {
         {/* Tetap ter-mount saat pindah menu: pertanyaan yang belum dijawab
             tidak terputus, prosesnya lanjut di latar, dan jawabannya muncul
             begitu user kembali ke Analisa. Hanya tampilannya yang disembunyikan. */}
-        <AIChat activeView="analisa" active={activeView === 'analisa'} />
+        {aiChatMounted && <AIChat activeView="analisa" active={activeView === 'analisa'} />}
 
         {activeView === 'about' && (
           <AboutView />

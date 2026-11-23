@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-    Ban,
     CheckCircle2,
     ChevronRight,
     Circle,
@@ -46,6 +45,7 @@ import {
     isEscalated,
     isMissingTaskTable,
     nextStatus,
+    normalizeTaskStatus,
     priorityClass,
     priorityLabel,
     readLocalTasks,
@@ -69,7 +69,9 @@ import {
 const STATUS_ICON: Record<TaskStatus, React.ComponentType<{ className?: string }>> = {
     todo: Circle,
     progress: Clock,
-    blocked: Ban,
+    // Status lama tetap punya ikon agar data lama tidak kehilangan tipe;
+    // kolomnya sudah tidak ditampilkan lagi.
+    blocked: Clock,
     done: CheckCircle2,
 }
 
@@ -162,62 +164,6 @@ function displayNameFor(email: string | null | undefined, names: Record<string, 
 function customerKey(value: string | null | undefined): string {
     const raw = (value ?? "").trim()
     return /^\d+$/.test(raw) ? raw.replace(/^0+(?=\d)/, "") : raw
-}
-
-/** Warna border kartu sesuai langkah task. */
-const STATUS_CARD_BORDER: Record<TaskStatus, string> = {
-    todo: "border-sky-500/50",
-    progress: "border-amber-500/50",
-    blocked: "border-rose-500/50",
-    done: "border-emerald-500/50",
-}
-
-/** Aksen border atas kartu — inline style supaya warnanya pasti terpasang. */
-const STATUS_CARD_TOP_COLOR: Record<TaskStatus, string> = {
-    todo: "#0ea5e9",
-    progress: "#f59e0b",
-    blocked: "#f43f5e",
-    done: "#10b981",
-}
-
-/** Warna tombol status: aktif solid, tidak aktif tinted. */
-const STATUS_BUTTON_TONE: Record<TaskStatus, { active: string; idle: string }> = {
-    todo: {
-        active: "border-sky-600 bg-sky-600 text-white hover:bg-sky-600/90 hover:text-white",
-        idle: "border-sky-600/30 bg-sky-500/10 text-sky-700 hover:bg-sky-500/15 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-300",
-    },
-    progress: {
-        active: "border-amber-500 bg-amber-500 text-amber-950 hover:bg-amber-500/90 hover:text-amber-950",
-        idle: "border-amber-500/30 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-300",
-    },
-    blocked: {
-        active: "border-rose-600 bg-rose-600 text-white hover:bg-rose-600/90 hover:text-white",
-        idle: "border-rose-600/30 bg-rose-500/10 text-rose-700 hover:bg-rose-500/15 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-300",
-    },
-    done: {
-        active: "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-600/90 hover:text-white",
-        idle: "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-300",
-    },
-}
-
-/** Warna header kolom kanban — tint tipis, tanpa border tambahan. */
-const STATUS_HEADER_TONE: Record<TaskStatus, { box: string; text: string }> = {
-    todo: {
-        box: "bg-sky-500/[0.06]",
-        text: "text-sky-700 dark:text-sky-300",
-    },
-    progress: {
-        box: "bg-amber-500/[0.06]",
-        text: "text-amber-700 dark:text-amber-300",
-    },
-    blocked: {
-        box: "bg-rose-500/[0.06]",
-        text: "text-rose-700 dark:text-rose-300",
-    },
-    done: {
-        box: "bg-emerald-500/[0.06]",
-        text: "text-emerald-700 dark:text-emerald-300",
-    },
 }
 
 /** Tipe penyimpanan aktif: tabel Supabase, atau cadangan localStorage. */
@@ -576,9 +522,9 @@ export function TaskBoard({ search }: TaskBoardProps) {
     const byStatus = useMemo(() => {
         const map: Record<TaskStatus, Task[]> = { todo: [], progress: [], blocked: [], done: [] }
         for (const task of visible) {
-            // Data lokal lama bisa punya status di luar empat kolom; jangan
-            // biarkan satu baris rusak menjatuhkan seluruh papan.
-            const column = map[task.status]
+            // `blocked` lama masuk ke kolom Di Proses; data lama tidak
+            // dihapus dan akan tersimpan sebagai progress saat diedit ulang.
+            const column = map[normalizeTaskStatus(task.status)]
             if (column) column.push(task)
         }
         for (const status of TASK_STATUSES) map[status.id].sort(sortTasks)
@@ -648,7 +594,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
             <div
                 role="tablist"
                 aria-label="Kategori komplain"
-                className="grid grid-cols-4 gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 md:hidden"
+                className="grid grid-cols-3 gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 md:hidden"
             >
                 {TASK_STATUSES.map((status) => {
                     const Icon = STATUS_ICON[status.id]
@@ -668,7 +614,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                     : "text-muted-foreground hover:text-foreground",
                             )}
                         >
-                            <Icon className={cn("h-3 w-3 shrink-0", STATUS_HEADER_TONE[status.id].text)} />
+                            <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
                             <span className="w-full text-center">{status.label}</span>
                             <span className="text-[10px] tabular-nums opacity-60">
                                 {byStatus[status.id].length}
@@ -679,7 +625,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
             </div>
 
             {/* Papan kanban — semua kolom hanya di desktop; mobile mengikuti tab. */}
-            <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid min-w-0 gap-3 md:grid-cols-3">
                 {TASK_STATUSES.map((status) => {
                     const Icon = STATUS_ICON[status.id]
                     const column = byStatus[status.id]
@@ -707,23 +653,13 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                 if (task) void moveTask(task, status.id)
                             }}
                             className={cn(
-                                "flex min-w-0 flex-col rounded-xl border border-border/60 bg-background p-2.5 transition-colors",
+                                "flex min-w-0 flex-col rounded-xl border border-border/60 bg-muted/20 p-2.5 transition-colors",
                                 mobileStatus !== status.id && "hidden md:flex",
                                 dragOver === status.id && "border-primary/50 bg-primary/5",
                             )}
                         >
-                            <header
-                                className={cn(
-                                    "mb-2 flex items-center justify-between gap-2 rounded-md px-2 py-1.5",
-                                    STATUS_HEADER_TONE[status.id].box,
-                                )}
-                            >
-                                <h2
-                                    className={cn(
-                                        "flex items-center gap-1.5 text-xs font-medium",
-                                        STATUS_HEADER_TONE[status.id].text,
-                                    )}
-                                >
+                            <header className="mb-2 flex items-center justify-between gap-2 border-b border-border/60 px-1 pb-2">
+                                <h2 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                                     <Icon className="h-3.5 w-3.5" />
                                     {status.label}
                                 </h2>
@@ -748,7 +684,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                         : task.followed_up_by
                                           ? {
                                                 icon: User,
-                                                label: "Di-FU oleh",
+                                                label: "Diproses oleh",
                                                 email: task.followed_up_by,
                                                 at: task.followed_up_at,
                                             }
@@ -769,11 +705,10 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                             }}
                                             onClick={() => openEdit(task)}
                                             className={cn(
-                                                "group cursor-pointer rounded-lg border border-t-[3px] bg-card p-3 transition-colors hover:border-primary/40",
-                                                STATUS_CARD_BORDER[task.status],
+                                                "group cursor-pointer rounded-lg border bg-card p-3 transition-colors hover:border-primary/40",
+                                                escalated && "border-l-2 border-l-destructive",
                                                 task.status === "done" && "bg-card/60",
                                             )}
-                                            style={{ borderTopColor: STATUS_CARD_TOP_COLOR[task.status] }}
                                         >
                                             <div className="flex items-start justify-between gap-2">
                                                 <button
@@ -870,7 +805,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                                                 ? `Otomatis Tinggi — belum selesai ${ESCALATION_DAYS} hari+`
                                                                 : "Prioritas"
                                                         }
-                                                        className={cn("shrink-0 gap-1 px-1.5 py-0 text-xs", priorityClass(priority))}
+                                                        className={cn("shrink-0", priorityClass(priority))}
                                                     >
                                                         <Flag className="h-2.5 w-2.5" />
                                                         {priorityLabel(priority)}
@@ -958,7 +893,9 @@ interface TaskSheetProps {
 function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOptions, plateOptions, userNames }: TaskSheetProps) {
     const [title, setTitle] = useState(task?.title ?? "")
     const [description, setDescription] = useState(task?.description ?? "")
-    const [status, setStatus] = useState<TaskStatus>(initialStatus ?? task?.status ?? "todo")
+    const [status, setStatus] = useState<TaskStatus>(
+        normalizeTaskStatus(initialStatus ?? task?.status ?? "todo"),
+    )
     const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "normal")
     const [salesName, setSalesName] = useState(task?.sales_name ?? "")
     const [licensePlate, setLicensePlate] = useState(task?.license_plate ?? "")
@@ -1614,8 +1551,8 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                             className={cn(
                                                 "h-auto min-h-8 min-w-0 justify-start gap-1.5 whitespace-normal px-2 py-1.5 text-left text-xs leading-tight [overflow-wrap:anywhere]",
                                                 status === s.id
-                                                    ? STATUS_BUTTON_TONE[s.id].active
-                                                    : STATUS_BUTTON_TONE[s.id].idle,
+                                                    ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                                                    : "bg-card text-muted-foreground hover:bg-muted",
                                             )}
                                             onClick={() => setStatus(s.id)}
                                         >
@@ -1660,9 +1597,9 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                             {task.followed_up_by && (
                                 <p
                                     className="flex items-start gap-1.5"
-                                    title={`Di-FU oleh ${displayNameFor(task.followed_up_by, userNames)}`}
+                                    title={`Diproses oleh ${displayNameFor(task.followed_up_by, userNames)}`}
                                 >
-                                    <User className="mt-0.5 h-3 w-3 shrink-0" aria-label="Di-FU oleh" />
+                                    <User className="mt-0.5 h-3 w-3 shrink-0" aria-label="Diproses oleh" />
                                     <span>
                                         <span className="font-medium text-foreground">
                                             {displayNameFor(task.followed_up_by, userNames)}

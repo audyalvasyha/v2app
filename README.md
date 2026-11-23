@@ -37,8 +37,10 @@ terdaftar yang bisa mengakses:
   tanpa login — tanpa ini, kunci anon yang tertanam di browser masih bisa
   dipakai menarik data langsung lewat API. Tabel yang dikunci: `equipment`,
   `maintenance_histories`, `service_logs`, `armada_outbound`, `skr_detail`,
-  dan `customers` — tabel terakhir ini PII (nomor telepon & NIK salesman)
-  dikunci **per-kolom**: `authenticated` hanya boleh membaca `customer_id` +
+  dan `customers` — equipment/maintenance/service logs kini **khusus admin
+  utama**, sedangkan SKR/outbound/customers tetap bisa dibaca user terbatas.
+  Tabel customers ini PII (nomor telepon & NIK salesman) dan dikunci
+  **per-kolom**: `authenticated` hanya boleh membaca `customer_id` +
   `customer_name`, jadi tidak ada jalur baca (dashboard, chatbot Tanya Data,
   atau query manual) yang bisa menarik kolom PII-nya. Setelah script
   dijalankan, cron reminder wajib memakai `SUPABASE_SERVICE_ROLE_KEY` (lihat
@@ -51,14 +53,14 @@ Ringkasan satu layar untuk inventaris unit, ketersediaan, biaya, dan jadwal serv
   beserta delta persen dibanding 30 hari sebelumnya, rata-rata biaya per unit, servis
   terlewat, dan total biaya keseluruhan.
 - **Panel "Perlu Tindakan Segera"**: 5 unit dengan prioritas servis tertinggi (terlewat →
-  segera → aman), lengkap dengan tombol pintas ke Monitoring Servis.
+  segera → aman), lengkap dengan tombol pintas ke Servis Rutin.
 - **Grafik tren biaya** harian selama 3 bulan terakhir, tanpa mengubah sumber data.
 - **Distribusi Status Unit**: bar bertumpuk per status asli + legenda persentase.
 - **Ringkasan 30 Hari**: jumlah entri perbaikan, unit paling boros, dan biaya tertinggi.
 - **Riwayat terbaru**: label waktu relatif ("Hari ini", "Kemarin", "12 hari lalu"),
   nomor plat, serta penanda *outlier* untuk biaya ≥ 2× rata-rata.
 
-### Monitoring Servis
+### Servis Rutin
 - Chip KPI untuk memfilter status: Terlewat, Segera, Aman, Tanpa jadwal.
 - Urutan berdasarkan prioritas, jarak servis (hari/km), dan biaya.
 - Bar progres siklus servis per unit; baris bisa diklik untuk membuka riwayat servis.
@@ -75,7 +77,7 @@ Ringkasan satu layar untuk inventaris unit, ketersediaan, biaya, dan jadwal serv
 - Dikelompokkan per bulan dengan subtotal, bar biaya relatif, dan penanda *outlier*.
 - Ringkasan total periode.
 
-### Analisa Ban
+### Ban
 Menu khusus pengeluaran ban per unit. Ban tidak punya tabel sendiri di
 database — pencatatannya ikut pada riwayat perbaikan, di kolom uraian
 (`maintenance_histories.nama_barang_atau_jasa`), jadi semua yang tampil
@@ -428,8 +430,9 @@ gantinya.
 ### Import harian (upsert)
 
 Sidik jari baris = `delivery_number + pod_date + skr_base_unit + skr_sales_unit +
-skr_value` (unique index). RPC `upsert_skr_detail(jsonb)` — hanya untuk role
-`authenticated`, dipanggil dari halaman yang sudah login:
+skr_value` (unique index). RPC `upsert_skr_detail(jsonb)` — **hanya admin
+utama** (dicek ulang di dalam fungsi, bukan cuma di UI), dipanggil dari
+halaman import yang sudah login:
 
 - kombinasi sudah ada → baris ditimpa dengan nilai CSV terbaru
 - kombinasi baru → baris ditambah
@@ -494,12 +497,12 @@ Pola **Atomic Design** dipakai konsisten: `ui` → `molecules` → `organisms` �
 | --- | --- |
 | `Ctrl` + `/` | Fokus ke kolom pencarian |
 | `Alt` + `D` | Buka tab Dashboard |
-| `Alt` + `M` | Buka tab Monitoring Servis |
+| `Alt` + `M` | Buka tab Servis Rutin |
 | `Alt` + `E` | Buka tab Equipment |
 | `Alt` + `H` | Buka tab Histories |
 | `Alt` + `S` | Buka tab SKR (Sisa Kiriman) |
 | `Alt` + `P` | Buka tab Pengiriman |
-| `Alt` + `B` | Buka tab Analisa Ban |
+| `Alt` + `B` | Buka tab Ban |
 | `Alt` + `T` | Ganti tema terang/gelap |
 
 ---

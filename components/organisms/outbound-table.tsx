@@ -70,7 +70,7 @@ const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
-const COLUMN_COUNT = 8
+const COLUMN_COUNT = 7
 
 function toTime(value: string | null | undefined): number {
     if (!value) return 0
@@ -394,7 +394,7 @@ function OutboundTableImpl({
 
             {/* TABEL */}
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                <Table className="min-w-[820px] table-fixed">
+                <Table className="min-w-[760px] table-fixed">
                     <TableHeader className="bg-muted/40">
                         <TableRow className="hover:bg-transparent">
                             <TableHead className="w-12 text-center text-xs">#</TableHead>
@@ -420,8 +420,7 @@ function OutboundTableImpl({
                             <TableHead className="w-[136px] text-center whitespace-nowrap">No. Polisi</TableHead>
                             <TableHead className="w-[96px] text-center whitespace-nowrap">Jam Out (WIB)</TableHead>
                             <TableHead className="w-[96px] text-center whitespace-nowrap">Jam In (WIB)</TableHead>
-                            <TableHead className="w-[124px] text-center whitespace-nowrap">Durasi berjalan</TableHead>
-                            <TableHead className="w-[92px] text-center whitespace-nowrap">Durasi</TableHead>
+                            <TableHead className="w-[132px] text-center whitespace-nowrap">Durasi</TableHead>
                             <TableHead className="w-[104px] text-center whitespace-nowrap">Status</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -459,7 +458,7 @@ function OutboundTableImpl({
                                                 <span className="text-sm">{row.no_polisi || "—"}</span>
                                                 {/* Penanda menginap menempel di nopol, bukan di
                                                     kolom Status, agar lebar status tidak berubah
-                                                    antar baris. Ikon 20×20, detail di tooltip. */}
+                                                    antar baris. Ikon 24×24, detail di tooltip. */}
                                                 {menginap && (
                                                     <Badge
                                                         variant="outline"
@@ -473,7 +472,7 @@ function OutboundTableImpl({
                                                                 ? `Menginap — trip selesai, durasi ${formatDuration(durasi)} (lebih dari ${OUTBOUND_LATE_HOURS} jam)`
                                                                 : `Menginap — keluar ${Math.floor(hoursOut ?? 0)} jam, belum kembali`
                                                         }
-                                                        className="h-5 w-5 shrink-0 justify-center gap-0 border-amber-500/35 bg-amber-500/10 px-0 text-amber-700 dark:text-amber-400"
+                                                        className="h-6 w-6 shrink-0 justify-center gap-0 border-amber-500/35 bg-amber-500/10 px-0 text-amber-700 dark:text-amber-400"
                                                     >
                                                         <Moon className="h-3 w-3" />
                                                     </Badge>
@@ -500,11 +499,10 @@ function OutboundTableImpl({
                                                     {formatClockDuration(berjalanDetik)}
                                                 </span>
                                             ) : (
-                                                <span className="text-xs text-muted-foreground">—</span>
+                                                <span className="text-muted-foreground">
+                                                    {formatClockDuration(durasiDetik)}
+                                                </span>
                                             )}
-                                        </TableCell>
-                                        <TableCell className="py-2.5 text-center font-mono text-sm tabular-nums text-muted-foreground">
-                                            {formatClockDuration(durasiDetik)}
                                         </TableCell>
                                         <TableCell className="py-2.5 text-center">
                                             <Badge variant="outline" className={cn("shrink-0", info.className)}>

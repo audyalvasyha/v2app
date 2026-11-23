@@ -193,22 +193,6 @@ function ServiceMonitoringTableImpl({
             </div>
 
             <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-                {/* Kepala tabel — konteks jumlah & petunjuk interaksi */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/20 px-4 py-3">
-                    <div className="min-w-0">
-                        <h3 className="text-sm font-semibold tracking-tight">Daftar unit</h3>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                            {sorted.length.toLocaleString("id-ID")} unit pada filter ini · klik baris untuk melihat riwayat servis
-                        </p>
-                    </div>
-                    <Badge
-                        variant="outline"
-                        className="shrink-0 border-border bg-background"
-                    >
-                        Halaman {currentPage} / {totalPages}
-                    </Badge>
-                </div>
-
                 <Table>
                     <TableHeader className="bg-muted/30">
                         <TableRow className="border-b-border/60 hover:bg-transparent">
@@ -270,7 +254,7 @@ function ServiceMonitoringTableImpl({
                                                     variant="outline"
                                                     className={cn("gap-1.5", status.tone.badge)}
                                                 >
-                                                    <span className={cn("h-1.5 w-1.5 rounded-[1px]", status.tone.dot)} />
+                                                    <span className={cn("h-1.5 w-1.5 rounded-full", status.tone.dot)} />
                                                     {status.label}
                                                 </Badge>
                                             </TableCell>

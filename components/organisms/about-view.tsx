@@ -28,7 +28,7 @@ const CAPABILITIES: { index: string; title: string; desc: string }[] = [
   },
   {
     index: "03",
-    title: "Jadwal Servis & Reminder Email",
+    title: "Servis Rutin & Reminder Email",
     desc: "Status servis dari tanggal dan odometer; unit terlewat atau mendekati jadwal dikirim otomatis lewat email harian.",
   },
   {
@@ -63,7 +63,7 @@ const CAPABILITIES: { index: string; title: string; desc: string }[] = [
   },
   {
     index: "10",
-    title: "Analisa Ban Harian",
+    title: "Ban Harian",
     desc: "Hasil pemeriksaan ban driver app per posisi roda: tekanan psi, ketebalan mm, kondisi, dan foto — dipetakan ke peta roda interaktif, daftar prioritas unit yang perlu tindakan, dan export CSV untuk tim bengkel.",
   },
   {

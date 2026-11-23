@@ -75,10 +75,18 @@ export function isTaskAttachmentType(type: string): boolean {
 
 export const TASK_STATUSES: { id: TaskStatus; label: string }[] = [
     { id: "todo", label: "Baru masuk" },
-    { id: "progress", label: "Sedang di-FU" },
-    { id: "blocked", label: "Menunggu toko" },
+    { id: "progress", label: "Di Proses" },
     { id: "done", label: "Selesai" },
 ]
+
+/**
+ * `blocked` adalah status lama "Menunggu toko" yang sudah dihapus dari papan.
+ * Baris lama tetap harus muncul, jadi status itu diperlakukan sebagai
+ * "Di Proses" sampai user menyimpannya ulang.
+ */
+export function normalizeTaskStatus(status: TaskStatus): TaskStatus {
+    return status === "blocked" ? "progress" : status
+}
 
 export const TASK_PRIORITIES: { id: TaskPriority; label: string }[] = [
     { id: "high", label: "Tinggi" },
@@ -87,7 +95,7 @@ export const TASK_PRIORITIES: { id: TaskPriority; label: string }[] = [
 ]
 
 export function statusLabel(status: TaskStatus): string {
-    return TASK_STATUSES.find((s) => s.id === status)?.label ?? status
+    return TASK_STATUSES.find((s) => s.id === normalizeTaskStatus(status))?.label ?? status
 }
 
 export function priorityLabel(priority: TaskPriority): string {
@@ -158,7 +166,7 @@ export function sortTasks(a: Task, b: Task, now: number = Date.now()): number {
 
 /** Kolom berikutnya saat tombol geser ditekan (Selesai tetap di ujung). */
 export function nextStatus(status: TaskStatus): TaskStatus | null {
-    const i = TASK_STATUSES.findIndex((s) => s.id === status)
+    const i = TASK_STATUSES.findIndex((s) => s.id === normalizeTaskStatus(status))
     if (i < 0 || i === TASK_STATUSES.length - 1) return null
     return TASK_STATUSES[i + 1].id
 }

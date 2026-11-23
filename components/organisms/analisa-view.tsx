@@ -2,14 +2,18 @@
 
 import React, { memo, useMemo, useState } from "react"
 import {
+    AlertTriangle,
     ArrowDownRight,
     ArrowUpRight,
     ChevronDown,
     Minus,
-    RefreshCw,
     Sparkles,
 } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { compactNilai, formatQty } from "@/lib/skr-status"
 import {
@@ -147,31 +151,31 @@ function BriefingBody({ brief }: { brief: AiBrief }) {
                 )}
             </div>
             {Array.isArray(brief.tabel) && brief.tabel.length > 0 && (
-                <div className="mt-5 overflow-x-auto">
-                    <table className="w-full min-w-[560px] text-left text-xs">
-                        <thead>
-                            <tr className="border-b border-border">
-                                <th className="pb-2 pr-3 text-xs font-medium text-muted-foreground">KPI</th>
-                                <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">30 hari</th>
-                                <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">Sebelumnya</th>
-                                <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">Δ</th>
-                                <th className="pb-2 px-3 text-xs font-medium text-muted-foreground">Status</th>
-                                <th className="pb-2 pl-3 text-xs font-medium text-muted-foreground">Telaah</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/60">
+                <div className="mt-5">
+                    <Table className="min-w-[560px] text-xs">
+                        <TableHeader>
+                            <TableRow className="hover:bg-transparent">
+                                <TableHead className="h-8 px-0 pb-2 pr-3 text-xs">KPI</TableHead>
+                                <TableHead className="h-8 px-3 pb-2 text-right text-xs">30 hari</TableHead>
+                                <TableHead className="h-8 px-3 pb-2 text-right text-xs">Sebelumnya</TableHead>
+                                <TableHead className="h-8 px-3 pb-2 text-right text-xs">Δ</TableHead>
+                                <TableHead className="h-8 px-3 pb-2 text-xs">Status</TableHead>
+                                <TableHead className="h-8 pb-2 pl-3 pr-0 text-xs">Telaah</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody className="divide-y divide-border/60">
                             {brief.tabel.map((row) => (
-                                <tr key={row.kpi} className="align-top">
-                                    <td className="py-2.5 pr-3 font-medium text-foreground">{row.kpi}</td>
-                                    <td className="py-2.5 px-3 text-right tabular-nums text-foreground">{row.nilai}</td>
-                                    <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">{row.pembanding}</td>
-                                    <td className="py-2.5 px-3 text-right tabular-nums text-foreground">{row.perubahan}</td>
-                                    <td className="py-2.5 px-3"><StatusDot status={row.status} /></td>
-                                    <td className="py-2.5 pl-3 pr-1 leading-relaxed text-muted-foreground">{row.telaah}</td>
-                                </tr>
+                                <TableRow key={row.kpi} className="align-top">
+                                    <TableCell className="px-0 py-2.5 pr-3 align-top font-medium text-foreground">{row.kpi}</TableCell>
+                                    <TableCell className="px-3 py-2.5 text-right align-top tabular-nums text-foreground">{row.nilai}</TableCell>
+                                    <TableCell className="px-3 py-2.5 text-right align-top tabular-nums text-muted-foreground">{row.pembanding}</TableCell>
+                                    <TableCell className="px-3 py-2.5 text-right align-top tabular-nums text-foreground">{row.perubahan}</TableCell>
+                                    <TableCell className="px-3 py-2.5 align-top"><StatusDot status={row.status} /></TableCell>
+                                    <TableCell className="whitespace-normal py-2.5 pl-3 pr-0 align-top leading-relaxed text-muted-foreground">{row.telaah}</TableCell>
+                                </TableRow>
                             ))}
-                        </tbody>
-                    </table>
+                        </TableBody>
+                    </Table>
                 </div>
             )}
             {Array.isArray(brief.prioritas) && brief.prioritas.length > 0 && (
@@ -264,7 +268,7 @@ function ScorecardStatus({ status }: { status: KpiStatus | null }) {
 function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundWindow, isLoading, error }: AnalisaViewProps) {
     /** Detail angka disembunyikan dulu; ringkasan teks selalu tampil. */
     const [detailOpen, setDetailOpen] = useState(false)
-    const [refreshedAt, setRefreshedAt] = useState<string | null>(null)
+    const [showAllScorecard, setShowAllScorecard] = useState(false)
 
     const snapshot = useMemo(
         () => buildKpiSnapshot(histories, skrRows, skrPrevRows, outbounds, outboundWindow),
@@ -278,6 +282,10 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundW
 
     const { brief: aiBrief, error: aiError, loading: aiLoading, regenerate } = useAiBrief(snapshot)
     const scorecard = useMemo(() => buildScorecard(snapshot, status), [snapshot, status])
+    const visibleScorecard = showAllScorecard
+        ? scorecard
+        : scorecard.filter((row) => row.status !== null || row.aktual !== "—")
+    const hiddenScorecardCount = scorecard.length - visibleScorecard.length
 
     /** Delta per KPI — arah naik/turun + apakah arah itu baik. */
     const deltas = useMemo(() => {
@@ -302,11 +310,13 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundW
     if (isLoading) {
         return (
             <div className="space-y-4">
-                <div className="rounded-lg border bg-card p-5">
-                    <Skeleton className="h-4 w-44" />
-                    <Skeleton className="mt-2 h-3 w-64" />
-                    <Skeleton className="mt-4 h-3 w-full max-w-2xl" />
-                </div>
+                <Card className="gap-0 py-0 shadow-sm">
+                    <CardContent className="p-5">
+                        <Skeleton className="h-4 w-44" />
+                        <Skeleton className="mt-2 h-3 w-64" />
+                        <Skeleton className="mt-4 h-3 w-full max-w-2xl" />
+                    </CardContent>
+                </Card>
                 <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border xl:grid-cols-4">
                     {Array.from({ length: 4 }).map((_, i) => (
                         <div key={i} className="space-y-2 bg-card p-5">
@@ -322,10 +332,11 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundW
 
     if (error) {
         return (
-            <div className="rounded-lg border px-4 py-3 text-sm">
-                <p className={cn("font-medium", STATUS_COLOR.perhatian)}>Gagal menghitung analisa</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{error}</p>
-            </div>
+            <Alert variant="destructive" className="items-start p-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Gagal menghitung analisa</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+            </Alert>
         )
     }
 
@@ -337,39 +348,28 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundW
                     <h2 className="text-sm font-semibold tracking-tight text-foreground">Briefing Head of Transport</h2>
                     <div className="flex items-center gap-3">
                         <span className="text-[11px] text-muted-foreground">Wings · 30 hari terakhir vs 30 hari sebelumnya</span>
-                        <button
+                        <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={regenerate}
                             disabled={aiLoading}
                             title="Paksa analisa AI ulang: lewati cache dan minta telaah baru dari model atas snapshot terbaru"
-                            className="inline-flex items-center gap-1 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
                         >
                             <Sparkles className={cn("h-3 w-3", aiLoading && "animate-pulse")} />
                             {aiLoading ? "Menyusun…" : "Insight baru"}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setRefreshedAt(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }))}
-                            title="Segarkan waktu analisa (data dihitung ulang otomatis)"
-                            className="inline-flex items-center gap-1 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground"
-                        >
-                            <RefreshCw className="h-3 w-3" />
-                            Segarkan
-                        </button>
+                        </Button>
                     </div>
                 </div>
-                <div className="mt-3 rounded-lg border bg-card px-5 py-4">
+                <Card className="mt-3 gap-0 py-0 shadow-sm">
+                    <CardContent className="px-5 py-4">
                     {aiBrief ? (
                         <BriefingBody brief={aiBrief} />
                     ) : (
                         <div>
                             <p className="max-w-3xl text-[13px] leading-relaxed text-foreground">
                                 {headline}
-                                {refreshedAt && (
-                                    <span className="ml-2 text-xs text-muted-foreground">
-                                        Ringkasan terakhir diperbarui pukul {refreshedAt} WIB.
-                                    </span>
-                                )}
                             </p>
                             {aiError && (
                                 <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
@@ -394,7 +394,8 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundW
                             )}
                         </div>
                     )}
-                </div>
+                    </CardContent>
+                </Card>
             </section>
 
             {/* Scorecard KPI resmi — 11 KPI matriks atasan; yang tak ada datanya
@@ -402,36 +403,53 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundW
             <section>
                 <h2 className="text-sm font-semibold tracking-tight text-foreground">Scorecard KPI resmi</h2>
                 <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                    Bobot &amp; target sesuai matriks resmi Head of Transport · tanda — = data belum ada di app, bukan nol
+                    Hanya KPI yang sudah punya data ditampilkan. Klik “tampilkan semua” untuk melihat matriks lengkap.
                 </p>
-                <div className="mt-3 rounded-lg border bg-card px-5 py-4">
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[720px] text-left text-xs">
-                            <thead>
-                                <tr className="border-b border-border">
-                                    <th className="pb-2 pr-3 text-xs font-medium text-muted-foreground">KPI</th>
-                                    <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">Bobot</th>
-                                    <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">Target</th>
-                                    <th className="pb-2 px-3 text-right text-xs font-medium text-muted-foreground">Aktual 30 hari</th>
-                                    <th className="pb-2 px-3 text-xs font-medium text-muted-foreground">Status</th>
-                                    <th className="pb-2 pl-3 text-xs font-medium text-muted-foreground">Sumber</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border/60">
-                                {scorecard.map((row) => (
-                                    <tr key={row.id}>
-                                        <td className="py-2.5 pr-3 font-medium text-foreground">{row.nama}</td>
-                                        <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">{row.bobot || "—"}</td>
-                                        <td className="py-2.5 px-3 text-right tabular-nums text-foreground">{row.target}</td>
-                                        <td className="py-2.5 px-3 text-right tabular-nums text-foreground">{row.aktual}</td>
-                                        <td className="py-2.5 px-3"><ScorecardStatus status={row.status} /></td>
-                                        <td className="py-2.5 pl-3 pr-1 leading-relaxed text-muted-foreground">{row.sumber}</td>
-                                    </tr>
+                <Card className="mt-3 gap-0 py-0 shadow-sm">
+                    <CardContent className="px-5 py-4">
+                        <Table className="min-w-[720px] text-xs">
+                            <TableHeader>
+                                <TableRow className="hover:bg-transparent">
+                                    <TableHead className="h-8 px-0 pb-2 pr-3 text-xs">KPI</TableHead>
+                                    <TableHead className="h-8 px-3 pb-2 text-right text-xs">Bobot</TableHead>
+                                    <TableHead className="h-8 px-3 pb-2 text-right text-xs">Target</TableHead>
+                                    <TableHead className="h-8 px-3 pb-2 text-right text-xs">Aktual 30 hari</TableHead>
+                                    <TableHead className="h-8 px-3 pb-2 text-xs">Status</TableHead>
+                                    <TableHead className="h-8 pb-2 pl-3 pr-0 text-xs">Sumber</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody className="divide-y divide-border/60">
+                                {visibleScorecard.map((row) => (
+                                    <TableRow key={row.id}>
+                                        <TableCell className="px-0 py-2.5 pr-3 align-top font-medium text-foreground">{row.nama}</TableCell>
+                                        <TableCell className="px-3 py-2.5 text-right align-top tabular-nums text-muted-foreground">{row.bobot || "—"}</TableCell>
+                                        <TableCell className="px-3 py-2.5 text-right align-top tabular-nums text-foreground">{row.target}</TableCell>
+                                        <TableCell className="px-3 py-2.5 text-right align-top tabular-nums text-foreground">{row.aktual}</TableCell>
+                                        <TableCell className="px-3 py-2.5 align-top"><ScorecardStatus status={row.status} /></TableCell>
+                                        <TableCell className="whitespace-normal py-2.5 pl-3 pr-0 align-top leading-relaxed text-muted-foreground">{row.sumber}</TableCell>
+                                    </TableRow>
                                 ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                            </TableBody>
+                        </Table>
+                        {hiddenScorecardCount > 0 && (
+                            <div className="mt-3 flex justify-center border-t pt-3">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                                    onClick={() => setShowAllScorecard((open) => !open)}
+                                    aria-expanded={showAllScorecard}
+                                >
+                                    <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAllScorecard && "rotate-180")} />
+                                    {showAllScorecard
+                                        ? "Sembunyikan KPI tanpa data"
+                                        : `Tampilkan ${hiddenScorecardCount} KPI tanpa data`}
+                                </Button>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
             </section>
 
             {/* Statistik KPI — grid gap-px = divider hairline antar sel */}
@@ -490,15 +508,17 @@ function AnalisaViewImpl({ histories, skrRows, skrPrevRows, outbounds, outboundW
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                     Ambang status provisional · biaya = catatan perbaikan/servis armada (belum termasuk BBM &amp; jasa mitra) · ritase mengikuti rentang data Pengiriman yang dimuat
                 </p>
-                <button
+                <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setDetailOpen((v) => !v)}
-                    className="inline-flex items-center gap-1 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    className="h-7 gap-1 px-2 text-xs text-muted-foreground"
                     aria-expanded={detailOpen}
                 >
                     <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", detailOpen && "rotate-180")} />
                     {detailOpen ? "Sembunyikan detail" : "Tampilkan detail rotasi"}
-                </button>
+                </Button>
             </div>
         </div>
     )

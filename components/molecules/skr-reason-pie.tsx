@@ -57,8 +57,8 @@ export function SkrReasonPie({ data }: { data: SkrReasonCategoryDatum[] }) {
     ) satisfies ChartConfig
 
     return (
-        <div>
-            <ChartContainer config={chartConfig} className="aspect-auto h-[300px] w-full">
+        <div className="flex h-full min-w-0 flex-col">
+            <ChartContainer config={chartConfig} className="aspect-auto h-[300px] w-full overflow-visible">
                 <PieChart>
                     <ChartTooltip
                         content={
@@ -122,11 +122,11 @@ export function SkrReasonPie({ data }: { data: SkrReasonCategoryDatum[] }) {
 
             {/* Legenda manual: satu baris per kategori — label + nilai + baris,
                 supaya detail angka yang tadinya ada di daftar tidak hilang. */}
-            <ul className="mt-1 divide-y">
+            <ul className="mt-auto divide-y border-t">
                 {sliced.map((d) => (
                     <li
                         key={d.category}
-                        className="flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors hover:bg-muted/40"
+                        className="flex items-center gap-2.5 px-1 py-1.5 text-xs transition-colors hover:bg-muted/40"
                     >
                         <span
                             className="h-2.5 w-2.5 shrink-0 rounded-sm"

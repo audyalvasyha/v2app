@@ -155,9 +155,10 @@ export function isOutboundLate(
 /** "2j 15m" */
 export function formatDuration(minutes: number | null): string {
     if (minutes == null) return "—"
-    if (minutes < 60) return `${minutes}m`
-    const h = Math.floor(minutes / 60)
-    const m = minutes % 60
+    const total = Math.max(0, Math.round(minutes))
+    if (total < 60) return `${total}m`
+    const h = Math.floor(total / 60)
+    const m = total % 60
     return m === 0 ? `${h}j` : `${h}j ${m}m`
 }
 

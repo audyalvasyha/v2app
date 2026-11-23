@@ -56,8 +56,31 @@ begin
     raise exception 'Harus login terlebih dahulu' using errcode = '42501';
   end if;
 
+  -- Import SKR mengubah data operasional seluruh armada. Jangan hanya
+  -- mengandalkan menu UI: siapa pun yang memegang JWT authenticated bisa
+  -- memanggil RPC ini langsung lewat PostgREST. Samakan dengan lib/roles.ts:
+  -- hanya admin utama yang boleh menulis.
+  if lower(coalesce(auth.jwt() ->> 'email', '')) <> lower('audyal.vasyah@pekanbaru-dr.com')
+     or (
+       to_regclass('public.app_users') is not null
+       and exists (
+         select 1
+           from public.app_users u
+          where lower(u.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+            and u.role <> 'admin'
+       )
+     ) then
+    raise exception 'Hanya admin yang boleh import SKR' using errcode = '42501';
+  end if;
+
   if jsonb_typeof(rows) <> 'array' then
     raise exception 'Payload harus berupa array JSON' using errcode = '22P02';
+  end if;
+
+  -- Batas batch: upload normal puluhan ribu baris, tapi payload raksasa
+  -- dari script tidak boleh menyandera database/Route Handler.
+  if jsonb_array_length(rows) > 50000 then
+    raise exception 'Maksimal 50.000 baris per upload' using errcode = '22023';
   end if;
 
   insert into public.skr_detail (

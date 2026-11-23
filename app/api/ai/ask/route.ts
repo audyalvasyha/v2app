@@ -136,6 +136,11 @@ function parseHistory(
 }
 
 export async function POST(request: Request) {
+  // Auth dulu, baru baca body: request tanpa JWT tidak perlu memicu parse
+  // JSON/validasi yang bisa dipakai untuk spam ke route berbiaya AI.
+  const auth = await requireUserClient(request)
+  if (!auth.ok) return auth.response
+
   let question: unknown;
   let rawHistory: unknown = [];
   let rememberThis: unknown = false;
@@ -166,12 +171,9 @@ export async function POST(request: Request) {
     );
   }
 
-  // ── Auth ────────────────────────────────────────────────────────
   // Auth + klien beridentitas user dilakukan di satu tempat
   // (`requireUserClient`) supaya route ini dan route /api/ai/memory
   // memakai aturan yang sama persis.
-  const auth = await requireUserClient(request);
-  if (!auth.ok) return auth.response;
   const { client: userClient, userId } = auth.value;
 
   // Baru setelah identitas pasti: kuota dihitung per user, bukan per IP,

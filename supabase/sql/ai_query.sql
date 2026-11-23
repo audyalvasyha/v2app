@@ -230,6 +230,11 @@ where tanggal is not null
 group by 1
 order by 1 desc;
 
+-- View ini membaca tabel biaya yang kini khusus admin. Tanpa
+-- security_invoker, view berjalan sebagai owner dan role terbatas tetap
+-- bisa membaca biaya lewat Tanya Midaa meski RLS tabelnya sudah dikunci.
+alter view public.ai_biaya_bulanan set (security_invoker = true);
+
 -- Kinerja sales per bulan, dengan nama (bukan kode salesman).
 --
 -- Dijadikan view karena dua alasan:

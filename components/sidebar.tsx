@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, Gauge, Layers, ChevronDown, Info, ListChecks, type LucideIcon } from "lucide-react"
+import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, BotMessageSquare, Layers, ChevronDown, Info, ListChecks, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/utils/supabase"
 import type { View } from "@/components/templates/dashboard-layout"
@@ -75,7 +75,17 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     try {
-      localStorage.removeItem("fleet-cache-v2")
+      // Jangan tinggalkan data operasional/percakapan di perangkat bersama.
+      // Preferensi tema & sidebar tidak sensitif, jadi sengaja tidak dihapus.
+      for (const key of [
+        "fleet-cache-v2",
+        "fleet-tasks-v1",
+        "midaa.ai-chat.v1",
+        "analisa-brief-cache-v1",
+        "weather-cache-v1",
+      ]) {
+        localStorage.removeItem(key)
+      }
     } catch {
       /* localStorage tidak tersedia — abaikan */
     }
@@ -151,7 +161,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
                 {can('monitoring') && (
                   <SidebarButton
                     icon={Activity}
-                    label="Monitoring Servis"
+                    label="Servis Rutin"
                     active={activeView === 'monitoring'}
                     collapsed={collapsed}
                     onClick={() => onViewChange('monitoring')}
@@ -165,7 +175,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
                     collapsed={collapsed}
                     onClick={() => onViewChange('equipment')}
                     badge={
-                      <Badge variant="secondary" className="min-w-5">
+                      <Badge variant="secondary" className="min-w-6">
                         {equipmentCounts.total}
                       </Badge>
                     }
@@ -183,7 +193,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
                 {can('ban') && (
                   <SidebarButton
                     icon={Disc3}
-                    label="Analisa Ban"
+                    label="Ban"
                     active={activeView === 'ban'}
                     collapsed={collapsed}
                     onClick={() => onViewChange('ban')}
@@ -198,7 +208,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
 
         {can('analisa') && (
           <SidebarButton
-            icon={Gauge}
+            icon={BotMessageSquare}
             label="Analisa"
             active={activeView === 'analisa'}
             collapsed={collapsed}
@@ -251,15 +261,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
       {/* Footer sengaja sticky + shrink-0: About dan akun harus tetap di
           dasar sidebar, bukan ikut tergulung bersama daftar menu. */}
       <div className="sticky bottom-0 z-20 shrink-0 border-t border-sidebar-border bg-sidebar p-2">
-        <SidebarButton
-          icon={Info}
-          label="About"
-          active={activeView === 'about'}
-          collapsed={collapsed}
-          onClick={() => onViewChange('about')}
-        />
-
-        <div className="relative mt-1">
+        <div className="relative">
         <button
           type="button"
           onClick={() => setAccountOpen((open) => !open)}
@@ -279,9 +281,21 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
 
         {accountOpen && (
           <div className={collapsed
-            ? "absolute bottom-0 left-full z-20 ml-2 w-40 rounded-md border bg-popover p-1 shadow-md"
+            ? "absolute bottom-0 left-full z-20 ml-2 w-44 rounded-md border bg-popover p-1 shadow-md"
             : "absolute bottom-full left-0 right-0 z-20 mb-1 rounded-md border bg-popover p-1 shadow-md"}
           >
+            <button
+              type="button"
+              onClick={() => {
+                onViewChange('about')
+                setAccountOpen(false)
+              }}
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+            >
+              <Info className="h-4 w-4 shrink-0" />
+              <span>Tentang aplikasi</span>
+            </button>
+            <div className="my-1 h-px bg-border" role="separator" />
             <button
               type="button"
               onClick={handleSignOut}

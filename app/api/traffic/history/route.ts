@@ -59,13 +59,22 @@ export async function GET(request: Request) {
     );
   }
 
-  return NextResponse.json({
-    generatedAt: new Date().toISOString(),
-    locations: histories.map((h) => ({
-      locationId: h.locationId,
-      available: h.available,
-      hourlyPattern: h.hourlyPattern,
-      daily: h.daily,
-    })),
-  });
+  return NextResponse.json(
+    {
+      generatedAt: new Date().toISOString(),
+      locations: histories.map((h) => ({
+        locationId: h.locationId,
+        available: h.available,
+        hourlyPattern: h.hourlyPattern,
+        daily: h.daily,
+      })),
+    },
+    {
+      // Pola historis berubah perlahan; cache 5 menit cukup dan menghemat
+      // query DB berulang saat beberapa user membuka halaman Traffic.
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900",
+      },
+    },
+  );
 }

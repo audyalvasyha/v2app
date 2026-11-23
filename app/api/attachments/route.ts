@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -77,6 +78,30 @@ function fail(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status })
 }
 
+/** Object key selalu dibuat route upload dengan prefix user yang login. */
+function belongsToUser(path: string, userId: string): boolean {
+  return path.startsWith(`${KEY_PREFIX}${userId}/`)
+}
+
+/**
+ * Lampiran yang sudah tercatat di task boleh dilihat user login lain yang
+ * memang bisa membaca papan komplain. Ini mencegah endpoint "view" dipakai
+ * untuk menebak object key milik task/user lain di bucket yang sama.
+ */
+async function isTaskAttachment(
+  client: SupabaseClient,
+  path: string,
+): Promise<boolean> {
+  const [original, resolution] = await Promise.all([
+    client.from("tasks").select("id").eq("attachment_path", path).limit(1),
+    client.from("tasks").select("id").eq("resolution_attachment_path", path).limit(1),
+  ])
+  return (
+    (!original.error && (original.data?.length ?? 0) > 0) ||
+    (!resolution.error && (resolution.data?.length ?? 0) > 0)
+  )
+}
+
 export async function POST(request: Request) {
   const auth = await requireUserClient(request)
   if (!auth.ok) return auth.response
@@ -138,6 +163,11 @@ export async function POST(request: Request) {
     if (action === "view") {
       const path = body.path
       if (!isSafeKey(path)) return fail("Path lampiran tidak valid.")
+      const isOwner = belongsToUser(path, auth.value.userId)
+      if (!isOwner && !(await isTaskAttachment(auth.value.client, path))) {
+        // Jangan bocorkan apakah object key itu ada atau bukan.
+        return fail("Lampiran tidak ditemukan.", 404)
+      }
       const url = await getSignedUrl(
         client,
         new GetObjectCommand({ Bucket: config.bucket, Key: path }),
@@ -149,6 +179,9 @@ export async function POST(request: Request) {
     if (action === "delete") {
       const path = body.path
       if (!isSafeKey(path)) return fail("Path lampiran tidak valid.")
+      if (!belongsToUser(path, auth.value.userId)) {
+        return fail("Tidak berwenang menghapus lampiran ini.", 403)
+      }
       await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: path }))
       return NextResponse.json({ ok: true })
     }

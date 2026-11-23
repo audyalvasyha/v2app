@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, useState } from "react"
+import React, { useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import {
     Card,
@@ -149,7 +149,7 @@ function LocationDetail({ loc, trafficPattern }: { loc: LocationWeather; traffic
                         Terasa {loc.current.apparent != null ? `${Math.round(loc.current.apparent)}°` : "—"}
                     </span>
                     <span className="tabular-nums text-muted-foreground">
-                        Lembap {loc.current.humidity != null ? `${Math.round(loc.current.humidity)}%` : "—"}
+                        Kelembapan {loc.current.humidity != null ? `${Math.round(loc.current.humidity)}%` : "—"}
                     </span>
                     <span className="tabular-nums text-muted-foreground">
                         Angin {loc.current.wind != null ? `${Math.round(loc.current.wind)}` : "—"} km/j
@@ -201,7 +201,14 @@ function LocationDetail({ loc, trafficPattern }: { loc: LocationWeather; traffic
 export function WeatherView() {
     const { locations, isLoading, error, updatedAt, refresh } = useWeather()
     const [selectedId, setSelectedId] = useState<string | null>(null)
+    const detailRef = useRef<HTMLDivElement>(null)
     const selected = locations.find((l) => l.def.id === selectedId) ?? locations[0] ?? null
+    const selectLocation = (id: string) => {
+        setSelectedId(id)
+        window.setTimeout(() => {
+            detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+        }, 0)
+    }
     const summary = useMemo(() => regionWeatherSummary(locations), [locations])
     const hasData = locations.length > 0
     // Pola traffic historis untuk rekomendasi jam berangkat (toggle byId,
@@ -214,7 +221,7 @@ export function WeatherView() {
             {/* Bar status: sumber data + waktu pembaruan + refresh manual */}
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>
-                    Open-Meteo · WIB · {formatTime(updatedAt)}
+                    Diperbarui {formatTime(updatedAt)} WIB
                     {" · "}
                     <span className="tabular-nums">{WEATHER_LOCATIONS.length} titik pantau</span>
                 </span>
@@ -290,14 +297,16 @@ export function WeatherView() {
                                 key={loc.def.id}
                                 loc={loc}
                                 selected={selected?.def.id === loc.def.id}
-                                onSelect={() => setSelectedId(loc.def.id)}
+                                onSelect={() => selectLocation(loc.def.id)}
                             />
                         ))}
                     </div>
 
                     {/* Detail lokasi terpilih */}
                     {selected && (
-                        <LocationDetail loc={selected} trafficPattern={history.byId.get(selected.def.id)?.hourlyPattern} />
+                        <div ref={detailRef} className="scroll-mt-20 sm:scroll-mt-24">
+                            <LocationDetail loc={selected} trafficPattern={history.byId.get(selected.def.id)?.hourlyPattern} />
+                        </div>
                     )}
                 </>
             )}

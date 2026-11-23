@@ -4,6 +4,13 @@ import Image from "next/image"
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Menu, Search, X } from "lucide-react"
 import type { ThemePreference } from "@/hooks/use-theme"
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog"
@@ -44,6 +51,7 @@ interface HeaderProps {
  */
 export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSearchChange, searchPlaceholder, searchItems, searchCounts, onSearchSelect, alerts = [], onSelectAlert, onOpenSidebar }: HeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   return (
     <header className="sticky top-0 z-20 shrink-0 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="flex h-16 items-center gap-2 px-4 sm:px-6">
@@ -116,11 +124,77 @@ export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSe
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 md:hidden"
+            onClick={() => setMobileSearchOpen(true)}
+            aria-label="Cari data"
+          >
+            <Search className="h-4 w-4" />
+          </Button>
           {onSelectAlert && <NotificationsBell alerts={alerts} onSelect={onSelectAlert} />}
           <ThemeToggle theme={theme} preference={themePreference} onToggle={onToggleTheme} />
           <KeyboardShortcutsDialog />
         </div>
       </div>
+
+      <Dialog
+        open={mobileSearchOpen}
+        onOpenChange={(open) => {
+          setMobileSearchOpen(open)
+          if (!open) setSearchOpen(false)
+        }}
+      >
+        <DialogContent className="top-3 w-[calc(100%-1rem)] max-w-lg translate-y-0 gap-3 p-3">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Cari data</DialogTitle>
+            <DialogDescription>
+              Cari equipment, riwayat, SKR, pengiriman, dan komplain dari seluruh menu.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              onFocus={() => setSearchOpen(true)}
+              onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)}
+              placeholder={searchPlaceholder ?? "Cari data…"}
+              className="h-10 rounded-full pl-9 pr-9"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onSearchChange("")
+                  setSearchOpen(false)
+                }}
+                aria-label="Bersihkan pencarian"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+
+            <GlobalSearchDropdown
+              open={searchOpen && mobileSearchOpen}
+              hasQuery={searchTerm.trim().length > 0}
+              items={searchItems}
+              counts={searchCounts}
+              onSelect={(view) => {
+                onSearchSelect(view)
+                setMobileSearchOpen(false)
+                setSearchOpen(false)
+              }}
+              onClose={() => setSearchOpen(false)}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </header>
   )
 }

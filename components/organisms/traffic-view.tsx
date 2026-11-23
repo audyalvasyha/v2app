@@ -16,7 +16,7 @@
  * + detail rute terpilih. Klik baris / garis / pin → peta zoom ke rute itu.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import {
     Activity,
@@ -37,19 +37,23 @@ import {
     WifiOff,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Skeleton } from "@/components/ui/skeleton"
 import type { MapLocation } from "@/components/organisms/traffic-map"
 import { useTrafficHistory, type LocationHistoryUi } from "@/hooks/use-traffic-history"
 
 // Peta Leaflet — ssr:false karena Leaflet menyentuh window saat init.
 const TrafficMap = dynamic(() => import("@/components/organisms/traffic-map").then((m) => m.TrafficMap), {
     ssr: false,
-    loading: () => <div className="h-[420px] w-full animate-pulse rounded-xl bg-muted/40 lg:h-[560px]" />,
+    loading: () => <Skeleton className="h-[420px] w-full rounded-xl lg:h-[560px]" />,
 })
 
 // Grafik historis keluar dari boundary charts.tsx (satu chunk recharts).
 const HistoryChart = dynamic(
     () => import("@/components/molecules/charts").then((m) => m.HistoryChart),
-    { ssr: false, loading: () => <div className="h-[180px] w-full animate-pulse rounded-md bg-muted/40" /> },
+    { ssr: false, loading: () => <Skeleton className="h-[180px] w-full rounded-md" /> },
 )
 
 type TrafficLevel = "good" | "warning" | "critical" | "unknown"
@@ -179,6 +183,7 @@ export function TrafficView() {
     const [refreshing, setRefreshing] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [selectedId, setSelectedId] = useState<string | null>(null)
+    const detailRef = useRef<HTMLDivElement>(null)
     const [showLines, setShowLines] = useState(false)
     const [showTraffic, setShowTraffic] = useState(true)
     const [tileUnavailable, setTileUnavailable] = useState(false)
@@ -267,6 +272,11 @@ export function TrafficView() {
 
     const onSelect = useCallback((id: string | null) => {
         setSelectedId((prev) => (prev && id === prev ? null : id))
+        if (id && window.matchMedia("(max-width: 1023px)").matches) {
+            window.setTimeout(() => {
+                detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }, 0)
+        }
     }, [])
 
     const onTileError = useCallback(() => {
@@ -279,80 +289,73 @@ export function TrafficView() {
 
     return (
         <div className="space-y-4">
-            {/* ── Hero header ─────────────────────────────────────────────── */}
-            <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-                    <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <h1 className="flex items-center gap-2 text-lg font-semibold">
-                                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/15">
-                                    <Route className="h-4.5 w-4.5 text-sky-600 dark:text-sky-400" />
-                                </span>
-                                Monitoring Lalu Lintas
-                            </h1>
-                            {/* Sumber data — jujur live vs estimasi */}
-                            {data && (
-                                liveFlowCount > 0 ? (
-                                    <Badge variant="outline" className="gap-1.5 border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                                        <Wifi className="h-3 w-3" /> Data live TomTom
-                                    </Badge>
-                                ) : (
-                                    <Badge variant="outline" className="gap-1.5 border-blue-500/35 bg-blue-500/10 text-blue-700 dark:text-blue-300">
-                                        <Satellite className="h-3 w-3" /> Mode estimasi (fallback gratis)
-                                    </Badge>
-                                )
-                            )}
-                        </div>
-                        <p className="mt-1.5 text-sm text-muted-foreground">
+            {/* Toolbar ringkas — judul halaman sudah tampil di header konten. */}
+            <Card className="gap-0 py-0 shadow-sm">
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+                        {data && (
+                            liveFlowCount > 0 ? (
+                                <Badge variant="outline" className="gap-1.5 border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                                    <Wifi className="h-3 w-3" /> Data live TomTom
+                                </Badge>
+                            ) : (
+                                <Badge variant="outline" className="gap-1.5 border-blue-500/35 bg-blue-500/10 text-blue-700 dark:text-blue-300">
+                                    <Satellite className="h-3 w-3" /> Mode estimasi
+                                </Badge>
+                            )
+                        )}
+                        <p className="text-sm text-muted-foreground">
                             {summary ? `${summary.routedGeometries}/${summary.totalRoutes} rute` : "Memuat rute…"}
                             {data ? ` · diperbarui ${relativeTime(data.generatedAt)}` : ""}
                         </p>
                     </div>
-                    <button
+                    <Button
+                        type="button"
+                        size="sm"
                         onClick={() => load(true)}
                         disabled={refreshing || loading}
-                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
+                        className="gap-1.5"
                     >
-                        <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                        <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
                         {refreshing ? "Memuat…" : "Segarkan"}
-                    </button>
-                </div>
-            </div>
+                    </Button>
+                </CardContent>
+            </Card>
 
             {error && (
-                <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                    <WifiOff className="h-4 w-4 shrink-0" /> {error}
-                </div>
+                <Alert variant="destructive" className="flex items-start gap-2 p-3 text-sm">
+                    <WifiOff className="h-4 w-4 shrink-0" />
+                    <AlertDescription>{error}</AlertDescription>
+                </Alert>
             )}
 
             {data && !data.configured && (
-                <div className="flex items-start gap-2 rounded-lg border border-amber-300/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+                <Alert className="flex items-start gap-2 border-amber-300/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
                     <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>
-                        TOMTOM_API_KEY belum diset — status memakai <strong>estimasi</strong> (jadwal × jarak ×
-                        cuaca). Isi key di Settings → Environment untuk data live.
-                    </span>
-                </div>
+                    <AlertDescription className="text-amber-700 dark:text-amber-400">
+                        Data live belum tersedia — status memakai <strong>estimasi</strong> dari jadwal, jarak,
+                        dan cuaca.
+                    </AlertDescription>
+                </Alert>
             )}
 
             {data && data.configured && !hasLive && liveFlowCount === 0 && (
-                <div className="flex items-start gap-2 rounded-lg border border-blue-300/50 bg-blue-500/10 p-3 text-sm text-blue-800 dark:text-blue-300">
+                <Alert className="flex items-start gap-2 border-blue-300/50 bg-blue-500/10 p-3 text-sm text-blue-800 dark:text-blue-300">
                     <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>
-                        Kuota TomTom habis — status memakai <strong>estimasi</strong> dari pola jam, karakter jalan,
-                        dan cuaca.
-                    </span>
-                </div>
+                    <AlertDescription className="text-blue-800 dark:text-blue-300">
+                        Data live sedang tidak tersedia — status memakai <strong>estimasi</strong> dari pola jam,
+                        karakter jalan, dan cuaca.
+                    </AlertDescription>
+                </Alert>
             )}
 
             {tileUnavailable && showTraffic && (
-                <div className="flex items-start gap-2 rounded-lg border border-slate-300/50 bg-slate-500/10 p-3 text-sm text-slate-700 dark:text-slate-300">
+                <Alert className="flex items-start gap-2 border-slate-300/50 bg-slate-500/10 p-3 text-sm text-slate-700 dark:text-slate-300">
                     <Layers className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>
-                        Lapisan warna traffic di peta tidak tersedia (kuota tile habis) — lapisan dimatikan sementara. Garis
-                        rute &amp; status per daerah tetap berfungsi.
-                    </span>
-                </div>
+                    <AlertDescription className="text-slate-700 dark:text-slate-300">
+                        Lapisan warna peta sementara tidak tersedia. Garis rute dan status per daerah tetap aktif.
+                    </AlertDescription>
+                </Alert>
             )}
 
             {/* ── Peta (kiri) + daftar rute & detail (kanan) ──────────────── */}
@@ -381,27 +384,33 @@ export function TrafficView() {
                             <span className="h-2.5 w-2.5 rounded-full bg-sky-500" /> Pool
                         </span>
                         <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
-                        <button
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
                             onClick={() => setShowTraffic((s) => !s)}
                             disabled={tileUnavailable}
-                            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${showTraffic && !tileUnavailable ? "border-primary/50 bg-primary/5 text-foreground" : "hover:bg-muted"
-                                }`}
+                            className={`h-7 gap-1.5 px-2.5 text-[11px] ${showTraffic && !tileUnavailable ? "border-primary/50 bg-primary/5 text-foreground" : ""}`}
                             title={tileUnavailable ? "Tile traffic tidak tersedia saat ini" : undefined}
                         >
                             <Layers className="h-3 w-3" /> Overlay traffic: {showTraffic && !tileUnavailable ? "AKTIF" : "MATI"}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
                             onClick={() => setShowLines((s) => !s)}
-                            className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors hover:bg-muted"
+                            className="h-7 gap-1.5 px-2.5 text-[11px]"
                         >
                             <Route className="h-3 w-3" /> {showLines ? "Sembunyikan semua garis" : "Tampilkan semua garis"}
-                        </button>
+                        </Button>
                     </div>
                 </div>
 
                 {/* Panel kanan: daftar rute compact + detail rute terpilih */}
                 <div className="lg:col-span-1">
-                    <div className="flex h-full flex-col rounded-xl border bg-card p-3">
+                    <Card className="flex h-full flex-col gap-0 py-0 shadow-sm">
+                        <CardContent className="flex h-full flex-col p-3">
                         <h2 className="mb-2 flex shrink-0 items-center gap-2 text-xs font-semibold text-muted-foreground">
                             <Navigation className="h-3.5 w-3.5" /> Rute dari Pool Bagan Batu
                         </h2>
@@ -411,7 +420,7 @@ export function TrafficView() {
                             {loading ? (
                                 <div className="space-y-1">
                                     {locations.slice(0, 8).map((l) => (
-                                        <div key={l.id} className="h-7 animate-pulse rounded-md bg-muted/40" />
+                                        <Skeleton key={l.id} className="h-7 w-full rounded-md" />
                                     ))}
                                 </div>
                             ) : (
@@ -465,7 +474,7 @@ export function TrafficView() {
                         </p>
 
                         {/* Detail rute terpilih */}
-                        <div className="mt-3 border-t pt-3">
+                        <div ref={detailRef} className="mt-3 scroll-mt-20 border-t pt-3 sm:scroll-mt-24">
                             {!selected ? (
                                 <div className="flex flex-1 flex-col gap-2">
                                     <p className="text-xs text-muted-foreground">
@@ -580,8 +589,8 @@ export function TrafficView() {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <Satellite className="mt-0.5 h-3 w-3 shrink-0 text-blue-600" /> Estimasi fallback
-                                                    gratis (pola jam × jarak × cuaca) — bukan pengukuran live.
+                                                    <Satellite className="mt-0.5 h-3 w-3 shrink-0 text-blue-600" /> Kondisi ini berupa estimasi,
+                                                    bukan pengukuran live.
                                                 </>
                                             )}
                                         </p>
@@ -591,7 +600,8 @@ export function TrafficView() {
                                 </div>
                             )}
                         </div>
-                    </div>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </div>

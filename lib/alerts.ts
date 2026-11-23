@@ -98,7 +98,7 @@ export function buildAlerts({
             id: "service-overdue-rest",
             tone: "danger",
             title: `+${remainingOverdue} unit servis terlewat`,
-            description: "Buka Monitoring Servis untuk melihat semuanya",
+            description: "Buka Servis Rutin untuk melihat semuanya",
             view: "monitoring",
         })
     }

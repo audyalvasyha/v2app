@@ -55,11 +55,24 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     if (checking) {
         return (
             <main className="flex min-h-screen items-center justify-center bg-background p-4">
-                <div className="w-full max-w-sm space-y-3">
-                    <Skeleton className="h-6 w-40" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
+                <div
+                    role="status"
+                    aria-busy="true"
+                    className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-sm"
+                >
+                    <span className="sr-only">Memeriksa sesi…</span>
+                    <div className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded-lg" />
+                        <div className="space-y-2">
+                            <Skeleton className="h-5 w-24" />
+                            <Skeleton className="h-3 w-40" />
+                        </div>
+                    </div>
+                    <div className="mt-5 space-y-3">
+                        <Skeleton className="h-10 w-full rounded-lg" />
+                        <Skeleton className="h-10 w-full rounded-lg" />
+                        <Skeleton className="h-10 w-full rounded-lg" />
+                    </div>
                 </div>
             </main>
         )

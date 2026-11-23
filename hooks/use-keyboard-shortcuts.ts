@@ -15,10 +15,10 @@ export const KEYBOARD_SHORTCUTS: Shortcut[] = [
   { key: "d", alt: true, description: "Buka Tab Dashboard" },
   { key: "e", alt: true, description: "Buka Tab Equipment" },
   { key: "h", alt: true, description: "Buka Tab Histories" },
-  { key: "m", alt: true, description: "Buka Tab Monitoring" },
+  { key: "m", alt: true, description: "Buka Tab Servis Rutin" },
   { key: "s", alt: true, description: "Buka Tab SKR (Sisa Kiriman)" },
   { key: "p", alt: true, description: "Buka Tab Pengiriman" },
-  { key: "b", alt: true, description: "Buka Tab Analisa Ban" },
+  { key: "b", alt: true, description: "Buka Tab Ban" },
   { key: "w", alt: true, description: "Buka Tab Perkiraan Cuaca" },
   { key: "t", alt: true, description: "Ganti Tema (Dark/Light)" },
 ]
@@ -53,7 +53,7 @@ export function useKeyboardShortcuts(
       if (e.altKey && e.key.toLowerCase() === "h" && onViewChange) {
         e.preventDefault(); onViewChange("maintenance");
       }
-      // Alt + M : Monitoring
+      // Alt + M : Servis Rutin
       if (e.altKey && e.key.toLowerCase() === "m" && onViewChange) {
         e.preventDefault(); onViewChange("monitoring");
       }
@@ -65,7 +65,7 @@ export function useKeyboardShortcuts(
       if (e.altKey && e.key.toLowerCase() === "p" && onViewChange) {
         e.preventDefault(); onViewChange("pengiriman");
       }
-      // Alt + B : Analisa Ban
+      // Alt + B : Ban
       if (e.altKey && e.key.toLowerCase() === "b" && onViewChange) {
         e.preventDefault(); onViewChange("ban");
       }

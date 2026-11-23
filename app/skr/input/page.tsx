@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { parseSkrCsv, SKR_CSV_TEMPLATE, type SkrCsvRow } from "@/lib/skr-csv"
 import { formatQty } from "@/lib/skr-status"
+import { roleForUser } from "@/lib/roles"
 import { usePageTitle } from "@/hooks/use-page-title"
 
 export default function SkrInputPage() {
@@ -21,6 +22,8 @@ export default function SkrInputPage() {
     const [checking, setChecking] = useState(true)
     const [session, setSession] = useState<{ email?: string } | null>(null)
     const [displayName, setDisplayName] = useState<string | null>(null)
+    const [isAdmin, setIsAdmin] = useState(false)
+    const [roleChecked, setRoleChecked] = useState(false)
 
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
@@ -53,20 +56,35 @@ export default function SkrInputPage() {
         const email = session?.email?.trim().toLowerCase()
         if (!email) {
             setDisplayName(null)
+            setIsAdmin(false)
+            setRoleChecked(true)
             return
         }
         let cancelled = false
+        setRoleChecked(false)
         void (async () => {
             try {
                 const { data, error } = await supabase
                     .from("app_users")
-                    .select("display_name")
+                    .select("role,display_name")
                     .eq("email", email)
                     .limit(1)
-                if (cancelled || error) return
+                if (cancelled) return
+                if (error) {
+                    // Fail-closed, kecuali admin utama tanpa baris app_users.
+                    setIsAdmin(roleForUser(email, null) === "admin")
+                    setDisplayName(null)
+                    return
+                }
+                setIsAdmin(roleForUser(email, data?.[0]?.role) === "admin")
                 setDisplayName(String(data?.[0]?.display_name ?? "").trim() || null)
             } catch {
-                if (!cancelled) setDisplayName(null)
+                if (!cancelled) {
+                    setIsAdmin(false)
+                    setDisplayName(null)
+                }
+            } finally {
+                if (!cancelled) setRoleChecked(true)
             }
         })()
         return () => {
@@ -86,6 +104,7 @@ export default function SkrInputPage() {
         await supabase.auth.signOut()
         setRows(null)
         setParseSummary(null)
+        setIsAdmin(false)
         if (fileRef.current) fileRef.current.value = ""
     }
 
@@ -143,7 +162,7 @@ export default function SkrInputPage() {
 
     const previewRows = useMemo(() => rows?.slice(0, 8) ?? [], [rows])
 
-    if (checking) {
+    if (checking || (session && !roleChecked)) {
         return (
             <main className="flex min-h-screen items-center justify-center bg-background p-4">
                 <div className="w-full max-w-sm space-y-3">
@@ -198,6 +217,26 @@ export default function SkrInputPage() {
                         {signingIn ? "Memeriksa…" : "Masuk"}
                     </Button>
                 </form>
+            </main>
+        )
+    }
+
+    if (!isAdmin) {
+        return (
+            <main className="flex min-h-screen items-center justify-center bg-background p-4">
+                <div className="w-full max-w-sm space-y-4 rounded-xl border border-destructive/30 bg-card p-6 text-center shadow-sm">
+                    <TriangleAlert className="mx-auto h-8 w-8 text-destructive" />
+                    <div className="space-y-1">
+                        <h1 className="text-base font-semibold">Akses khusus admin</h1>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                            Akun ini tidak punya izin import SKR. Hubungi admin utama kalau
+                            memang perlu mengubah data.
+                        </p>
+                    </div>
+                    <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={handleSignOut}>
+                        <LogOut className="h-3.5 w-3.5" /> Keluar
+                    </Button>
+                </div>
             </main>
         )
     }
@@ -262,14 +301,14 @@ export default function SkrInputPage() {
                     <div className="space-y-2 pt-1 text-xs">
                         <div className="flex flex-wrap gap-1.5">
                             {parseSummary.headerMap.map((m) => (
-                                <Badge key={m.csvHeader} variant="outline" className="gap-1 normal-case tracking-normal">
+                                <Badge key={m.csvHeader} variant="outline">
                                     <span className="text-muted-foreground">{m.csvHeader}</span>
                                     <span aria-hidden>→</span>
                                     <span className="font-mono">{m.dbColumn}</span>
                                 </Badge>
                             ))}
                             {parseSummary.unknownHeaders.map((h) => (
-                                <Badge key={h} variant="outline" className="border-amber-500/35 normal-case tracking-normal text-amber-700 dark:text-amber-400">
+                                <Badge key={h} variant="warning">
                                     {h} (diabaikan)
                                 </Badge>
                             ))}

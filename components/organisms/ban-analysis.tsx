@@ -20,6 +20,7 @@ import { formatDateMedium } from "@/lib/format";
 import { appsheetFileUrl } from "@/lib/appsheet-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { FilterChips } from "@/components/molecules/filter-chips";
 import { BanPageSkeleton } from "@/components/molecules/view-skeleton";
@@ -455,13 +456,6 @@ export function BanAnalysis({
     URL.revokeObjectURL(url);
   };
 
-  /** Hitungan posisi (semua unit gabung) — untuk tile ringkasan. */
-  const actionCount = actionItems.reduce(
-    (n, u) => n + u.issues.filter((x) => x.level === "action").length,
-    0,
-  );
-  const warningCount =
-    actionItems.reduce((n, u) => n + u.issues.length, 0) - actionCount;
   /** Hitungan unit — untuk badge panel (satu kartu = satu unit). */
   const actionUnits = actionItems.filter(
     (u) => u.worstLevel === "action",
@@ -518,7 +512,7 @@ export function BanAnalysis({
           <p className="mt-0.5 text-xs text-muted-foreground">{tireError}</p>
         </div>
       ) : isLoadingTire && inspections.length === 0 ? (
-        <div className="h-10 animate-pulse rounded-lg border bg-muted/40" />
+        <Skeleton className="h-10 w-full rounded-lg border" />
       ) : inspections.length === 0 ? (
         <div className="flex items-center gap-3 rounded-xl border border-dashed border-border/60 bg-muted/30 px-4 py-6">
           <CircleCheck
@@ -557,13 +551,8 @@ export function BanAnalysis({
                 <h3 className="text-sm font-semibold leading-none">
                   Ban perlu tindakan
                 </h3>
-                <p className="mt-1.5 text-xs tabular-nums text-muted-foreground">
-                  {actionUnits > 0 && `${actionUnits} unit tindakan`}
-                  {actionUnits > 0 && warningUnits > 0 && " · "}
-                  {warningUnits > 0 && `${warningUnits} unit waspada`}
-                  {" · "}
-                  {actionCount + warningCount} posisi
-                  <span className="hidden @min-[360px]:inline"> · klik baris untuk detail</span>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Klik baris untuk melihat detail posisi.
                 </p>
               </div>
             </div>
@@ -768,7 +757,7 @@ export function BanAnalysis({
         )}
       >
         {isLoading && equipments.length === 0 ? (
-          <div className="h-[420px] animate-pulse rounded-2xl border bg-muted/20" />
+          <Skeleton className="h-[420px] w-full rounded-2xl border" />
         ) : (
           <HinoTyreMap
             equipments={equipments}

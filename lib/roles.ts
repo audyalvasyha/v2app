@@ -6,9 +6,10 @@
  * penulisannya lewat SQL Editor / service role supaya user tidak bisa
  * menaikkan perannya sendiri dari browser.
  *
- * Catatan penting: pembatasan di sini adalah lapisan UI. RLS tabel data masih
- * memberi akses baca ke semua user `authenticated` (lihat auth_lockdown.sql),
- * jadi role ini mencegah menu terbuka — bukan menggantikan RLS per-peran.
+ * Catatan penting: pembatasan di sini juga dijaga RLS. Tabel bengkel/biaya
+ * (equipment, maintenance_histories, service_logs) hanya bisa dibaca admin
+ * utama lewat helper is_app_admin(); SKR, outbound, dan customers tetap
+ * terbuka untuk role terbatas. Jangan mengandalkan menu saja.
  */
 
 import type { View } from "@/components/templates/dashboard-layout"

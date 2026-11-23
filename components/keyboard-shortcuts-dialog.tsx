@@ -20,14 +20,20 @@ export function KeyboardShortcutsDialog() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" title="Keyboard Shortcuts">
-          <Keyboard className="h-5 w-5" />
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Pintasan keyboard"
+          aria-label="Pintasan keyboard"
+          className="hidden h-9 w-9 md:inline-flex"
+        >
+          <Keyboard className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Keyboard Shortcuts</DialogTitle>
-          <DialogDescription>Speed up your workflow with these shortcuts</DialogDescription>
+          <DialogTitle>Pintasan Keyboard</DialogTitle>
+          <DialogDescription>Percepat kerja dengan pintasan berikut.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {KEYBOARD_SHORTCUTS.map((shortcut) => (

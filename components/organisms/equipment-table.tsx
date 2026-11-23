@@ -1,6 +1,6 @@
 "use client"
 
-import React, { Fragment, memo, useEffect, useMemo, useState } from "react"
+import React, { memo, useEffect, useMemo, useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,7 +23,6 @@ import {
     PaginationNext,
     PaginationPrevious,
 } from "@/components/ui/pagination"
-import { UnitProfileDialog } from "@/components/organisms/unit-profile-dialog"
 import { FilterChips } from "@/components/molecules/filter-chips"
 // Format & warna status kini dari lib bersama — konsisten dengan menu Dashboard
 import { compactRupiah, formatDateMedium, formatKm, formatRupiah, relativeDayLabel } from "@/lib/format"
@@ -33,7 +32,6 @@ import {
     ArrowLeft,
     ArrowUpDown,
     Building2,
-    ChevronDown,
     ChevronRight,
     Clock3,
     Hash,
@@ -51,14 +49,11 @@ interface EquipmentTableProps {
     onStatusFilterChange?: (next: string) => void
     /** Log servis per unit untuk jadwal servis berikutnya di dialog detail */
     serviceLogs?: any[]
-    /** Pengiriman per nopol — bahan tab Pengiriman di profil 360° */
-    outbounds?: any[]
 }
 
 type SortKey = "default" | "id" | "odometer" | "cost" | "history"
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
-const RECENT_HISTORY_LIMIT = 8
 
 const STATUS_CHIPS: { id: string; label: string }[] = [
     { id: "all", label: "Semua" },
@@ -184,9 +179,7 @@ function EquipmentTableImpl({
     statusFilter = "all",
     onStatusFilterChange,
     serviceLogs,
-    outbounds = [],
 }: EquipmentTableProps) {
-    const [expandedId, setExpandedId] = useState<string | null>(null)
     const [sortKey, setSortKey] = useState<SortKey>("default")
     const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0])
     const [page, setPage] = useState(1)
@@ -194,8 +187,6 @@ function EquipmentTableImpl({
     const [detailId, setDetailId] = useState<string | null>(null)
     /** Pencarian riwayat perbaikan di halaman detail + mode tampil semua. */
     const [historyQuery, setHistoryQuery] = useState("")
-    /** Dialog profil 360° — ringkasan servis, biaya, ban, dan pengiriman. */
-    const [profileOpen, setProfileOpen] = useState(false)
     const [showAllHistory, setShowAllHistory] = useState(false)
 
     // Index riwayat per unit sekali — dipakai untuk kolom biaya, detail, dan panel expanded
@@ -346,18 +337,9 @@ function EquipmentTableImpl({
                     <Button variant="outline" size="sm" className="gap-1.5 bg-card" onClick={() => setDetailId(null)}>
                         <ArrowLeft className="h-3.5 w-3.5" /> Kembali ke daftar
                     </Button>
-                    <div className="flex items-center gap-2">
-                        <span className="hidden text-xs text-muted-foreground sm:inline">
-                            Detail equipment {it.equipment_id}
-                        </span>
-                        <Button
-                            size="sm"
-                            className="cursor-pointer gap-1.5"
-                            onClick={() => setProfileOpen(true)}
-                        >
-                            Profil 360°
-                        </Button>
-                    </div>
+                    <span className="text-xs text-muted-foreground">
+                        Detail equipment {it.equipment_id}
+                    </span>
                 </div>
 
                 {/* Kartu identitas + ringkasan unit */}
@@ -436,9 +418,6 @@ function EquipmentTableImpl({
                         <div className="text-sm font-semibold">
                             Riwayat perbaikan <span className="text-muted-foreground">({st?.count ?? 0})</span>
                         </div>
-                        <div className="text-xs tabular-nums text-muted-foreground">
-                            Total {st ? formatRupiah(st.total) : "—"}
-                        </div>
                     </div>
                     <div className="p-5">
                         {/* Pencarian + hitungan entri riwayat */}
@@ -503,14 +482,6 @@ function EquipmentTableImpl({
                     </div>
                 </div>
 
-                <UnitProfileDialog
-                    open={profileOpen}
-                    onOpenChange={setProfileOpen}
-                    equipment={it}
-                    histories={histories}
-                    serviceLogs={serviceLogs ?? []}
-                    outbounds={outbounds}
-                />
             </div>
         )
     }
@@ -581,31 +552,20 @@ function EquipmentTableImpl({
                     <TableBody>
                         {pageRows.length > 0 ? (
                             pageRows.map(({ item, stat, history }) => {
-                                const isExpanded = expandedId === String(item.id)
                                 const tone = statusTone(item.status)
 
                                 return (
-                                    <Fragment key={String(item.id)}>
                                         <TableRow
+                                            key={String(item.id)}
                                             onClick={() => setDetailId(String(item.id))}
                                             className={[
                                                 "cursor-pointer border-l-2 transition-colors hover:bg-muted/40",
                                                 tone.accent,
-                                                isExpanded ? "bg-muted/30" : "",
                                             ].join(" ")}
+                                            title={`Buka detail ${item.equipment_id}`}
                                         >
-                                            <TableCell
-                                                className="py-2.5"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    setExpandedId(isExpanded ? null : String(item.id))
-                                                }}
-                                            >
-                                                {isExpanded ? (
-                                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                                ) : (
-                                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                                )}
+                                            <TableCell className="py-2.5">
+                                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                             </TableCell>
                                             <TableCell className="py-2.5">
                                                 <div className="font-medium leading-none">{item.equipment_id}</div>
@@ -656,121 +616,12 @@ function EquipmentTableImpl({
                                             </TableCell>
                                             <TableCell className="py-2.5">
                                                 <Badge variant="outline" className={["gap-1.5", tone.badge].join(" ")}>
-                                                    <span className={["h-1.5 w-1.5 rounded-[1px]", tone.dot].join(" ")} />
+                                                    <span className={["h-1.5 w-1.5 rounded-full", tone.dot].join(" ")} />
                                                     {item.status || "Tidak diketahui"}
                                                 </Badge>
                                             </TableCell>
                                         </TableRow>
 
-                                        {isExpanded && (
-                                            <TableRow className="bg-muted/20 hover:bg-muted/20">
-                                                <TableCell colSpan={6} className="p-0">
-                                                    <div className="px-4 py-4 sm:px-6">
-                                                        {/* Detail atribut unit */}
-                                                        <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                                                            <div>
-                                                                <dt className="text-xs text-muted-foreground">
-                                                                    Deskripsi
-                                                                </dt>
-                                                                <dd className="mt-1 text-sm">{item.description || "—"}</dd>
-                                                            </div>
-                                                            <div>
-                                                                <dt className="text-xs text-muted-foreground">
-                                                                    Perusahaan
-                                                                </dt>
-                                                                <dd className="mt-1 text-sm">{item.company_code || "—"}</dd>
-                                                            </div>
-                                                            <div>
-                                                                <dt className="text-xs text-muted-foreground">
-                                                                    Tahun konstruksi
-                                                                </dt>
-                                                                <dd className="mt-1 text-sm tabular-nums">
-                                                                    {item.construction_year || "—"}
-                                                                </dd>
-                                                            </div>
-                                                            <div>
-                                                                <dt className="text-xs text-muted-foreground">
-                                                                    Total perawatan
-                                                                </dt>
-                                                                <dd className="mt-1 text-sm font-medium tabular-nums text-primary">
-                                                                    {stat ? formatRupiah(stat.total) : "—"}
-                                                                </dd>
-                                                            </div>
-                                                        </dl>
-
-                                                        {/* Riwayat perbaikan unit ini */}
-                                                        <div className="mt-4">
-                                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                <div className="flex items-center gap-2 text-sm font-semibold">
-                                                                    <Clock3 className="h-3.5 w-3.5 text-muted-foreground" />
-                                                                    Riwayat perbaikan
-                                                                </div>
-                                                                {stat && (
-                                                                    <span className="text-xs text-muted-foreground">
-                                                                        {stat.count} entri
-                                                                        {stat.last ? ` · terakhir ${formatDateMedium(stat.last)}` : ""}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-
-                                                            {history.length > 0 ? (
-                                                                <div className="mt-2 overflow-hidden rounded-lg border bg-background">
-                                                                    <Table>
-                                                                        <TableHeader className="bg-muted/40">
-                                                                            <TableRow className="hover:bg-transparent">
-                                                                                <TableHead className="h-8 whitespace-nowrap py-1 text-xs">
-                                                                                    Tanggal
-                                                                                </TableHead>
-                                                                                <TableHead className="h-8 py-1 text-xs">
-                                                                                    Barang / Jasa
-                                                                                </TableHead>
-                                                                                <TableHead className="h-8 whitespace-nowrap py-1 text-right text-xs">
-                                                                                    Biaya
-                                                                                </TableHead>
-                                                                            </TableRow>
-                                                                        </TableHeader>
-                                                                        <TableBody>
-                                                                            {history
-                                                                                .slice(0, RECENT_HISTORY_LIMIT)
-                                                                                .map((h, idx) => (
-                                                                                    <TableRow
-                                                                                        key={String(h.id ?? `${h.tanggal}-${idx}`)}
-                                                                                        className={idx === 0 ? "bg-primary/[0.03]" : ""}
-                                                                                    >
-                                                                                        <TableCell className="py-2 text-xs tabular-nums">
-                                                                                            {formatDateMedium(h.tanggal)}
-                                                                                        </TableCell>
-                                                                                        <TableCell
-                                                                                            className="max-w-[320px] truncate py-2 text-xs"
-                                                                                            title={h.nama_barang_atau_jasa || ""}
-                                                                                        >
-                                                                                            {h.nama_barang_atau_jasa || "—"}
-                                                                                        </TableCell>
-                                                                                        <TableCell className="py-2 text-right font-mono text-xs tabular-nums">
-                                                                                            {formatRupiah(Number(h.jumlah_harga) || 0)}
-                                                                                        </TableCell>
-                                                                                    </TableRow>
-                                                                                ))}
-                                                                        </TableBody>
-                                                                    </Table>
-                                                                    {history.length > RECENT_HISTORY_LIMIT && (
-                                                                        <div className="border-t bg-muted/20 px-3 py-2 text-center text-xs text-muted-foreground">
-                                                                            + {history.length - RECENT_HISTORY_LIMIT} entri lebih lama — buka menu{" "}
-                                                                            <span className="font-medium">Histories</span> untuk daftar lengkapnya
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            ) : (
-                                                                <p className="mt-2 rounded-lg border border-dashed bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
-                                                                    Belum ada riwayat perbaikan untuk unit ini.
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </Fragment>
                                 )
                             })
                         ) : (

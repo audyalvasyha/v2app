@@ -4,9 +4,9 @@
 --  Latar: kunci anon tertanam di bundle browser dan bisa dipakai siapa pun.
 --  Selama policy SELECT terbuka untuk anon, orang luar tetap bisa menarik
 --  data langsung lewat API meskipun halaman sudah di balik login. Script ini
---  memindahkan hak baca dari role `anon` ke role `authenticated` — user yang
---  login lewat halaman web (JWT authenticated) tetap bisa membaca seperti
---  biasa, sisanya ditolak.
+--  memindahkan hak baca dari role `anon` ke `authenticated`, lalu membatasi
+--  equipment/biaya ke admin utama; data operasional SKR/outbound/customers
+--  tetap terbuka untuk user login yang berperan terbatas.
 --
 --  SEBELUM menjalankan, siapkan dua hal:
 --  1. SUPABASE_SERVICE_ROLE_KEY di Vercel (dan .env.local untuk tes lokal).
@@ -60,14 +60,53 @@ alter table public.skr_detail           enable row level security;
 -- melewati seluruh penguncian di atas.
 alter table public.customers            enable row level security;
 
+-- Helper peran untuk RLS. Menu saja tidak cukup: user terbatas yang
+-- memegang JWT tetap bisa memanggil PostgREST/AI langsung. Samakan dengan
+-- lib/roles.ts: hanya admin utama yang membuka data bengkel/biaya.
+create or replace function public.is_app_admin()
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  email text := lower(coalesce(auth.jwt() ->> 'email', ''));
+begin
+  if email <> lower('audyal.vasyah@pekanbaru-dr.com') then
+    return false;
+  end if;
+
+  -- Samakan dengan roleForUser(): admin utama tanpa baris tetap admin,
+  -- tetapi baris eksplisit `terbatas` harus menurunkan akses RLS juga.
+  if to_regclass('public.app_users') is null then
+    return true;
+  end if;
+
+  return coalesce(
+    (select u.role = 'admin'
+       from public.app_users u
+      where lower(u.email) = email
+      limit 1),
+    true
+  );
+end;
+$$;
+
+revoke all on function public.is_app_admin() from public, anon;
+grant execute on function public.is_app_admin() to authenticated;
+
 create policy "authenticated_baca_equipment"
-  on public.equipment for select to authenticated using (true);
+  on public.equipment for select to authenticated
+  using (public.is_app_admin());
 
 create policy "authenticated_baca_maintenance_histories"
-  on public.maintenance_histories for select to authenticated using (true);
+  on public.maintenance_histories for select to authenticated
+  using (public.is_app_admin());
 
 create policy "authenticated_baca_service_logs"
-  on public.service_logs for select to authenticated using (true);
+  on public.service_logs for select to authenticated
+  using (public.is_app_admin());
 
 create policy "authenticated_baca_armada_outbound"
   on public.armada_outbound for select to authenticated using (true);
@@ -80,6 +119,8 @@ create policy "authenticated_baca_customers"
 -- Catatan: policy di atas hanya mengatur baris mana yang terlihat. Ia TIDAK
 -- membatasi kolom — tanpa grant per-kolom di bawah, user yang login masih
 -- bisa menarik telephone_number & nik_salesman langsung dari tabel.
+-- equipment/maintenance_histories/service_logs kini KHUSUS admin; SKR,
+-- outbound, dan customers tetap terbuka untuk role terbatas.
 
 -- ── 3. Cabut hak anon di level grant (ganda pengaman di luar RLS) ──
 revoke all on public.equipment,

@@ -17,11 +17,11 @@ import dynamic from "next/dynamic"
 // Grafik ikut boundary bersama dengan grafik dashboard (satu chunk recharts).
 const SkrMonthChart = dynamic(() =>
     import("@/components/molecules/charts").then((m) => m.SkrMonthChart),
-    { loading: () => <Skeleton className="h-[220px] w-full" /> },
+    { loading: () => <Skeleton className="h-[420px] w-full" /> },
 )
 const SkrReasonPie = dynamic(() =>
     import("@/components/molecules/charts").then((m) => m.SkrReasonPie),
-    { loading: () => <Skeleton className="h-[300px] w-full" /> },
+    { loading: () => <Skeleton className="h-[420px] w-full" /> },
 )
 import { FilterToolbar } from "@/components/molecules/filter-toolbar"
 import { FilterChips } from "@/components/molecules/filter-chips"
@@ -154,6 +154,7 @@ function SkrViewImpl({
     const [rankGroup, setRankGroup] = useState<RankGroup>("armada")
     /** customer_id yang baris detailnya sedang dibuka */
     const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null)
+    const [rankingOpen, setRankingOpen] = useState(false)
 
     // 1. Filter kategori POD saja — pencarian ke text search header; detail
     //    yang masuk sudah terfilter (prop `details`, dari DashboardContent).
@@ -438,20 +439,6 @@ function SkrViewImpl({
                 </div>
             )}
 
-            {!usingView && (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-2.5 text-xs leading-relaxed">
-                    <span className="font-medium text-amber-700 dark:text-amber-400">
-                        Mode lambat aktif.
-                    </span>{" "}
-                    <span className="text-muted-foreground">
-                        View <code className="rounded bg-muted px-1">skr_ringkasan</code> belum ada —
-                        data difilter di browser. Jalankan{" "}
-                        <code className="rounded bg-muted px-1">supabase/sql/skr_ringkasan.sql</code>{" "}
-                        agar filter berjalan di server.
-                    </span>
-                </div>
-            )}
-
             {/* KONTROL — kiri: rentang tanggal; kanan: reset filter kategori saat aktif */}
             <FilterToolbar
                 date={{
@@ -517,85 +504,92 @@ function SkrViewImpl({
                             >
                                 Nilai
                             </Button>
-                            <span className="ml-1.5 text-xs text-muted-foreground">
-                                qty kolom · nilai garis
-                            </span>
                         </div>
                     </div>
                 </div>
 
-                <div className="grid lg:grid-cols-2">
-                    <div className="p-4">
-                        <div className="grid gap-px bg-border sm:grid-cols-3">
-                            <div className="bg-card px-4 py-3">
-                                <p className="text-xs font-medium text-muted-foreground">
-                                    {monthWindow.current.label}
-                                </p>
-                                <p className="mt-1 text-lg font-semibold leading-none tabular-nums text-primary">
-                                    {fmtChart(chartTotals.current)}
-                                </p>
-                            </div>
-                            <div className="bg-card px-4 py-3">
-                                <p className="text-xs font-medium text-muted-foreground">
-                                    {monthWindow.previous.label}
-                                </p>
-                                <p className="mt-1 text-lg font-semibold leading-none tabular-nums">
-                                    {chartTotals.previous > 0 ? fmtChart(chartTotals.previous) : "—"}
-                                </p>
-                            </div>
-                            <div className="bg-card px-4 py-3">
-                                <p className="text-xs font-medium text-muted-foreground">
-                                    Selisih
-                                </p>
-                                <p
-                                    className={cn(
-                                        "mt-1 flex items-center gap-1.5 text-lg font-semibold leading-none tabular-nums",
-                                        chartDelta == null
-                                            ? "text-muted-foreground"
-                                            : chartDelta >= 0
-                                                ? "text-emerald-600 dark:text-emerald-400"
-                                                : "text-primary",
-                                    )}
-                                >
-                                    {chartDelta == null
-                                        ? "—"
-                                        : `${chartDelta >= 0 ? "+" : "−"}${Math.abs(chartDelta).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`}
-                                </p>
-                            </div>
+                <div className="p-4">
+                    <div className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
+                        <div className="bg-card px-4 py-3">
+                            <p className="text-xs font-medium text-muted-foreground">
+                                {monthWindow.current.label}
+                            </p>
+                            <p className="mt-1 text-lg font-semibold leading-none tabular-nums text-primary">
+                                {fmtChart(chartTotals.current)}
+                            </p>
                         </div>
-
-                        <div className="-mx-2 mt-2 ring-1 ring-border">
-                            <SkrMonthChart
-                                currentRows={chartRows}
-                                previousRows={chartRows}
-                                currentIso={{ from: monthWindow.current.from, to: monthWindow.current.to }}
-                                previousIso={{ from: monthWindow.previous.from, to: monthWindow.previous.to }}
-                                currentLabel={monthWindow.current.label}
-                                previousLabel={monthWindow.previous.label}
-                            />
+                        <div className="bg-card px-4 py-3">
+                            <p className="text-xs font-medium text-muted-foreground">
+                                {monthWindow.previous.label}
+                            </p>
+                            <p className="mt-1 text-lg font-semibold leading-none tabular-nums">
+                                {chartTotals.previous > 0 ? fmtChart(chartTotals.previous) : "—"}
+                            </p>
+                        </div>
+                        <div className="bg-card px-4 py-3">
+                            <p className="text-xs font-medium text-muted-foreground">
+                                Selisih
+                            </p>
+                            <p
+                                className={cn(
+                                    "mt-1 flex items-center gap-1.5 text-lg font-semibold leading-none tabular-nums",
+                                    chartDelta == null
+                                        ? "text-muted-foreground"
+                                        : chartDelta >= 0
+                                            ? "text-emerald-600 dark:text-emerald-400"
+                                            : "text-primary",
+                                )}
+                            >
+                                {chartDelta == null
+                                    ? "—"
+                                    : `${chartDelta >= 0 ? "+" : "−"}${Math.abs(chartDelta).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`}
+                            </p>
                         </div>
                     </div>
 
-                    {reasonsByCategory.length > 0 ? (
-                        <div className="p-4">
-                            <div className="mb-3 flex items-center justify-between border-b border-border/50 pb-2">
-                                <h3 className="text-sm font-semibold">Sebaran Alasan SKR per Kategori</h3>
-                                <p className="text-[11px] text-muted-foreground">porsi nilai per kategori POD</p>
+                    <div className="mt-4 grid gap-4 lg:grid-cols-[65fr_35fr] lg:items-stretch">
+                        <section className="flex min-w-0 flex-col overflow-hidden rounded-lg border bg-card">
+                            <div className="flex min-h-10 items-center justify-between gap-2 border-b px-3 py-2">
+                                <p className="text-xs font-semibold">Qty &amp; Nilai Harian</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                    batang qty · garis nilai
+                                </p>
                             </div>
-                            <div className="-mx-2 ring-1 ring-border">
-                                <SkrReasonPie
-                                    data={reasonsByCategory.map((g) => ({
-                                        category: g.category,
-                                        label: g.label,
-                                        rows: g.rows,
-                                        nilai: g.nilai,
-                                    }))}
+                            <div className="flex min-w-0 flex-1 flex-col p-4">
+                                <SkrMonthChart
+                                    currentRows={chartRows}
+                                    previousRows={chartRows}
+                                    currentIso={{ from: monthWindow.current.from, to: monthWindow.current.to }}
+                                    previousIso={{ from: monthWindow.previous.from, to: monthWindow.previous.to }}
+                                    currentLabel={monthWindow.current.label}
+                                    previousLabel={monthWindow.previous.label}
                                 />
                             </div>
-                        </div>
-                    ) : (
-                        <div className="hidden lg:block p-4" />
-                    )}
+                        </section>
+
+                        {reasonsByCategory.length > 0 ? (
+                            <section className="flex min-w-0 flex-col overflow-hidden rounded-lg border bg-card">
+                                <div className="flex min-h-10 items-center justify-between gap-2 border-b px-3 py-2">
+                                    <p className="text-xs font-semibold">Sebaran Alasan SKR</p>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        porsi nilai per kategori POD
+                                    </p>
+                                </div>
+                                <div className="flex min-w-0 flex-1 flex-col p-4">
+                                    <SkrReasonPie
+                                        data={reasonsByCategory.map((g) => ({
+                                            category: g.category,
+                                            label: g.label,
+                                            rows: g.rows,
+                                            nilai: g.nilai,
+                                        }))}
+                                    />
+                                </div>
+                            </section>
+                        ) : (
+                            <div className="hidden rounded-lg border border-dashed lg:block" />
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -609,54 +603,77 @@ function SkrViewImpl({
                 onToggle={(key) => setExpandedCustomer((cur) => (cur === key ? null : key))}
             />
 
-            {/* PERINGKAT */}
+            {/* PERINGKAT — dilipat agar tabel dan kartu customer di atas tetap fokus. */}
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
-                    <div className="flex items-center gap-1">
-                        {(
-                            [
-                                ["armada", "Armada"],
-                                ["sales", "Sales"],
-                            ] as [RankGroup, string][]
-                        ).map(([id, label]) => (
-                            <Button
-                                key={id}
-                                variant={rankGroup === id ? "secondary" : "ghost"}
-                                size="sm"
-                                className="h-7"
-                                onClick={() => setRankGroup(id)}
-                            >
-                                {label}
-                            </Button>
-                        ))}
+                    <div className="min-w-0">
+                        <p className="text-sm font-semibold">Peringkat Armada &amp; Sales</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                            Top 5 berdasarkan {metric === "qty" ? "qty" : "nilai"} dan redelivery.
+                        </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                        Top & bottom 5 · metrik{" "}
-                        <span className="font-medium text-foreground">
-                            {metric === "qty" ? "qty" : "nilai"}
-                        </span>{" "}
-                        · detail toko di kartu di atas
-                    </p>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 gap-1"
+                        onClick={() => setRankingOpen((open) => !open)}
+                        aria-expanded={rankingOpen}
+                    >
+                        {rankingOpen ? "Sembunyikan" : "Tampilkan"}
+                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", rankingOpen && "rotate-180")} />
+                    </Button>
                 </div>
 
-                <div className="grid xl:grid-cols-2 xl:divide-x">
-                    <RankingTable
-                        title="5 Bottom by"
-                        items={ranking.top}
-                        metric={metric}
-                        rankGroup={rankGroup}
-                        equipmentByPlate={equipmentByPlate}
-                        highlight
-                    />
-                    <RankingTable
-                        title="5 Bottom Redelivery"
-                        items={redeliveryRanking.top}
-                        metric={metric}
-                        rankGroup={rankGroup}
-                        equipmentByPlate={equipmentByPlate}
-                        emptyHint="Tidak ada baris redelivery pada filter ini."
-                    />
-                </div>
+                {rankingOpen && (
+                    <>
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
+                            <div className="flex items-center gap-1">
+                                {(
+                                    [
+                                        ["armada", "Armada"],
+                                        ["sales", "Sales"],
+                                    ] as [RankGroup, string][]
+                                ).map(([id, label]) => (
+                                    <Button
+                                        key={id}
+                                        variant={rankGroup === id ? "secondary" : "ghost"}
+                                        size="sm"
+                                        className="h-7"
+                                        onClick={() => setRankGroup(id)}
+                                    >
+                                        {label}
+                                    </Button>
+                                ))}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Metrik{" "}
+                                <span className="font-medium text-foreground">
+                                    {metric === "qty" ? "qty" : "nilai"}
+                                </span>{" "}
+                                · detail toko di kartu di atas
+                            </p>
+                        </div>
+
+                        <div className="grid xl:grid-cols-2 xl:divide-x">
+                            <RankingTable
+                                title={`Top 5 ${rankGroup === "armada" ? "Armada" : "Sales"}`}
+                                items={ranking.top}
+                                metric={metric}
+                                rankGroup={rankGroup}
+                                equipmentByPlate={equipmentByPlate}
+                                highlight
+                            />
+                            <RankingTable
+                                title="Top 5 Redelivery"
+                                items={redeliveryRanking.top}
+                                metric={metric}
+                                rankGroup={rankGroup}
+                                equipmentByPlate={equipmentByPlate}
+                                emptyHint="Tidak ada baris redelivery pada filter ini."
+                            />
+                        </div>
+                    </>
+                )}
             </div>
 
             {/* FOOTER FILTER */}
@@ -699,7 +716,7 @@ function SearchDetailRows({
                 </div>
             </div>
 
-            <div className="max-h-[420px] overflow-y-auto">
+            <div className="max-h-[420px] overflow-auto">
                 {rows.length === 0 ? (
                     <p className="py-8 text-center text-xs text-muted-foreground">
                         Tidak ada baris SKR yang cocok dengan pencarian.
@@ -804,7 +821,7 @@ function CustomerDetailCard({
             <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
                 <div className="flex min-w-0 items-center gap-1.5">
                     <Store className="h-3.5 w-3.5 shrink-0 text-primary" />
-                    <h3 className="text-xs font-semibold">5 Bottom SKR by Customer</h3>
+                    <h3 className="text-xs font-semibold">Top 5 SKR per Customer</h3>
                     <span className="hidden truncate text-[10px] text-muted-foreground sm:inline">
                         dari {totalCount.toLocaleString("id-ID")} customer · klik baris untuk rincian dokumen
                     </span>
@@ -881,7 +898,7 @@ function CustomerDetailCard({
                             </button>
 
                             {open && (
-                                <div className="border-t bg-muted/20 px-3 py-1.5">
+                                <div className="overflow-x-auto border-t bg-muted/20 px-3 py-1.5">
                                     {docRows.length === 0 ? (
                                         <p className="py-3 text-center text-xs text-muted-foreground">
                                             Tidak ada dokumen pada filter ini.
@@ -982,7 +999,7 @@ function RankingTable({
     highlight,
     emptyHint,
 }: RankingTableProps) {
-    const leadingIcon = title.startsWith("5 Teratas")
+    const leadingIcon = title.startsWith("Top 5")
 
     if (items.length === 0) {
         return (

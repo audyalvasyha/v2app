@@ -97,9 +97,74 @@ drop policy if exists tasks_update on public.tasks;
 drop policy if exists tasks_delete on public.tasks;
 
 create policy tasks_read   on public.tasks for select to authenticated using (true);
+
 create policy tasks_insert on public.tasks for insert to authenticated with check (true);
+
 create policy tasks_update on public.tasks for update to authenticated using (true) with check (true);
+
 create policy tasks_delete on public.tasks for delete to authenticated using (true);
+
+-- ── Kepemilikan path lampiran ────────────────────────────────────
+-- Endpoint /api/attachments mengizinkan user lain melihat lampiran yang
+-- tercatat di task. Tanpa trigger ini, siapa pun bisa insert task dengan
+-- attachment_path milik orang lain lalu memakai endpoint view untuk
+-- membuka file korban. Path upload selalu complaints/<auth.uid()>/<uuid>.
+create or replace function public.enforce_task_attachment_owner()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid text := auth.uid()::text;
+begin
+  -- Service role / migrasi tanpa JWT tidak punya auth.uid(); jangan blokir.
+  if uid is null then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if new.attachment_path is not null and btrim(new.attachment_path) <> ''
+       and new.attachment_path not like ('complaints/' || uid || '/%') then
+      raise exception 'Lampiran komplain harus diunggah oleh user yang membuat task'
+        using errcode = '42501';
+    end if;
+
+    if new.resolution_attachment_path is not null and btrim(new.resolution_attachment_path) <> ''
+       and new.resolution_attachment_path not like ('complaints/' || uid || '/%') then
+      raise exception 'Dokumentasi penyelesaian harus diunggah oleh user yang menyimpan task'
+        using errcode = '42501';
+    end if;
+
+    return new;
+  end if;
+
+  -- Hanya validasi field yang berubah. Baris lama dengan path lama tetap
+  -- bisa diedit (mis. ganti status) tanpa dipaksa upload ulang.
+  if new.attachment_path is distinct from old.attachment_path
+     and new.attachment_path is not null and btrim(new.attachment_path) <> ''
+     and new.attachment_path not like ('complaints/' || uid || '/%') then
+    raise exception 'Lampiran komplain harus diunggah oleh user yang membuat task'
+      using errcode = '42501';
+  end if;
+
+  if new.resolution_attachment_path is distinct from old.resolution_attachment_path
+     and new.resolution_attachment_path is not null and btrim(new.resolution_attachment_path) <> ''
+     and new.resolution_attachment_path not like ('complaints/' || uid || '/%') then
+    raise exception 'Dokumentasi penyelesaian harus diunggah oleh user yang menyimpan task'
+      using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.enforce_task_attachment_owner() from public, anon, authenticated;
+
+drop trigger if exists tasks_enforce_attachment_owner on public.tasks;
+create trigger tasks_enforce_attachment_owner
+  before insert or update on public.tasks
+  for each row execute function public.enforce_task_attachment_owner();
 
 -- ── Lampiran (Cloudflare R2) ────────────────────────────────────
 -- File tidak disimpan di Supabase Storage. Browser upload langsung ke

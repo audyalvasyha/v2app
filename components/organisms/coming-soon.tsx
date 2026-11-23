@@ -5,7 +5,7 @@ import { Button } from "../ui/button";
 import { Disc3, ArrowRight } from "lucide-react";
 
 /**
- * Pemberitahuan Coming Soon untuk menu Analisa Ban.
+ * Pemberitahuan Coming Soon untuk menu Ban.
  *
   Dibongkar dari `components/organisms/ban-analysis.tsx` — saat ini menu
   ini masih dalam pengembangan. Komponen ini bersih dan berdiri sendiri, jadi
@@ -23,7 +23,7 @@ export function ComingSoon() {
         <h1 className="text-2xl font-semibold tracking-tight">Segera Hadir</h1>
 
         <p className="mt-3 text-muted-foreground">
-          Menu Analisa Ban masih dalam pengembangan. Kembalilah nanti untuk
+          Menu Ban masih dalam pengembangan. Kembalilah nanti untuk
           melihat peta ban yang bisa dipilih berdasarkan nopol.
         </p>
 
