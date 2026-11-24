@@ -233,21 +233,10 @@ function ReviewDetail({
                         </span>
                     )}
                 </div>
-                <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-x-6 gap-y-2">
+                <div className="mt-2 min-w-0">
                     <h2 className="min-w-0 break-words font-mono text-4xl font-semibold leading-none tracking-[-0.07em] [overflow-wrap:anywhere] sm:text-6xl">
                         {group.plate}
                     </h2>
-                    <p className="max-w-sm text-[11px] leading-relaxed text-muted-foreground">
-                        {formatNumber(group.total)} komplain tercatat
-                        <span aria-hidden className="mx-1.5 text-muted-foreground/40">
-                            ·
-                        </span>
-                        {formatNumber(group.open)} belum selesai
-                        <span aria-hidden className="mx-1.5 text-muted-foreground/40">
-                            ·
-                        </span>
-                        terakhir {formatDateShort(group.lastAt)}
-                    </p>
                 </div>
             </header>
 

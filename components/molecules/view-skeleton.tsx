@@ -353,11 +353,10 @@ export function BoardPageSkeleton() {
 /** Review: toolbar, masthead register, lalu daftar baris nopol. */
 export function ReviewPageSkeleton() {
   return (
-    <div className="min-w-0 space-y-4" role="status" aria-busy="true">
+    <div className="min-w-0" role="status" aria-busy="true">
       <LoadingLabel text="Memuat review komplain…" />
 
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <Skeleton className="h-3 w-40" />
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
         <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
           <div className="inline-flex w-full max-w-full flex-wrap items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 sm:w-auto">
             {[54, 52, 58, 56].map((width, i) => (
@@ -368,18 +367,21 @@ export function ReviewPageSkeleton() {
         </div>
       </div>
 
-      <section className="border-y border-border/70 border-t-2 border-t-foreground/55 bg-card/70">
+      <section className="mt-4 border-y border-border/70 border-t-2 border-t-foreground/55 bg-card/70">
         <div className="grid lg:grid-cols-[minmax(0,1fr)_19rem]">
           <div className="px-4 py-5 sm:px-6 sm:py-6">
-            <Skeleton className="h-2.5 w-48 max-w-full" />
+            <Skeleton className="h-2.5 w-44 max-w-full" />
             <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-3">
-              <Skeleton className="h-16 w-32 sm:h-20 sm:w-40" />
-              <div className="space-y-2 pb-1">
-                <Skeleton className="h-4 w-44 max-w-full" />
-                <Skeleton className="h-3 w-56 max-w-full" />
+              <Skeleton className="h-16 w-24 sm:h-20 sm:w-32" />
+              <div className="min-w-0 space-y-2 pb-1">
+                <Skeleton className="h-4 w-40 max-w-full" />
+                <Skeleton className="h-3 w-52 max-w-full" />
               </div>
             </div>
-            <Skeleton className="mt-5 h-3 w-full max-w-md" />
+            <div className="mt-5 max-w-xl space-y-1.5">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-4/5" />
+            </div>
           </div>
 
           <div className="grid grid-cols-3 divide-x divide-border/70 border-t border-border/70 lg:block lg:divide-x-0 lg:divide-y lg:border-l lg:border-t-0">
@@ -392,7 +394,7 @@ export function ReviewPageSkeleton() {
                   <Skeleton className="h-2.5 w-16" />
                   <Skeleton className="hidden h-2.5 w-24 sm:block" />
                 </div>
-                <Skeleton className="mt-2 h-5 w-8 lg:mt-0" />
+                <Skeleton className="mt-1 h-5 w-8 lg:mt-0" />
               </div>
             ))}
           </div>
@@ -402,15 +404,15 @@ export function ReviewPageSkeleton() {
       <div className="mt-5">
         <div className="flex items-end justify-between gap-3 border-b-2 border-foreground/20 pb-2">
           <div className="flex items-baseline gap-3">
-            <Skeleton className="h-3 w-28" />
-            <Skeleton className="h-2.5 w-16" />
+            <Skeleton className="h-2.5 w-24" />
+            <Skeleton className="h-2.5 w-14" />
           </div>
           <Skeleton className="hidden h-2.5 w-36 sm:block" />
         </div>
         <div className="divide-y divide-border/70 border-b border-border/70">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="flex items-center justify-between gap-3 px-3 py-4">
-              <Skeleton className="h-4 w-28 max-w-[45%]" />
+            <div key={i} className="flex items-center justify-between gap-3 px-3 py-3.5">
+              <Skeleton className="h-4 w-24 max-w-[45%]" />
               <Skeleton className="h-3.5 w-3.5 rounded-sm" />
             </div>
           ))}
