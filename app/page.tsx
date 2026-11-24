@@ -394,10 +394,12 @@ function DashboardContent() {
     }
 
     // 2. Selalu refresh di background agar data tetap segar (stale-while-revalidate)
+    let lastRefreshStartedAt = 0
+    let hasRenderedData = Boolean(cached)
     async function fetchData() {
       if (isRefreshing.current) return
       isRefreshing.current = true
-      if (!cached) setIsLoading(true)
+      if (!hasRenderedData) setIsLoading(true)
 
       try {
         const [eqResponse, histResponse, serviceResponse] = await Promise.all([
@@ -443,11 +445,38 @@ function DashboardContent() {
         // Misal env Supabase belum terisi atau jaringan gagal — tampilkan pesan, jangan crash
         setError(fetchError instanceof Error ? fetchError.message : 'Gagal memuat data')
       } finally {
+        hasRenderedData = true
         setIsLoading(false)
         isRefreshing.current = false
       }
     }
+
+    // Dashboard sering dibiarkan terbuka lama. Tanpa ini, data yang baru
+    // dimasukkan ke Supabase tidak pernah muncul sampai halaman di-reload —
+    // chart bisa tetap kosong padahal database sudah berisi data bulan ini.
+    // Revalidasi saat tab kembali aktif, dibatasi 30 detik agar tidak
+    // menembak query berulang ketika user sekadar pindah jendela.
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'hidden') return
+      if (isRefreshing.current) return
+      if (Date.now() - lastRefreshStartedAt < 30_000) return
+      lastRefreshStartedAt = Date.now()
+      void fetchData()
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshIfVisible()
+    }
+
+    lastRefreshStartedAt = Date.now()
     fetchData()
+    window.addEventListener('focus', refreshIfVisible)
+    window.addEventListener('online', refreshIfVisible)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      window.removeEventListener('focus', refreshIfVisible)
+      window.removeEventListener('online', refreshIfVisible)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [roleLoaded, userRole])
 
   //_Nama toko untuk menu SKR — hanya id + nama yang diambil, lewat view
