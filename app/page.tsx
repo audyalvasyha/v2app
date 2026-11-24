@@ -1039,6 +1039,7 @@ function DashboardContent() {
   const headerInfo: Record<View, { title: string; desc: string }> = {
     dashboard: { title: 'Dashboard', desc: 'Prioritas harian armada dan pengiriman.' },
     tugas: { title: 'Complaint Board', desc: 'Follow-up komplain pengiriman.' },
+    review: { title: 'Review', desc: 'Rekap komplain per nopol untuk evaluasi dan tindakan.' },
     equipment: { title: 'Daftar Equipment', desc: 'Aset armada dan riwayat perawatan.' },
     maintenance: { title: 'Semua Riwayat Maintenance', desc: 'Riwayat perbaikan seluruh unit.' },
     monitoring: { title: 'Servis Rutin', desc: 'Jadwal servis rutin tiap unit.' },
@@ -1053,7 +1054,8 @@ function DashboardContent() {
 
   // Placeholder search global di header, mengikuti konteks menu aktif
   const searchPlaceholder =
-    activeView === 'tugas' ? 'Cari komplain… (sales, plat, delivery, FO, ID/nama toko)'
+    activeView === 'tugas' || activeView === 'review'
+      ? 'Cari komplain… (sales, plat, delivery, FO, ID/nama toko)'
     : activeView === 'equipment' ? 'Cari equipment… (ID, deskripsi, nopol)'
     : activeView === 'maintenance' ? 'Cari riwayat perbaikan… (barang/jasa, nopol)'
     : activeView === 'monitoring' ? 'Cari unit untuk servis rutin… (ID, nopol)'
@@ -1150,10 +1152,13 @@ function DashboardContent() {
           </>
         )}
 
-        {activeView === 'tugas' && (
-          // Papan tugas memakai tabel `tasks` sendiri — tidak menambah query
-          // ke data armada yang sudah dimuat dashboard.
-          <TaskBoard search={filters.search ?? ''} />
+        {(activeView === 'tugas' || activeView === 'review') && (
+          // Kedua menu memakai sumber data dan form tindakan yang sama;
+          // Review hanya mengganti tampilan papan menjadi rekap nopol.
+          <TaskBoard
+            search={filters.search ?? ''}
+            viewMode={activeView === 'review' ? 'review' : 'board'}
+          />
         )}
 
         {activeView === 'equipment' && (

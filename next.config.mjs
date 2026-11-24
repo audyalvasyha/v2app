@@ -2,6 +2,10 @@
 const nextConfig = {
   // Jangan bocorkan versi framework di header respons.
   poweredByHeader: false,
+  // Preview Freebuff dibuka lewat domain proxy acak. Tanpa ini Next.js
+  // memblokir aset dev/HMR dari domain tersebut sehingga preview bisa kosong
+  // atau tidak ikut ter-update. Pengaturan ini hanya berlaku saat `next dev`.
+  allowedDevOrigins: ['*.daytonaproxy01.net', '*.daytonaproxy.net'],
   // Header pertahanan dasar. CSP tidak dipasang di sini karena aplikasi
   // memakai inline style dari Leaflet/Tailwind; header di bawah aman untuk
   // semua halaman dan tidak mengubah perilaku UI.
@@ -11,7 +15,12 @@ const nextConfig = {
         source: '/:path*',
         headers: [
           { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'X-Frame-Options', value: 'DENY' },
+          // Preview Freebuff dirender di dalam iframe. `DENY` membuat panel
+          // preview kosong walau server membalas 200, jadi header itu hanya
+          // dipasang di produksi. Build produksi tetap menolak framing.
+          ...(process.env.NODE_ENV === 'production'
+            ? [{ key: 'X-Frame-Options', value: 'DENY' }]
+            : []),
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },

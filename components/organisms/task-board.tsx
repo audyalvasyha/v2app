@@ -1,9 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import {
-    CheckCircle2,
-    ChevronLeft,
+import { CheckCircle2, ChevronLeft,
     ChevronRight,
     Circle,
     Clock,
@@ -33,6 +31,8 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { BoardPageSkeleton } from "@/components/molecules/view-skeleton"
+import { ComplaintPlateSummary } from "@/components/organisms/complaint-plate-summary"
+import { complaintPlateKey } from "@/lib/complaint-summary"
 import { Textarea } from "@/components/ui/textarea"
 import { SuggestField, type Suggestion } from "@/components/molecules/suggest-field"
 import { FilterChips } from "@/components/molecules/filter-chips"
@@ -204,14 +204,18 @@ type StorageMode = "remote" | "local"
 interface TaskBoardProps {
     /** Kata kunci dari search header — papan ikut menyaring semua identitas komplain */
     search: string
+    /** Papan kanban atau halaman ringkasan per nopol (menu Review). */
+    viewMode?: "board" | "review"
 }
 
-export function TaskBoard({ search }: TaskBoardProps) {
+export function TaskBoard({ search, viewMode = "board" }: TaskBoardProps) {
     const [tasks, setTasks] = useState<Task[]>([])
     const [mode, setMode] = useState<StorageMode>("remote")
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [priorityFilter, setPriorityFilter] = useState<"all" | TaskPriority>("all")
+    /** Nopol yang sedang dibuka di halaman detail Review; null = daftar nopol. */
+    const [reviewPlate, setReviewPlate] = useState<string | null>(null)
     /** Tab status yang sedang dibuka di mobile; desktop tetap menampilkan semua kolom. */
     const [mobileStatus, setMobileStatus] = useState<TaskStatus>("todo")
     /** Halaman aktif per kategori (1-based). */
@@ -233,6 +237,28 @@ export function TaskBoard({ search }: TaskBoardProps) {
     const [customerNames, setCustomerNames] = useState<Record<string, string>>({})
     /** ID yang sudah diminta; mencegah effect fetch berulang saat toko tidak ditemukan. */
     const requestedCustomerIds = useRef<Set<string>>(new Set())
+
+    /** Halaman detail memakai scroll utama, jadi kembalikan posisi ke atas. */
+    const scrollAppToTop = () => {
+        document.getElementById("app-scroll")?.scrollTo({ top: 0, behavior: "auto" })
+    }
+
+    const openReviewPlate = (key: string) => {
+        setReviewPlate(key)
+        scrollAppToTop()
+    }
+
+    const closeReviewDetail = () => {
+        setReviewPlate(null)
+        scrollAppToTop()
+    }
+
+    // Detail nopol hanya hidup di menu Review. Pindah ke papan berarti
+    // kembali ke daftar nopol saat menu Review dibuka lagi.
+    useEffect(() => {
+        if (viewMode !== "review") setReviewPlate(null)
+        else scrollAppToTop()
+    }, [viewMode])
 
     const openCreate = () => {
         setEditing(null)
@@ -643,6 +669,11 @@ export function TaskBoard({ search }: TaskBoardProps) {
         return <BoardPageSkeleton />
     }
 
+    const reviewDetailOpen =
+        viewMode === "review" &&
+        !!reviewPlate &&
+        tasks.some((task) => complaintPlateKey(task.license_plate) === reviewPlate)
+
     return (
         <div className="min-w-0 space-y-4">
             {mode === "local" && (
@@ -673,40 +704,57 @@ export function TaskBoard({ search }: TaskBoardProps) {
                 </div>
             )}
 
-            {/* Kontrol papan */}
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                <p className="min-w-0 text-xs tabular-nums text-muted-foreground">
-                    {formatNumber(visible.length)} komplain ditampilkan
-                    {searchLower || priorityFilter !== "all" ? " (terfilter)" : ""}
-                </p>
-                <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
-                    <FilterChips
-                        ariaLabel="Filter prioritas"
-                        className="w-full sm:w-auto"
-                        options={
-                            [
-                                { id: "all", label: "Semua" },
-                                ...TASK_PRIORITIES,
-                            ] as { id: "all" | TaskPriority; label: string }[]
-                        }
-                        value={priorityFilter}
-                        onChange={setPriorityFilter}
-                    />
-                    <Button
-                        size="sm"
-                        className="h-[42px] w-full gap-1.5 px-4 sm:w-auto"
-                        onClick={openCreate}
-                    >
-                        <Plus className="h-4 w-4" /> Komplain baru
-                    </Button>
+            {/* Kontrol halaman — disembunyikan saat membaca berkas nopol. */}
+            {!reviewDetailOpen && (
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                    <p className="min-w-0 text-xs tabular-nums text-muted-foreground">
+                        {formatNumber(visible.length)} komplain ditampilkan
+                        {searchLower || priorityFilter !== "all" ? " (terfilter)" : ""}
+                    </p>
+                    <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
+                        <FilterChips
+                            ariaLabel="Filter prioritas"
+                            className="w-full sm:w-auto"
+                            options={
+                                [
+                                    { id: "all", label: "Semua" },
+                                    ...TASK_PRIORITIES,
+                                ] as { id: "all" | TaskPriority; label: string }[]
+                            }
+                            value={priorityFilter}
+                            onChange={setPriorityFilter}
+                        />
+                        <Button
+                            size="sm"
+                            className="h-[42px] w-full gap-1.5 px-4 sm:w-auto"
+                            onClick={openCreate}
+                        >
+                            <Plus className="h-4 w-4" /> Komplain baru
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            )}
+
+            {viewMode === "review" && (
+                <ComplaintPlateSummary
+                    tasks={tasks}
+                    visibleTasks={visible}
+                    selectedKey={reviewPlate}
+                    userNames={userNames}
+                    onSelectPlate={openReviewPlate}
+                    onBack={closeReviewDetail}
+                    onOpenTask={(task) => openEdit(task)}
+                />
+            )}
 
             {/* Navigasi status khusus mobile: satu kolom per tab. */}
             <div
                 role="tablist"
                 aria-label="Kategori komplain"
-                className="grid grid-cols-3 gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 md:hidden"
+                className={cn(
+                    "grid grid-cols-3 gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 md:hidden",
+                    viewMode !== "board" && "hidden",
+                )}
             >
                 {TASK_STATUSES.map((status) => {
                     const Icon = STATUS_ICON[status.id]
@@ -734,7 +782,12 @@ export function TaskBoard({ search }: TaskBoardProps) {
             </div>
 
             {/* Papan kanban — semua kolom hanya di desktop; mobile mengikuti tab. */}
-            <div className="grid min-w-0 gap-3 md:grid-cols-3">
+            <div
+                className={cn(
+                    "grid min-w-0 gap-3 md:grid-cols-3",
+                    viewMode !== "board" && "hidden",
+                )}
+            >
                 {TASK_STATUSES.map((status) => {
                     const Icon = STATUS_ICON[status.id]
                     const column = byStatus[status.id]
@@ -1065,7 +1118,7 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
     const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "normal")
     const [salesName, setSalesName] = useState(task?.sales_name ?? "")
     const [licensePlate, setLicensePlate] = useState(task?.license_plate ?? "")
-    const [deliveryNo, setDeliveryNo] = useState(task?.delivery_no ?? "")
+    const [deliveryNo, setDeliveryNo] = useState((task?.delivery_no ?? "").toUpperCase())
     const [freightOrder, setFreightOrder] = useState(task?.freight_order ?? "")
     const [customerNo, setCustomerNo] = useState(task?.customer_no ?? "")
     const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
@@ -1367,7 +1420,7 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                 priority,
                 sales_name: cleanSales,
                 license_plate: licensePlate.trim() || null,
-                delivery_no: deliveryNo.trim() || null,
+                delivery_no: deliveryNo.trim().toUpperCase() || null,
                 freight_order: freightOrder.trim() || null,
                 customer_no: cleanCustomer || null,
                 attachment_path: nextAttachmentPath,
@@ -1655,7 +1708,9 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                             <Input
                                 id="task-delivery"
                                 value={deliveryNo}
-                                onChange={(e) => setDeliveryNo(e.target.value)}
+                                autoCapitalize="characters"
+                                spellCheck={false}
+                                onChange={(e) => setDeliveryNo(e.target.value.toUpperCase())}
                             />
                         </div>
                         <div className="space-y-1.5">

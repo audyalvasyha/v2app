@@ -334,9 +334,14 @@ function EquipmentTableImpl({
         return (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Button variant="outline" size="sm" className="gap-1.5 bg-card" onClick={() => setDetailId(null)}>
-                        <ArrowLeft className="h-3.5 w-3.5" /> Kembali ke daftar
-                    </Button>
+                    <button
+                        type="button"
+                        onClick={() => setDetailId(null)}
+                        className="group inline-flex min-h-11 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 sm:min-h-9"
+                    >
+                        <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
+                        Kembali ke daftar
+                    </button>
                     <span className="text-xs text-muted-foreground">
                         Detail equipment {it.equipment_id}
                     </span>

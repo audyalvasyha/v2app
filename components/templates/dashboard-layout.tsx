@@ -6,7 +6,7 @@ import type { ThemePreference } from "@/hooks/use-theme"
 import type { GlobalSearchItem, GlobalSearchGroupCount } from "@/components/molecules/global-search-dropdown"
 import type { AlertView, AppAlert } from "@/lib/alerts"
 
-export type View = 'dashboard' | 'tugas' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman' | 'ban' | 'weather' | 'traffic' | 'analisa'
+export type View = 'dashboard' | 'tugas' | 'review' | 'equipment' | 'maintenance' | 'monitoring' | 'about' | 'skr' | 'pengiriman' | 'ban' | 'weather' | 'traffic' | 'analisa'
 
 const SIDEBAR_COLLAPSED_KEY = "fleet-sidebar-collapsed"
 

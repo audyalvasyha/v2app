@@ -6,9 +6,9 @@
 --  membuat user. Tabel ini hanya menyimpan PERAN per email:
 --
 --    admin     → semua menu
---    terbatas  → Complaint Board, SKR, Pengiriman, Cuaca, Traffic, About
---                (tanpa Dashboard, Analisa, Equipment, Histories, Monitoring,
---                dan Analisa Ban)
+--    terbatas  → Complaint Board, Review, SKR, Pengiriman, Cuaca, Traffic,
+--                About (tanpa Dashboard, Analisa, Equipment, Histories,
+--                Monitoring, dan Analisa Ban)
 --
 --  Aplikasi juga mengunci email: baris admin untuk email selain
 --  audyal.vasyah@pekanbaru-dr.com tetap diperlakukan sebagai terbatas.
