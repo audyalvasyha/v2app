@@ -262,8 +262,14 @@ export function TaskBoard({ search, viewMode = "board" }: TaskBoardProps) {
     // Detail nopol hanya hidup di menu Review. Pindah ke papan berarti
     // kembali ke daftar nopol saat menu Review dibuka lagi.
     useEffect(() => {
-        if (viewMode !== "review") setReviewPlate(null)
-        else scrollAppToTop()
+        if (viewMode !== "review") {
+            setReviewPlate(null)
+        } else {
+            // Filter prioritas tidak ditampilkan di Review, jadi jangan biarkan
+            // filter dari papan ikut menyaring daftar nopol secara diam-diam.
+            setPriorityFilter("all")
+            scrollAppToTop()
+        }
     }, [viewMode])
 
     const openCreate = () => {
@@ -710,20 +716,13 @@ export function TaskBoard({ search, viewMode = "board" }: TaskBoardProps) {
                 </div>
             )}
 
-            {/* Kontrol halaman — disembunyikan saat membaca berkas nopol. */}
-            {!reviewDetailOpen && (
-                <div
-                    className={cn(
-                        "flex min-w-0 flex-wrap items-center gap-2",
-                        viewMode === "review" ? "justify-end" : "justify-between",
-                    )}
-                >
-                    {viewMode !== "review" && (
-                        <p className="min-w-0 text-xs tabular-nums text-muted-foreground">
-                            {formatNumber(visible.length)} komplain ditampilkan
-                            {searchLower || priorityFilter !== "all" ? " (terfilter)" : ""}
-                        </p>
-                    )}
+            {/* Kontrol papan — di Review tidak perlu filter atau tombol buat baru. */}
+            {!reviewDetailOpen && viewMode !== "review" && (
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                    <p className="min-w-0 text-xs tabular-nums text-muted-foreground">
+                        {formatNumber(visible.length)} komplain ditampilkan
+                        {searchLower || priorityFilter !== "all" ? " (terfilter)" : ""}
+                    </p>
                     <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
                         <FilterChips
                             ariaLabel="Filter prioritas"

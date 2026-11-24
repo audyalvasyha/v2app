@@ -356,18 +356,7 @@ export function ReviewPageSkeleton() {
     <div className="min-w-0" role="status" aria-busy="true">
       <LoadingLabel text="Memuat review komplain…" />
 
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
-          <div className="inline-flex w-full max-w-full flex-wrap items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 sm:w-auto">
-            {[54, 52, 58, 56].map((width, i) => (
-              <Skeleton key={i} className="h-8 rounded-md" style={{ width }} />
-            ))}
-          </div>
-          <Skeleton className="h-[42px] w-full rounded-md sm:w-36" />
-        </div>
-      </div>
-
-      <section className="mt-4 border-y border-border/70 border-t-2 border-t-foreground/55 bg-card/70">
+      <section className="border-y border-border/70 border-t-2 border-t-foreground/55 bg-card/70">
         <div className="grid lg:grid-cols-[minmax(0,1fr)_19rem]">
           <div className="px-4 py-5 sm:px-6 sm:py-6">
             <Skeleton className="h-2.5 w-44 max-w-full" />
