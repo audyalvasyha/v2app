@@ -183,13 +183,13 @@ export default function SkrInputPage() {
             <main className="flex min-h-screen items-center justify-center bg-background p-4">
                 <form
                     onSubmit={handleSignIn}
-                    className="w-full max-w-sm space-y-4 rounded-xl border bg-card p-6 shadow-sm"
+                    className="w-full max-w-sm space-y-4 rounded-sm border border-border/70 bg-card p-6 shadow-none"
                 >
                     <div className="flex items-center gap-2">
-                        <ShieldCheck className="h-5 w-5 text-primary" />
-                        <h1 className="text-base font-semibold">Import SKR — Admin</h1>
+                        <ShieldCheck className="h-4 w-4 text-primary" />
+                        <h1 className="text-sm font-medium tracking-tight">Import SKR — Admin</h1>
                     </div>
-                    <p className="text-xs leading-relaxed text-muted-foreground">
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
                         Halaman khusus admin untuk mengganti data SKR. Dashboard utama
                         memakai login yang sama — satu akun untuk semuanya.
                     </p>
@@ -216,7 +216,7 @@ export default function SkrInputPage() {
                             onChange={(e) => setPassword(e.target.value)}
                         />
                     </div>
-                    <Button type="submit" className="w-full" disabled={signingIn}>
+                    <Button type="submit" className="w-full rounded-sm" disabled={signingIn}>
                         {signingIn ? "Memeriksa…" : "Masuk"}
                     </Button>
                 </form>
@@ -227,7 +227,7 @@ export default function SkrInputPage() {
     if (!isAdmin) {
         return (
             <main className="flex min-h-screen items-center justify-center bg-background p-4">
-                <div className="w-full max-w-sm space-y-4 rounded-xl border border-destructive/30 bg-card p-6 text-center shadow-sm">
+                <div className="w-full max-w-sm space-y-4 rounded-sm border border-destructive/30 bg-card p-6 text-center shadow-none">
                     <TriangleAlert className="mx-auto h-8 w-8 text-destructive" />
                     <div className="space-y-1">
                         <h1 className="text-base font-semibold">Akses khusus admin</h1>
@@ -236,7 +236,7 @@ export default function SkrInputPage() {
                             memang perlu mengubah data.
                         </p>
                     </div>
-                    <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={handleSignOut}>
+                    <Button variant="outline" size="sm" className="w-full gap-1.5 rounded-sm" onClick={handleSignOut}>
                         <LogOut className="h-3.5 w-3.5" /> Keluar
                     </Button>
                 </div>
@@ -261,7 +261,7 @@ export default function SkrInputPage() {
             </div>
 
             {/* Info mode upsert harian */}
-            <div className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-2.5 text-xs leading-relaxed">
+            <div className="flex items-start gap-2 rounded-sm border border-emerald-500/30 bg-emerald-500/5 px-4 py-2.5 text-[11px] leading-relaxed">
                 <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                 <p>
                     <span className="font-medium text-emerald-700 dark:text-emerald-400">Mode harian (upsert).</span>{" "}
@@ -274,20 +274,20 @@ export default function SkrInputPage() {
             </div>
 
             {/* Langkah 1 — template */}
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border/70 bg-card px-4 py-3">
                 <div>
                     <p className="text-sm font-medium">1. Unduh template (opsional)</p>
                     <p className="text-xs text-muted-foreground">
                         Header CSV asli dengan spasi/kapital tetap dikenali otomatis — template hanya contoh susunan.
                     </p>
                 </div>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={downloadTemplate}>
+                <Button variant="outline" size="sm" className="gap-1.5 rounded-sm" onClick={downloadTemplate}>
                     <Download className="h-3.5 w-3.5" /> template-skr.csv
                 </Button>
             </div>
 
             {/* Langkah 2 — pilih file */}
-            <div className="space-y-2 rounded-xl border bg-card px-4 py-3">
+            <div className="space-y-2 rounded-sm border border-border/70 bg-card px-4 py-3">
                 <p className="text-sm font-medium">2. Pilih file CSV</p>
                 <input
                     ref={fileRef}
@@ -297,7 +297,7 @@ export default function SkrInputPage() {
                         const f = e.target.files?.[0]
                         if (f) void handleFile(f)
                     }}
-                    className="block w-full cursor-pointer rounded-lg border border-dashed p-3 text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:text-primary-foreground hover:border-primary/40"
+                    className="block w-full cursor-pointer rounded-sm border border-dashed p-3 text-sm text-muted-foreground file:mr-3 file:cursor-pointer file:rounded-sm file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:text-primary-foreground hover:border-primary/40"
                 />
 
                 {parseSummary && (
@@ -317,7 +317,7 @@ export default function SkrInputPage() {
                             ))}
                         </div>
                         {parseSummary.errors.length > 0 && (
-                            <ul className="space-y-0.5 rounded-md bg-destructive/5 px-3 py-2 text-destructive">
+                            <ul className="space-y-0.5 rounded-sm bg-destructive/5 px-3 py-2 text-destructive">
                                 {parseSummary.errors.slice(0, 5).map((e) => (
                                     <li key={e.rowNumber}>
                                         Baris {e.rowNumber}: {e.message}
@@ -334,17 +334,17 @@ export default function SkrInputPage() {
 
             {/* Langkah 3 — preview + upload */}
             {rows && rows.length > 0 && (
-                <div className="space-y-2 rounded-xl border bg-card px-4 py-3">
+                <div className="space-y-2 rounded-sm border border-border/70 bg-card px-4 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-sm font-medium">
                             3. Periksa & unggah — {formatQty(rows.length, "baris")} terbaca
                         </p>
-                        <Button className="gap-1.5" onClick={handleUpload} disabled={uploading}>
+                        <Button className="gap-1.5 rounded-sm" onClick={handleUpload} disabled={uploading}>
                             <Upload className="h-4 w-4" />
                             {uploading ? "Mengunggah…" : "Upsert data"}
                         </Button>
                     </div>
-                    <div className="overflow-x-auto rounded-lg border">
+                    <div className="overflow-x-auto rounded-sm border">
                         <table className="w-full min-w-[720px] text-left text-xs">
                             <thead className="bg-muted/40 text-muted-foreground">
                                 <tr>

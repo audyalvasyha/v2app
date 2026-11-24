@@ -105,7 +105,7 @@ export function SuggestField({
                 <div
                     id={listId}
                     role="listbox"
-                    className="absolute z-30 mt-1 max-h-48 w-full overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+                    className="absolute z-30 mt-1 max-h-48 w-full overflow-y-auto rounded-sm border bg-popover p-1 text-popover-foreground shadow-md"
                 >
                     {loading ? (
                         <p className="px-2 py-2 text-xs text-muted-foreground">Mencari…</p>

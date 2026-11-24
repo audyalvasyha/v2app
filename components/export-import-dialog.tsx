@@ -68,7 +68,7 @@ export function ExportImportDialog() {
                 </Button>
             </DialogTrigger>
 
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl rounded-sm">
                 <DialogHeader>
                     <div className="flex items-center gap-2">
                         <DialogTitle>Export &amp; Import Data Armada</DialogTitle>
@@ -137,14 +137,14 @@ export function ExportImportDialog() {
                         <div className="space-y-2">
                             <Label>Format Berkas</Label>
                             <div className="grid gap-2 sm:grid-cols-2">
-                                <Button variant="outline" disabled className="justify-start gap-2">
+                                <Button variant="outline" disabled className="justify-start gap-2 rounded-sm">
                                     <FileJson className="h-4 w-4" />
                                     JSON
                                     <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                                         strukturnya
                                     </span>
                                 </Button>
-                                <Button variant="outline" disabled className="justify-start gap-2">
+                                <Button variant="outline" disabled className="justify-start gap-2 rounded-sm">
                                     <FileSpreadsheet className="h-4 w-4" />
                                     CSV
                                     <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -154,7 +154,7 @@ export function ExportImportDialog() {
                             </div>
                         </div>
 
-                        <Button disabled={!FEATURE_ENABLED} className="w-full gap-2">
+                        <Button disabled={!FEATURE_ENABLED} className="w-full gap-2 rounded-sm">
                             <ArrowDownToLine className="h-4 w-4" />
                             Unduh Cadangan Armada
                         </Button>
@@ -177,7 +177,7 @@ export function ExportImportDialog() {
 
                         <div className="space-y-2">
                             <Label>Dari Berkas</Label>
-                            <Button variant="outline" disabled className="w-full justify-start gap-2">
+                            <Button variant="outline" disabled className="w-full justify-start gap-2 rounded-sm">
                                 <ArrowUpFromLine className="h-4 w-4" />
                                 Pilih Berkas JSON
                             </Button>
@@ -197,7 +197,7 @@ export function ExportImportDialog() {
                             />
                         </div>
 
-                        <Button disabled={!FEATURE_ENABLED} className="w-full gap-2">
+                        <Button disabled={!FEATURE_ENABLED} className="w-full gap-2 rounded-sm">
                             Validasi &amp; Impor
                         </Button>
                     </TabsContent>

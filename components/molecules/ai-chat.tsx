@@ -598,7 +598,7 @@ export function AIChat({
         ask(input);
       }}
       className={pageMode
-        ? "flex w-full items-end gap-1.5 rounded-[28px] border border-input bg-card p-1.5 pl-2 shadow-sm transition-[border-color,box-shadow] focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/15"
+        ? "flex w-full items-end gap-1.5 rounded-sm border border-input bg-card p-1.5 pl-2 shadow-none transition-[border-color,box-shadow] focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/15"
         : "flex gap-2 border-t border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.04] p-3"}
     >
       <textarea
@@ -618,7 +618,7 @@ export function AIChat({
         placeholder={pageMode ? "Tanya apa saja." : rememberNext ? "Ketik yang mau diingat…" : "Tanya apa saja… (Enter kirim, Shift+Enter baris baru)"}
         className={pageMode
           ? "max-h-40 min-h-10 flex-1 resize-none overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-transparent px-2 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none disabled:opacity-50"
-          : "max-h-[120px] min-h-[2.25rem] flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"}
+          : "max-h-[120px] min-h-[2.25rem] flex-1 resize-none rounded-sm border border-input bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"}
       />
       {pageMode ? (
         <div className="flex shrink-0 items-center gap-1">
@@ -631,7 +631,7 @@ export function AIChat({
             title={rememberNext ? "Pertanyaan ini akan disimpan ke ingatan Midaa" : "Simpan pertanyaan ini ke ingatan Midaa"}
             aria-label="Simpan pertanyaan ini ke ingatan Midaa"
             aria-pressed={rememberNext}
-            className={`h-10 w-10 shrink-0 rounded-full ${rememberNext ? "text-primary" : "text-muted-foreground"}`}
+            className={`h-10 w-10 shrink-0 rounded-sm ${rememberNext ? "text-primary" : "text-muted-foreground"}`}
           >
             <BookmarkPlus className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`} />
           </Button>
@@ -640,7 +640,7 @@ export function AIChat({
             size="icon"
             aria-label="Kirim pertanyaan"
             disabled={loading || !input.trim()}
-            className="h-10 w-10 shrink-0 rounded-full"
+            className="h-10 w-10 shrink-0 rounded-sm"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
           </Button>
@@ -655,11 +655,11 @@ export function AIChat({
             onClick={() => setRememberNext((v) => !v)}
             title="Simpan pertanyaan ini ke ingatan Midaa"
             aria-pressed={rememberNext}
-            className={rememberNext ? "shrink-0 text-primary" : "shrink-0 text-muted-foreground"}
+            className={rememberNext ? "shrink-0 rounded-sm text-primary" : "shrink-0 rounded-sm text-muted-foreground"}
           >
             <BookmarkPlus className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`} />
           </Button>
-          <Button type="submit" size="icon" disabled={loading || !input.trim()}>
+          <Button type="submit" size="icon" className="rounded-sm" disabled={loading || !input.trim()}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
@@ -862,7 +862,7 @@ export function AIChat({
                     )}
 
                     {memoryError && (
-                      <p className="rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                      <p className="rounded-sm border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
                         {memoryError}
                       </p>
                     )}
@@ -885,6 +885,7 @@ export function AIChat({
                         type="submit"
                         size="icon"
                         variant="secondary"
+                        className="rounded-sm"
                         disabled={memoryBusy || !memoryInput.trim()}
                         aria-label="Simpan ingatan"
                       >

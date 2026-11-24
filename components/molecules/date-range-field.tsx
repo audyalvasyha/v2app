@@ -120,7 +120,7 @@ export function DateRangeField({ idPrefix, from, to, onApply, isFetching, classN
                         type="button"
                         variant="outline"
                         className={cn(
-                            "h-9 gap-2 bg-card px-3 font-mono text-sm",
+                            "h-9 gap-2 rounded-sm bg-card px-3 font-mono text-sm",
                             open && "border-primary/50 ring-1 ring-primary/25",
                         )}
                     >
@@ -140,7 +140,7 @@ export function DateRangeField({ idPrefix, from, to, onApply, isFetching, classN
             <PopoverContent
                 align="start"
                 collisionPadding={8}
-                className="w-[min(340px,calc(100vw_-_1.5rem))] rounded-xl p-3"
+                className="w-[min(340px,calc(100vw_-_1.5rem))] rounded-sm p-3"
             >
                 <div className="flex items-end gap-2">
                     <div className="min-w-0 flex-1 space-y-1">
@@ -182,7 +182,7 @@ export function DateRangeField({ idPrefix, from, to, onApply, isFetching, classN
 
                 <Button
                     size="sm"
-                    className="mt-3 h-8 w-full gap-1.5"
+                    className="mt-3 h-8 w-full gap-1.5 rounded-sm"
                     onClick={() => {
                         commit(draftFrom, draftTo)
                         setOpen(false)

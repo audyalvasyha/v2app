@@ -1478,8 +1478,10 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                 side="right"
                 className="flex w-full max-w-none flex-col gap-0 overflow-hidden border-l bg-background p-0 sm:max-w-2xl"
             >
-                <SheetHeader className="shrink-0 border-b px-5 py-4 pr-12 text-left">
-                    <SheetTitle className="text-base">{task ? "Ubah komplain" : "Komplain baru"}</SheetTitle>
+                <SheetHeader className="shrink-0 border-b border-border/60 px-5 py-4 pr-12 text-left">
+                    <SheetTitle className="text-sm font-medium tracking-tight">
+                        {task ? "Ubah komplain" : "Komplain baru"}
+                    </SheetTitle>
                     <SheetDescription className="sr-only">
                         Detail dan formulir komplain pengiriman.
                     </SheetDescription>
@@ -1487,27 +1489,31 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
 
                 <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
                     <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-                        <div className="space-y-5">
-                            <section className="space-y-3">
-                                <h3 className="text-xs font-medium text-muted-foreground">Komplain</h3>
+                        <div className="space-y-6">
+                            <section aria-label="Komplain" className="space-y-4">
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="task-title">Apa yang dikomplain</Label>
+                                    <Label htmlFor="task-title" className="text-[11px] font-medium text-muted-foreground">
+                                        Apa yang dikomplain
+                                    </Label>
                                     <Textarea
                                         id="task-title"
                                         value={title}
                                         onChange={(e) => setTitle(e.target.value)}
                                         rows={3}
                                         autoFocus
+                                        className="rounded-sm"
                                     />
                                 </div>
 
                                 <div className="max-w-[200px] space-y-1.5">
-                                    <Label>Prioritas</Label>
+                                    <Label className="text-[11px] font-medium text-muted-foreground">
+                                        Prioritas
+                                    </Label>
                                     <Select value={priority} onValueChange={(v) => setPriority(v as TaskPriority)}>
-                                        <SelectTrigger className="w-full">
+                                        <SelectTrigger className="w-full rounded-sm">
                                             <SelectValue />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent className="rounded-sm">
                                             {TASK_PRIORITIES.map((p) => (
                                                 <SelectItem key={p.id} value={p.id}>
                                                     {p.label}
@@ -1523,23 +1529,26 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                 </div>
                             </section>
 
-                            <section className="space-y-3 border-t pt-5">
-                                <h3 className="text-xs font-medium text-muted-foreground">Lampiran</h3>
+                            <section aria-label="Lampiran" className="space-y-4 border-t border-border/60 pt-5">
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="task-attachment">Foto bukti komplain</Label>
+                                    <Label htmlFor="task-attachment" className="text-[11px] font-medium text-muted-foreground">
+                                        Foto bukti komplain
+                                    </Label>
                                     <Input
                                         ref={attachmentInputRef}
                                         id="task-attachment"
                                         type="file"
                                         accept="image/png,image/jpeg,.png,.jpg,.jpeg"
                                         onChange={handleAttachmentChange}
-                                        className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
+                                        className="cursor-pointer rounded-sm file:mr-3 file:rounded-sm file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
                                     />
-                                    <p className="text-xs text-muted-foreground">PNG atau JPEG, maksimal 5 MB.</p>
+                                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                                        PNG atau JPEG, maksimal 5 MB.
+                                    </p>
                                 </div>
 
                                 {attachmentPreviewUrl && attachmentFile && (
-                                    <div className="overflow-hidden rounded-md border bg-muted/30">
+                                    <div className="overflow-hidden rounded-sm border bg-muted/30">
                                         {/* Preview lokal sebelum file diunggah saat Simpan. */}
                                         <img
                                             src={attachmentPreviewUrl}
@@ -1554,7 +1563,7 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                                 type="button"
                                                 variant="ghost"
                                                 size="sm"
-                                                className="h-7 shrink-0 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                                                 onClick={clearAttachment}
                                             >
                                                 <X className="h-3 w-3" /> Hapus
@@ -1564,7 +1573,7 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                 )}
 
                                 {!attachmentFile && task?.attachment_path && !removeAttachment && (
-                                    <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-2.5 py-2">
+                                    <div className="flex items-center justify-between gap-2 rounded-sm border bg-muted/30 px-2.5 py-2">
                                         {existingAttachmentUrl ? (
                                             <a
                                                 href={existingAttachmentUrl}
@@ -1584,7 +1593,7 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                             type="button"
                                             variant="ghost"
                                             size="sm"
-                                            className="h-7 shrink-0 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                            className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                                             onClick={clearAttachment}
                                         >
                                             <X className="h-3 w-3" /> Hapus
@@ -1598,149 +1607,79 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                     </p>
                                 )}
 
-                                <div className="space-y-1.5 border-t border-border/60 pt-3">
-                                    <Label htmlFor="task-resolution-attachment">
-                                        Dokumentasi penyelesaian
-                                        {status === "done" && (
-                                            <span aria-hidden className="text-destructive">*</span>
-                                        )}
-                                    </Label>
-                                    <Input
-                                        ref={resolutionInputRef}
-                                        id="task-resolution-attachment"
-                                        type="file"
-                                        accept="image/png,image/jpeg,.png,.jpg,.jpeg"
-                                        aria-required={status === "done"}
-                                        onChange={handleResolutionChange}
-                                        className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        {status === "done"
-                                            ? "Wajib diunggah saat status Selesai."
-                                            : "Opsional, jadi wajib begitu status diubah ke Selesai."}{" "}
-                                        PNG atau JPEG, maksimal 5 MB.
-                                    </p>
-                                </div>
-
-                                {resolutionPreviewUrl && resolutionFile && (
-                                    <div className="overflow-hidden rounded-md border bg-muted/30">
-                                        <img
-                                            src={resolutionPreviewUrl}
-                                            alt="Pratinjau dokumentasi penyelesaian"
-                                            className="max-h-44 w-full object-contain"
-                                        />
-                                        <div className="flex items-center justify-between gap-2 border-t px-2.5 py-1.5">
-                                            <span className="min-w-0 truncate text-xs text-muted-foreground">
-                                                {resolutionFile.name}
-                                            </span>
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-7 shrink-0 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                                onClick={clearResolutionAttachment}
-                                            >
-                                                <X className="h-3 w-3" /> Hapus
-                                            </Button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {!resolutionFile && task?.resolution_attachment_path && !removeResolution && (
-                                    <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-2.5 py-2">
-                                        {existingResolutionUrl ? (
-                                            <a
-                                                href={existingResolutionUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground hover:underline"
-                                            >
-                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-                                                <span className="truncate">Lihat dokumentasi penyelesaian</span>
-                                            </a>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" /> Dokumentasi tersimpan
-                                            </span>
-                                        )}
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 shrink-0 gap-1 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                            onClick={clearResolutionAttachment}
-                                        >
-                                            <X className="h-3 w-3" /> Hapus
-                                        </Button>
-                                    </div>
-                                )}
-
-                                {removeResolution && task?.resolution_attachment_path && !resolutionFile && (
-                                    <p className="text-xs text-muted-foreground">
-                                        Dokumentasi penyelesaian akan dihapus saat Simpan.
-                                    </p>
-                                )}
                             </section>
 
-                            <section className="space-y-3 border-t pt-5">
-                                <h3 className="text-xs font-medium text-muted-foreground">Identitas pengiriman</h3>
+                            <section aria-label="Identitas pengiriman" className="space-y-4 border-t border-border/60 pt-5">
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="task-sales" className="text-[11px] font-medium text-muted-foreground">
+                                            Nama sales
+                                        </Label>
+                                        <SuggestField
+                                            id="task-sales"
+                                            value={salesName}
+                                            onValueChange={setSalesName}
+                                            onSelect={(sales) => setSalesName(sales.label)}
+                                            suggestions={salesSuggestions}
+                                            emptyText={
+                                                salesOptions.length === 0
+                                                    ? "Daftar sales belum termuat"
+                                                    : "Sales tidak ditemukan"
+                                            }
+                                            className="rounded-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="task-plate" className="text-[11px] font-medium text-muted-foreground">
+                                            No. plat mobil
+                                        </Label>
+                                        <SuggestField
+                                            id="task-plate"
+                                            value={licensePlate}
+                                            onValueChange={setLicensePlate}
+                                            onSelect={(plate) => setLicensePlate(plate.label)}
+                                            suggestions={plateSuggestions}
+                                            emptyText={
+                                                plateOptions.length === 0
+                                                    ? "Daftar nopol belum termuat"
+                                                    : "Nopol tidak ditemukan"
+                                            }
+                                            className="rounded-sm"
+                                        />
+                                    </div>
+                                </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="task-sales">Nama sales</Label>
-                            <SuggestField
-                                id="task-sales"
-                                value={salesName}
-                                onValueChange={setSalesName}
-                                onSelect={(sales) => setSalesName(sales.label)}
-                                suggestions={salesSuggestions}
-                                emptyText={
-                                    salesOptions.length === 0
-                                        ? "Daftar sales belum termuat"
-                                        : "Sales tidak ditemukan"
-                                }
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="task-plate">No. plat mobil</Label>
-                            <SuggestField
-                                id="task-plate"
-                                value={licensePlate}
-                                onValueChange={setLicensePlate}
-                                onSelect={(plate) => setLicensePlate(plate.label)}
-                                suggestions={plateSuggestions}
-                                emptyText={
-                                    plateOptions.length === 0
-                                        ? "Daftar nopol belum termuat"
-                                        : "Nopol tidak ditemukan"
-                                }
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="task-delivery">No. delivery</Label>
-                            <Input
-                                id="task-delivery"
-                                value={deliveryNo}
-                                autoCapitalize="characters"
-                                spellCheck={false}
-                                onChange={(e) => setDeliveryNo(e.target.value.toUpperCase())}
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="task-fo">No. freight order</Label>
-                            <Input
-                                id="task-fo"
-                                value={freightOrder}
-                                onChange={(e) => setFreightOrder(e.target.value)}
-                            />
-                        </div>
-                    </div>
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="task-delivery" className="text-[11px] font-medium text-muted-foreground">
+                                            No. delivery
+                                        </Label>
+                                        <Input
+                                            id="task-delivery"
+                                            value={deliveryNo}
+                                            autoCapitalize="characters"
+                                            spellCheck={false}
+                                            onChange={(e) => setDeliveryNo(e.target.value.toUpperCase())}
+                                            className="rounded-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="task-fo" className="text-[11px] font-medium text-muted-foreground">
+                                            No. freight order
+                                        </Label>
+                                        <Input
+                                            id="task-fo"
+                                            value={freightOrder}
+                                            onChange={(e) => setFreightOrder(e.target.value)}
+                                            className="rounded-sm"
+                                        />
+                                    </div>
+                                </div>
 
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="task-customer-no">ID pelanggan</Label>
+                                    <Label htmlFor="task-customer-no" className="text-[11px] font-medium text-muted-foreground">
+                                        ID pelanggan
+                                    </Label>
                                     <SuggestField
                                         id="task-customer-no"
                                         value={customerNo}
@@ -1760,21 +1699,22 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                                 ? "Gagal memuat data pelanggan"
                                                 : "Pelanggan tidak ditemukan"
                                         }
+                                        className="rounded-sm"
                                     />
                                     {pickedCustomer && (
-                                        <p className="text-xs text-muted-foreground">
+                                        <p className="text-[11px] text-muted-foreground">
                                             Toko: {pickedCustomer.name}
                                         </p>
                                     )}
                                 </div>
                             </section>
 
-                            <section className="space-y-3 border-t pt-5">
-                                <h3 className="text-xs font-medium text-muted-foreground">Tindakan</h3>
-
+                            <section aria-label="Tindakan" className="space-y-4 border-t border-border/60 pt-5">
                     {task && (
                         <div className="space-y-1.5">
-                            <Label>Status</Label>
+                            <Label className="text-[11px] font-medium text-muted-foreground">
+                                Status
+                            </Label>
                             <div className="grid min-w-0 grid-cols-2 gap-2">
                                 {TASK_STATUSES.map((s) => {
                                     const Icon = STATUS_ICON[s.id]
@@ -1786,7 +1726,7 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                             variant="outline"
                                             aria-pressed={status === s.id}
                                             className={cn(
-                                                "h-auto min-h-8 min-w-0 justify-start gap-1.5 whitespace-normal px-2 py-1.5 text-left text-xs leading-tight [overflow-wrap:anywhere]",
+                                                "h-auto min-h-8 min-w-0 justify-start gap-1.5 whitespace-normal rounded-sm px-2 py-1.5 text-left text-xs leading-tight [overflow-wrap:anywhere]",
                                                 status === s.id
                                                     ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
                                                     : "bg-card text-muted-foreground hover:bg-muted",
@@ -1801,24 +1741,27 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                             </div>
                             {status === "done" && !resolutionFile && (!task?.resolution_attachment_path || removeResolution) && (
                                 <p className="text-xs text-destructive">
-                                    Dokumentasi penyelesaian wajib diunggah di bagian Lampiran.
+                                    Dokumentasi penyelesaian wajib diunggah di bagian bawah form.
                                 </p>
                             )}
                         </div>
                     )}
 
                     <div className="space-y-1.5">
-                        <Label htmlFor="task-description">Catatan tindakan</Label>
+                        <Label htmlFor="task-description" className="text-[11px] font-medium text-muted-foreground">
+                            Catatan tindakan
+                        </Label>
                         <Textarea
                             id="task-description"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             rows={2}
+                            className="rounded-sm"
                         />
                     </div>
 
                     {task && (
-                        <div className="space-y-1 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                        <div className="space-y-1 rounded-sm border border-border/60 bg-muted/20 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
                             <p
                                 className="flex items-start gap-1.5"
                                 title={`Dibuat oleh ${displayNameFor(task.created_by, userNames)}`}
@@ -1863,6 +1806,91 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                     )}
 
                             </section>
+
+                            <section aria-label="Dokumentasi penyelesaian" className="space-y-4 border-t border-border/60 pt-5">
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="task-resolution-attachment" className="text-[11px] font-medium text-muted-foreground">
+                                        Dokumentasi penyelesaian
+                                        {status === "done" && (
+                                            <span aria-hidden className="text-destructive">*</span>
+                                        )}
+                                    </Label>
+                                    <Input
+                                        ref={resolutionInputRef}
+                                        id="task-resolution-attachment"
+                                        type="file"
+                                        accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                                        aria-required={status === "done"}
+                                        onChange={handleResolutionChange}
+                                        className="cursor-pointer rounded-sm file:mr-3 file:rounded-sm file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
+                                    />
+                                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                                        {status === "done"
+                                            ? "Wajib diunggah saat status Selesai."
+                                            : "Opsional, jadi wajib begitu status diubah ke Selesai."}{" "}
+                                        PNG atau JPEG, maksimal 5 MB.
+                                    </p>
+                                </div>
+
+                                {resolutionPreviewUrl && resolutionFile && (
+                                    <div className="overflow-hidden rounded-sm border bg-muted/30">
+                                        <img
+                                            src={resolutionPreviewUrl}
+                                            alt="Pratinjau dokumentasi penyelesaian"
+                                            className="max-h-44 w-full object-contain"
+                                        />
+                                        <div className="flex items-center justify-between gap-2 border-t px-2.5 py-1.5">
+                                            <span className="min-w-0 truncate text-xs text-muted-foreground">
+                                                {resolutionFile.name}
+                                            </span>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                onClick={clearResolutionAttachment}
+                                            >
+                                                <X className="h-3 w-3" /> Hapus
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {!resolutionFile && task?.resolution_attachment_path && !removeResolution && (
+                                    <div className="flex items-center justify-between gap-2 rounded-sm border bg-muted/30 px-2.5 py-2">
+                                        {existingResolutionUrl ? (
+                                            <a
+                                                href={existingResolutionUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground hover:underline"
+                                            >
+                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                                                <span className="truncate">Lihat dokumentasi penyelesaian</span>
+                                            </a>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" /> Dokumentasi tersimpan
+                                            </span>
+                                        )}
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                            onClick={clearResolutionAttachment}
+                                        >
+                                            <X className="h-3 w-3" /> Hapus
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {removeResolution && task?.resolution_attachment_path && !resolutionFile && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Dokumentasi penyelesaian akan dihapus saat Simpan.
+                                    </p>
+                                )}
+                            </section>
                         </div>
                     </div>
 
@@ -1872,12 +1900,12 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                         </p>
                     )}
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/20 px-5 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-muted/10 px-5 py-3">
                         {task ? (
                             <Button
                                 type="button"
                                 variant="ghost"
-                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                className="rounded-sm text-destructive hover:bg-destructive/10 hover:text-destructive"
                                 onClick={() => void handleDelete()}
                                 disabled={isSaving}
                             >
@@ -1887,10 +1915,10 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                             <span />
                         )}
                         <div className="ml-auto flex gap-2">
-                            <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
+                            <Button type="button" variant="outline" className="rounded-sm" onClick={onClose} disabled={isSaving}>
                                 Batal
                             </Button>
-                            <Button type="submit" disabled={isSaving}>
+                            <Button type="submit" className="rounded-sm" disabled={isSaving}>
                                 {isSaving ? "Menyimpan…" : "Simpan"}
                             </Button>
                         </div>

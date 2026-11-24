@@ -62,20 +62,20 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                 <div
                     role="status"
                     aria-busy="true"
-                    className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-sm"
+                    className="w-full max-w-sm rounded-sm border border-border/70 bg-card p-6 shadow-none"
                 >
                     <span className="sr-only">Memeriksa sesi…</span>
                     <div className="flex items-center gap-3">
-                        <Skeleton className="h-10 w-10 rounded-lg" />
+                        <Skeleton className="h-10 w-10 rounded-sm" />
                         <div className="space-y-2">
                             <Skeleton className="h-5 w-24" />
                             <Skeleton className="h-3 w-40" />
                         </div>
                     </div>
                     <div className="mt-5 space-y-3">
-                        <Skeleton className="h-10 w-full rounded-lg" />
-                        <Skeleton className="h-10 w-full rounded-lg" />
-                        <Skeleton className="h-10 w-full rounded-lg" />
+                        <Skeleton className="h-10 w-full rounded-sm" />
+                        <Skeleton className="h-10 w-full rounded-sm" />
+                        <Skeleton className="h-10 w-full rounded-sm" />
                     </div>
                 </div>
             </main>
@@ -88,7 +88,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             <main className="flex min-h-screen items-center justify-center bg-background p-4">
                 <form
                     onSubmit={handleSignIn}
-                    className="w-full max-w-sm space-y-5 rounded-xl border bg-card p-6 shadow-sm"
+                    className="w-full max-w-sm space-y-5 rounded-sm border border-border/70 bg-card p-6 shadow-none"
                 >
                     <div className="flex items-center gap-3">
                         <Image
@@ -96,22 +96,20 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                             alt="Logo Midaa"
                             width={40}
                             height={40}
-                            className="h-10 w-10 rounded-lg"
+                            className="h-10 w-10 rounded-sm"
                             priority
                         />
                         <div>
-                            <h1 className="text-lg font-bold leading-tight">Midaa</h1>
-                            <p className="text-xs text-muted-foreground">Transport Management System</p>
+                            <h1 className="text-base font-medium leading-tight tracking-tight">Midaa</h1>
+                            <p className="text-[11px] text-muted-foreground">Transport Management System</p>
                         </div>
                     </div>
 
-                    <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs leading-relaxed">
-                        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        <p className="text-muted-foreground">
-                            Akses terbatas untuk user terdaftar. Masuk dengan akun yang
-                            diberikan admin.
-                        </p>
-                    </div>
+                    <p className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
+                        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                        Akses terbatas untuk user terdaftar. Masuk dengan akun yang diberikan
+                        admin.
+                    </p>
 
                     <div className="space-y-1.5">
                         <Label htmlFor="email">Email</Label>
@@ -136,7 +134,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                             onChange={(e) => setPassword(e.target.value)}
                         />
                     </div>
-                    <Button type="submit" className="w-full gap-1.5" disabled={signingIn}>
+                    <Button type="submit" className="w-full gap-1.5 rounded-sm" disabled={signingIn}>
                         <LogIn className="h-4 w-4" />
                         {signingIn ? "Memeriksa…" : "Masuk"}
                     </Button>
