@@ -3,11 +3,14 @@
 --
 --  Satu baris = satu komplain kekurangan dari toko. Kolom identitas
 --  pengiriman (sales, plat, delivery, freight order, pelanggan) dipakai
---  untuk menelusuri asal komplain; atribusi user diisi aplikasi dari
---  sesi Supabase Auth:
+--  untuk menelusuri asal komplain; atribusi user DIPAKSA trigger dari
+--  sesi Supabase Auth (bukan dipercaya dari payload browser):
 --    created_by      → user yang mencatat komplain
 --    followed_up_by  → user pertama yang memindahkan ke "sedang di-FU"
 --    resolved_by     → user yang menandai selesai
+--
+--  Delete dibatasi ke pembuat komplain atau admin utama. Update tetap
+--  terbuka untuk kolaborasi, tetapi kolom atribusi tidak bisa diubah.
 --
 --  DIBACA & DITULIS OLEH: browser dengan sesi user terdaftar (menu ada
 --  di balik AuthGate). RLS: hanya role `authenticated`.
@@ -36,9 +39,9 @@ create table if not exists public.tasks (
   delivery_no    text,
   freight_order  text,
   customer_no    text,
-  -- Object key foto bukti komplain Cloudflare R2 (PNG/JPEG).
+  -- Daftar object key foto bukti komplain R2, satu path per baris.
   attachment_path text,
-  -- Object key dokumentasi penyelesaian; wajib diisi saat status selesai.
+  -- Daftar object key dokumentasi penyelesaian, satu path per baris.
   resolution_attachment_path text,
   -- Atribusi user (email dari Supabase Auth).
   created_by      text,
@@ -102,7 +105,114 @@ create policy tasks_insert on public.tasks for insert to authenticated with chec
 
 create policy tasks_update on public.tasks for update to authenticated using (true) with check (true);
 
-create policy tasks_delete on public.tasks for delete to authenticated using (true);
+-- Helper admin untuk policy delete. Disalin dari is_app_admin() supaya
+-- tasks.sql tetap bisa dijalankan mandiri sebelum auth_lockdown.sql.
+create or replace function public.is_task_admin()
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := lower(coalesce(auth.jwt() ->> 'email', ''));
+begin
+  if v_email <> lower('audyal.vasyah@pekanbaru-dr.com') then
+    return false;
+  end if;
+
+  if to_regclass('public.app_users') is null then
+    return true;
+  end if;
+
+  return coalesce(
+    (select u.role = 'admin'
+       from public.app_users u
+      where lower(u.email) = v_email
+      limit 1),
+    true
+  );
+end;
+$$;
+
+revoke all on function public.is_task_admin() from public, anon;
+grant execute on function public.is_task_admin() to authenticated;
+
+create policy tasks_delete on public.tasks for delete to authenticated using (
+  public.is_task_admin()
+  or (
+    coalesce(auth.jwt() ->> 'email', '') <> ''
+    and lower(coalesce(created_by, '')) = lower(auth.jwt() ->> 'email')
+  )
+);
+
+-- ── Atribusi audit dari sesi, bukan dari browser ─────────────────
+-- RLS update sengaja terbuka agar tim bisa saling melanjutkan komplain.
+-- Tanpa trigger ini, siapa pun bisa mengubah created_by/resolved_by atau
+-- memundurkan created_at lewat PostgREST dan memalsukan jejak audit.
+create or replace function public.enforce_task_audit_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor text := lower(coalesce(auth.jwt() ->> 'email', auth.uid()::text));
+begin
+  -- Service role / migrasi tanpa JWT tidak punya auth.uid(); jangan blokir.
+  if auth.uid() is null then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    new.created_by := actor;
+    new.created_at := now();
+    new.followed_up_by := null;
+    new.followed_up_at := null;
+    new.resolved_by := null;
+    new.resolved_at := null;
+  else
+    -- Kolom identitas dan waktu pembuatan tidak boleh diubah setelah ada.
+    new.created_by := old.created_by;
+    new.created_at := old.created_at;
+    new.followed_up_by := old.followed_up_by;
+    new.followed_up_at := old.followed_up_at;
+    new.resolved_by := old.resolved_by;
+    new.resolved_at := old.resolved_at;
+  end if;
+
+  if new.status = 'done' then
+    if new.followed_up_by is null then
+      new.followed_up_by := actor;
+      new.followed_up_at := now();
+    end if;
+    if new.resolved_by is null then
+      new.resolved_by := actor;
+      new.resolved_at := now();
+    end if;
+  elsif new.status in ('progress', 'blocked') then
+    if new.followed_up_by is null then
+      new.followed_up_by := actor;
+      new.followed_up_at := now();
+    end if;
+    new.resolved_by := null;
+    new.resolved_at := null;
+  else
+    -- Kembali ke "Baru": dokumentasi selesai tidak lagi berlaku.
+    new.resolved_by := null;
+    new.resolved_at := null;
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.enforce_task_audit_fields() from public, anon, authenticated;
+
+drop trigger if exists tasks_enforce_audit_fields on public.tasks;
+create trigger tasks_enforce_audit_fields
+  before insert or update on public.tasks
+  for each row execute function public.enforce_task_audit_fields();
 
 -- ── Kepemilikan path lampiran ────────────────────────────────────
 -- Endpoint /api/attachments mengizinkan user lain melihat lampiran yang
@@ -117,43 +227,52 @@ set search_path = public
 as $$
 declare
   uid text := auth.uid()::text;
+  old_attachment_paths text[] := array[]::text[];
+  old_resolution_paths text[] := array[]::text[];
+  new_path text;
 begin
   -- Service role / migrasi tanpa JWT tidak punya auth.uid(); jangan blokir.
   if uid is null then
     return new;
   end if;
 
-  if tg_op = 'INSERT' then
-    if new.attachment_path is not null and btrim(new.attachment_path) <> ''
-       and new.attachment_path not like ('complaints/' || uid || '/%') then
+  if tg_op = 'UPDATE' then
+    old_attachment_paths := array(
+      select btrim(p)
+        from unnest(string_to_array(coalesce(old.attachment_path, ''), E'\n')) as u(p)
+       where btrim(p) <> ''
+    );
+    old_resolution_paths := array(
+      select btrim(p)
+        from unnest(string_to_array(coalesce(old.resolution_attachment_path, ''), E'\n')) as u(p)
+       where btrim(p) <> ''
+    );
+  end if;
+
+  -- Satu kolom bisa berisi beberapa path, satu per baris. Hanya path baru
+  -- yang wajib milik user yang sedang menyimpan; path lama (termasuk milik
+  -- user lain) tetap boleh dipertahankan saat komplain diedit bersama.
+  foreach new_path in array string_to_array(coalesce(new.attachment_path, ''), E'\n')
+  loop
+    new_path := btrim(new_path);
+    if new_path <> ''
+       and not (new_path = any(old_attachment_paths))
+       and new_path not like ('complaints/' || uid || '/%') then
       raise exception 'Lampiran komplain harus diunggah oleh user yang membuat task'
         using errcode = '42501';
     end if;
+  end loop;
 
-    if new.resolution_attachment_path is not null and btrim(new.resolution_attachment_path) <> ''
-       and new.resolution_attachment_path not like ('complaints/' || uid || '/%') then
+  foreach new_path in array string_to_array(coalesce(new.resolution_attachment_path, ''), E'\n')
+  loop
+    new_path := btrim(new_path);
+    if new_path <> ''
+       and not (new_path = any(old_resolution_paths))
+       and new_path not like ('complaints/' || uid || '/%') then
       raise exception 'Dokumentasi penyelesaian harus diunggah oleh user yang menyimpan task'
         using errcode = '42501';
     end if;
-
-    return new;
-  end if;
-
-  -- Hanya validasi field yang berubah. Baris lama dengan path lama tetap
-  -- bisa diedit (mis. ganti status) tanpa dipaksa upload ulang.
-  if new.attachment_path is distinct from old.attachment_path
-     and new.attachment_path is not null and btrim(new.attachment_path) <> ''
-     and new.attachment_path not like ('complaints/' || uid || '/%') then
-    raise exception 'Lampiran komplain harus diunggah oleh user yang membuat task'
-      using errcode = '42501';
-  end if;
-
-  if new.resolution_attachment_path is distinct from old.resolution_attachment_path
-     and new.resolution_attachment_path is not null and btrim(new.resolution_attachment_path) <> ''
-     and new.resolution_attachment_path not like ('complaints/' || uid || '/%') then
-    raise exception 'Dokumentasi penyelesaian harus diunggah oleh user yang menyimpan task'
-      using errcode = '42501';
-  end if;
+  end loop;
 
   return new;
 end;
@@ -176,8 +295,12 @@ create trigger tasks_enforce_attachment_owner
 --  1) anon HARUS ditolak:
 --     curl "$SUPABASE_URL/rest/v1/tasks?select=id" -H "apikey: <anon-key>"
 --     → 401 / 42501
---  2) user login bisa menulis satu baris uji, lalu hapus lagi:
+--  2) user login bisa menulis satu baris uji, lalu menghapus baris
+--     miliknya sendiri. Delete task milik user lain harus 0 baris:
 --     insert into public.tasks (title, sales_name, delivery_no)
 --     values ('tes', 'sales uji', 'DO-1') returning id;
 --     delete from public.tasks where title = 'tes';
+--  3) created_by tidak boleh berubah lewat update langsung:
+--     update public.tasks set created_by = 'orang-lain@contoh.com'
+--      where id = '<id-task>';  -- nilai tetap seperti semula
 -- ═══════════════════════════════════════════════════════════════

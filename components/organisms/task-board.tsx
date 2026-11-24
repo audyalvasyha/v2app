@@ -64,6 +64,8 @@ import {
     TASK_RESOLUTION_REQUIRED_MESSAGE,
     TASK_STATUSES,
     isTaskAttachmentType,
+    parseTaskAttachmentPaths,
+    serializeTaskAttachmentPaths,
     withTaskSchemaHint,
     writeLocalTasks,
     type Task,
@@ -153,6 +155,23 @@ function attachmentMime(file: File): "image/png" | "image/jpeg" | null {
     return null
 }
 
+/** Preview file lokal; object URL dibuat dan dibersihkan per file. */
+function LocalAttachmentPreview({ file, alt }: { file: File; alt: string }) {
+    const [url, setUrl] = useState<string | null>(null)
+
+    useEffect(() => {
+        const next = URL.createObjectURL(file)
+        setUrl(next)
+        return () => URL.revokeObjectURL(next)
+    }, [file])
+
+    return url ? (
+        <img src={url} alt={alt} className="h-24 w-full object-cover" />
+    ) : (
+        <div className="h-24 w-full animate-pulse bg-muted" />
+    )
+}
+
 /** Validasi + upload satu lampiran ke R2. Mengembalikan object key bila sukses. */
 async function uploadTaskAttachment(file: File): Promise<{ path: string } | { error: string }> {
     const mime = attachmentMime(file)
@@ -212,9 +231,11 @@ interface TaskBoardProps {
     search: string
     /** Papan kanban atau halaman ringkasan per nopol (menu Review). */
     viewMode?: "board" | "review"
+    /** Admin boleh menghapus komplain siapa pun; user lain hanya miliknya. */
+    canDeleteAll?: boolean
 }
 
-export function TaskBoard({ search, viewMode = "board" }: TaskBoardProps) {
+export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: TaskBoardProps) {
     const [tasks, setTasks] = useState<Task[]>([])
     const [mode, setMode] = useState<StorageMode>("remote")
     const [isLoading, setIsLoading] = useState(true)
@@ -520,8 +541,12 @@ export function TaskBoard({ search, viewMode = "board" }: TaskBoardProps) {
             const next = tasks.filter((t) => t.id !== target.id)
             setTasks(next)
             writeLocalTasks(next)
-            if (target.attachment_path) void removeR2Attachment(target.attachment_path)
-            if (target.resolution_attachment_path) void removeR2Attachment(target.resolution_attachment_path)
+            for (const path of [
+                ...parseTaskAttachmentPaths(target.attachment_path),
+                ...parseTaskAttachmentPaths(target.resolution_attachment_path),
+            ]) {
+                void removeR2Attachment(path)
+            }
             return null
         }
 
@@ -529,8 +554,12 @@ export function TaskBoard({ search, viewMode = "board" }: TaskBoardProps) {
             const { error: deleteError } = await supabase.from("tasks").delete().eq("id", target.id)
             if (deleteError) return deleteError.message
             setTasks((prev) => prev.filter((t) => t.id !== target.id))
-            if (target.attachment_path) void removeR2Attachment(target.attachment_path)
-            if (target.resolution_attachment_path) void removeR2Attachment(target.resolution_attachment_path)
+            for (const path of [
+                ...parseTaskAttachmentPaths(target.attachment_path),
+                ...parseTaskAttachmentPaths(target.resolution_attachment_path),
+            ]) {
+                void removeR2Attachment(path)
+            }
             return null
         } catch (e) {
             return e instanceof Error ? e.message : "Gagal menghapus komplain"
@@ -1092,6 +1121,13 @@ export function TaskBoard({ search, viewMode = "board" }: TaskBoardProps) {
                     onClose={() => setSheetOpen(false)}
                     onSave={saveTask}
                     onDelete={removeTask}
+                    canDelete={
+                        editing
+                            ? canDeleteAll ||
+                              (!!userEmail &&
+                                  editing.created_by?.toLowerCase() === userEmail.toLowerCase())
+                            : false
+                    }
                     salesOptions={salesOptions}
                     plateOptions={plateOptions}
                     userNames={userNames}
@@ -1108,6 +1144,8 @@ interface TaskSheetProps {
     onClose: () => void
     onSave: (input: TaskInput, target: Task | null) => Promise<string | null>
     onDelete: (task: Task) => Promise<string | null>
+    /** Hanya pembuat komplain atau admin yang boleh menghapus. */
+    canDelete: boolean
     /** Daftar sales dari tabel `salesman` */
     salesOptions: { nik: string; nama: string }[]
     /** Daftar nopol dari tabel `equipment` */
@@ -1121,7 +1159,7 @@ interface TaskSheetProps {
  * state-nya selalu mulai dari data yang sedang diedit — tanpa effect
  * sinkronisasi yang rawan nilai basi.
  */
-function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOptions, plateOptions, userNames }: TaskSheetProps) {
+function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, canDelete, salesOptions, plateOptions, userNames }: TaskSheetProps) {
     const [title, setTitle] = useState(task?.title ?? "")
     const [description, setDescription] = useState(task?.description ?? "")
     const [status, setStatus] = useState<TaskStatus>(
@@ -1133,16 +1171,12 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
     const [deliveryNo, setDeliveryNo] = useState((task?.delivery_no ?? "").toUpperCase())
     const [freightOrder, setFreightOrder] = useState(task?.freight_order ?? "")
     const [customerNo, setCustomerNo] = useState(task?.customer_no ?? "")
-    const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
-    const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(null)
-    const [existingAttachmentUrl, setExistingAttachmentUrl] = useState<string | null>(null)
-    const [removeAttachment, setRemoveAttachment] = useState(false)
-    const attachmentInputRef = useRef<HTMLInputElement | null>(null)
-    const [resolutionFile, setResolutionFile] = useState<File | null>(null)
-    const [resolutionPreviewUrl, setResolutionPreviewUrl] = useState<string | null>(null)
-    const [existingResolutionUrl, setExistingResolutionUrl] = useState<string | null>(null)
-    const [removeResolution, setRemoveResolution] = useState(false)
-    const resolutionInputRef = useRef<HTMLInputElement | null>(null)
+    const [attachmentFiles, setAttachmentFiles] = useState<File[]>([])
+    const [existingAttachmentUrls, setExistingAttachmentUrls] = useState<Record<string, string>>({})
+    const [removedAttachmentPaths, setRemovedAttachmentPaths] = useState<string[]>([])
+    const [resolutionFiles, setResolutionFiles] = useState<File[]>([])
+    const [existingResolutionUrls, setExistingResolutionUrls] = useState<Record<string, string>>({})
+    const [removedResolutionPaths, setRemovedResolutionPaths] = useState<string[]>([])
     const [isSaving, setIsSaving] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -1150,119 +1184,135 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
     /** Pelanggan yang dipilih/terdeteksi — nama toko hanya ditampilkan, bukan input. */
     const [pickedCustomer, setPickedCustomer] = useState<{ id: string; name: string } | null>(null)
 
-    // Preview lokal untuk file baru; URL dibersihkan saat file diganti/ditutup.
-    useEffect(() => {
-        if (!attachmentFile) {
-            setAttachmentPreviewUrl(null)
-            return
-        }
-        const url = URL.createObjectURL(attachmentFile)
-        setAttachmentPreviewUrl(url)
-        return () => URL.revokeObjectURL(url)
-    }, [attachmentFile])
+    const storedAttachmentPaths = useMemo(
+        () => parseTaskAttachmentPaths(task?.attachment_path),
+        [task?.attachment_path],
+    )
+    const storedResolutionPaths = useMemo(
+        () => parseTaskAttachmentPaths(task?.resolution_attachment_path),
+        [task?.resolution_attachment_path],
+    )
+    const keptAttachmentPaths = useMemo(
+        () => storedAttachmentPaths.filter((path) => !removedAttachmentPaths.includes(path)),
+        [storedAttachmentPaths, removedAttachmentPaths],
+    )
+    const keptResolutionPaths = useMemo(
+        () => storedResolutionPaths.filter((path) => !removedResolutionPaths.includes(path)),
+        [storedResolutionPaths, removedResolutionPaths],
+    )
+    const resolutionDocumentCount = keptResolutionPaths.length + resolutionFiles.length
 
-    // Lampiran lama ada di bucket privat, jadi tampilkan lewat signed URL.
+    // Lampiran lama ada di bucket privat, jadi semua path diminta signed URL.
     useEffect(() => {
-        const path = task?.attachment_path
-        if (!path) {
-            setExistingAttachmentUrl(null)
-            return
-        }
-        let cancelled = false
-        void attachmentApi<{ url?: string }>({ action: "view", path })
-            .then(({ url }) => {
-                if (!cancelled) setExistingAttachmentUrl(url ?? null)
-            })
-            .catch(() => {
-                if (!cancelled) setExistingAttachmentUrl(null)
-            })
-        return () => {
-            cancelled = true
-        }
-    }, [task?.attachment_path])
-
-    // Preview dan signed URL untuk dokumentasi penyelesaian.
-    useEffect(() => {
-        if (!resolutionFile) {
-            setResolutionPreviewUrl(null)
-            return
-        }
-        const url = URL.createObjectURL(resolutionFile)
-        setResolutionPreviewUrl(url)
-        return () => URL.revokeObjectURL(url)
-    }, [resolutionFile])
-
-    useEffect(() => {
-        const path = task?.resolution_attachment_path
-        if (!path) {
-            setExistingResolutionUrl(null)
+        if (storedAttachmentPaths.length === 0) {
+            setExistingAttachmentUrls({})
             return
         }
         let cancelled = false
-        void attachmentApi<{ url?: string }>({ action: "view", path })
-            .then(({ url }) => {
-                if (!cancelled) setExistingResolutionUrl(url ?? null)
-            })
-            .catch(() => {
-                if (!cancelled) setExistingResolutionUrl(null)
-            })
+        void Promise.all(
+            storedAttachmentPaths.map(async (path) => {
+                try {
+                    const { url } = await attachmentApi<{ url?: string }>({ action: "view", path })
+                    return url ? ([path, url] as const) : null
+                } catch {
+                    return null
+                }
+            }),
+        ).then((entries) => {
+            if (cancelled) return
+            const next: Record<string, string> = {}
+            for (const entry of entries) {
+                if (entry) next[entry[0]] = entry[1]
+            }
+            setExistingAttachmentUrls(next)
+        })
         return () => {
             cancelled = true
         }
-    }, [task?.resolution_attachment_path])
+    }, [storedAttachmentPaths])
 
-    const clearAttachment = () => {
-        setAttachmentFile(null)
-        setRemoveAttachment(true)
-        if (attachmentInputRef.current) attachmentInputRef.current.value = ""
+    useEffect(() => {
+        if (storedResolutionPaths.length === 0) {
+            setExistingResolutionUrls({})
+            return
+        }
+        let cancelled = false
+        void Promise.all(
+            storedResolutionPaths.map(async (path) => {
+                try {
+                    const { url } = await attachmentApi<{ url?: string }>({ action: "view", path })
+                    return url ? ([path, url] as const) : null
+                } catch {
+                    return null
+                }
+            }),
+        ).then((entries) => {
+            if (cancelled) return
+            const next: Record<string, string> = {}
+            for (const entry of entries) {
+                if (entry) next[entry[0]] = entry[1]
+            }
+            setExistingResolutionUrls(next)
+        })
+        return () => {
+            cancelled = true
+        }
+    }, [storedResolutionPaths])
+
+    const removeAttachmentFile = (index: number) => {
+        setAttachmentFiles((prev) => prev.filter((_, i) => i !== index))
+    }
+
+    const removeExistingAttachment = (path: string) => {
+        setRemovedAttachmentPaths((prev) => (prev.includes(path) ? prev : [...prev, path]))
+    }
+
+    const removeResolutionFile = (index: number) => {
+        setResolutionFiles((prev) => prev.filter((_, i) => i !== index))
+    }
+
+    const removeExistingResolution = (path: string) => {
+        setRemovedResolutionPaths((prev) => (prev.includes(path) ? prev : [...prev, path]))
     }
 
     const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0] ?? null
-        if (!file) {
-            setAttachmentFile(null)
-            return
-        }
-        if (!attachmentMime(file)) {
-            setError("Lampiran harus berupa gambar PNG atau JPEG.")
-            e.target.value = ""
-            return
-        }
-        if (file.size > TASK_ATTACHMENT_MAX_BYTES) {
-            setError("Ukuran lampiran maksimal 5 MB.")
-            e.target.value = ""
-            return
+        const files = Array.from(e.target.files ?? [])
+        if (files.length === 0) return
+        for (const file of files) {
+            if (!attachmentMime(file)) {
+                setError(`${file.name} bukan gambar PNG atau JPEG.`)
+                e.target.value = ""
+                return
+            }
+            if (file.size > TASK_ATTACHMENT_MAX_BYTES) {
+                setError(`Ukuran ${file.name} melebihi 5 MB.`)
+                e.target.value = ""
+                return
+            }
         }
         setError(null)
-        setRemoveAttachment(false)
-        setAttachmentFile(file)
-    }
-
-    const clearResolutionAttachment = () => {
-        setResolutionFile(null)
-        setRemoveResolution(true)
-        if (resolutionInputRef.current) resolutionInputRef.current.value = ""
+        setAttachmentFiles((prev) => [...prev, ...files])
+        e.target.value = ""
     }
 
     const handleResolutionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0] ?? null
-        if (!file) {
-            setResolutionFile(null)
-            return
-        }
-        if (!attachmentMime(file)) {
-            setError("Dokumentasi penyelesaian harus berupa gambar PNG atau JPEG.")
-            e.target.value = ""
-            return
-        }
-        if (file.size > TASK_ATTACHMENT_MAX_BYTES) {
-            setError("Ukuran dokumentasi penyelesaian maksimal 5 MB.")
-            e.target.value = ""
-            return
+        const files = Array.from(e.target.files ?? [])
+        if (files.length === 0) return
+        for (const file of files) {
+            if (!attachmentMime(file)) {
+                setError(`${file.name} bukan gambar PNG atau JPEG.`)
+                e.target.value = ""
+                return
+            }
+            if (file.size > TASK_ATTACHMENT_MAX_BYTES) {
+                setError(`Ukuran ${file.name} melebihi 5 MB.`)
+                e.target.value = ""
+                return
+            }
         }
         setError(null)
-        setRemoveResolution(false)
-        setResolutionFile(file)
+        setResolutionFiles((prev) => [...prev, ...files])
+        e.target.value = ""
     }
     const [customerSuggestions, setCustomerSuggestions] = useState<Suggestion[]>([])
     const [customerSearching, setCustomerSearching] = useState(false)
@@ -1384,14 +1434,12 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
             setError("ID pelanggan harus berupa angka — pilih dari daftar yang muncul.")
             return
         }
-        let nextAttachmentPath = task?.attachment_path ?? null
-        if (removeAttachment && !attachmentFile) nextAttachmentPath = null
-        let nextResolutionPath = task?.resolution_attachment_path ?? null
-        if (removeResolution && !resolutionFile) nextResolutionPath = null
+        const nextAttachmentPaths = [...keptAttachmentPaths]
+        const nextResolutionPaths = [...keptResolutionPaths]
 
         // Dokumentasi penyelesaian adalah syarat status Selesai. Lampiran lama
         // yang masih tersimpan tetap dihitung; kalau dihapus, wajib ganti baru.
-        if (status === "done" && !resolutionFile && !nextResolutionPath) {
+        if (status === "done" && nextResolutionPaths.length === 0 && resolutionFiles.length === 0) {
             setError(TASK_RESOLUTION_REQUIRED_MESSAGE)
             return
         }
@@ -1400,28 +1448,31 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
         setError(null)
         const uploadedPaths: string[] = []
 
-        if (attachmentFile) {
-            const result = await uploadTaskAttachment(attachmentFile)
+        for (const file of attachmentFiles) {
+            const result = await uploadTaskAttachment(file)
             if ("error" in result) {
-                setError(result.error)
-                setIsSaving(false)
-                return
-            }
-            uploadedPaths.push(result.path)
-            nextAttachmentPath = result.path
-        }
-
-        if (resolutionFile) {
-            const result = await uploadTaskAttachment(resolutionFile)
-            if ("error" in result) {
-                // Jangan tinggalkan lampiran komplain yang sudah terlanjur upload.
                 for (const path of uploadedPaths) void removeR2Attachment(path)
                 setError(result.error)
                 setIsSaving(false)
                 return
             }
             uploadedPaths.push(result.path)
-            nextResolutionPath = result.path
+            // Path upload baru di depan agar trigger lama yang hanya memeriksa
+            // awalan kolom tetap menerima penambahan foto pada task bersama.
+            nextAttachmentPaths.unshift(result.path)
+        }
+
+        for (const file of resolutionFiles) {
+            const result = await uploadTaskAttachment(file)
+            if ("error" in result) {
+                // Jangan tinggalkan lampiran yang sudah terlanjur upload.
+                for (const path of uploadedPaths) void removeR2Attachment(path)
+                setError(result.error)
+                setIsSaving(false)
+                return
+            }
+            uploadedPaths.push(result.path)
+            nextResolutionPaths.unshift(result.path)
         }
 
         const saveError = await onSave(
@@ -1435,8 +1486,8 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                 delivery_no: deliveryNo.trim().toUpperCase() || null,
                 freight_order: freightOrder.trim() || null,
                 customer_no: cleanCustomer || null,
-                attachment_path: nextAttachmentPath,
-                resolution_attachment_path: nextResolutionPath,
+                attachment_path: serializeTaskAttachmentPaths(nextAttachmentPaths),
+                resolution_attachment_path: serializeTaskAttachmentPaths(nextResolutionPaths),
             },
             task,
         )
@@ -1449,16 +1500,15 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
         }
 
         // Hapus objek lama yang diganti/dilepas setelah baris tersimpan.
-        for (const oldPath of [task?.attachment_path, task?.resolution_attachment_path]) {
-            if (oldPath && oldPath !== nextAttachmentPath && oldPath !== nextResolutionPath) {
-                void removeR2Attachment(oldPath)
-            }
+        const keptPaths = new Set([...nextAttachmentPaths, ...nextResolutionPaths])
+        for (const oldPath of [...storedAttachmentPaths, ...storedResolutionPaths]) {
+            if (!keptPaths.has(oldPath)) void removeR2Attachment(oldPath)
         }
         onClose()
     }
 
     const handleDelete = async () => {
-        if (!task) return
+        if (!task || !canDelete) return
         if (!confirmDelete) {
             setConfirmDelete(true)
             return
@@ -1534,78 +1584,98 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                         Foto bukti komplain
                                     </Label>
                                     <Input
-                                        ref={attachmentInputRef}
                                         id="task-attachment"
                                         type="file"
                                         accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                                        multiple
                                         onChange={handleAttachmentChange}
                                         className="cursor-pointer rounded-sm file:mr-3 file:rounded-sm file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
                                     />
                                     <p className="text-[11px] leading-relaxed text-muted-foreground">
-                                        PNG atau JPEG, maksimal 5 MB.
+                                        Bisa pilih lebih dari satu foto. PNG atau JPEG, maksimal 5 MB
+                                        per file.
                                     </p>
                                 </div>
 
-                                {attachmentPreviewUrl && attachmentFile && (
-                                    <div className="overflow-hidden rounded-sm border bg-muted/30">
-                                        {/* Preview lokal sebelum file diunggah saat Simpan. */}
-                                        <img
-                                            src={attachmentPreviewUrl}
-                                            alt="Pratinjau lampiran"
-                                            className="max-h-44 w-full object-contain"
-                                        />
-                                        <div className="flex items-center justify-between gap-2 border-t px-2.5 py-1.5">
-                                            <span className="min-w-0 truncate text-xs text-muted-foreground">
-                                                {attachmentFile.name}
-                                            </span>
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                                onClick={clearAttachment}
-                                            >
-                                                <X className="h-3 w-3" /> Hapus
-                                            </Button>
-                                        </div>
+                                {keptAttachmentPaths.length > 0 && (
+                                    <div className="space-y-1.5">
+                                        <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                            {formatNumber(keptAttachmentPaths.length)} foto tersimpan
+                                        </p>
+                                        <ul className="divide-y divide-border/60 overflow-hidden rounded-sm border border-border/70">
+                                            {keptAttachmentPaths.map((path, index) => (
+                                                <li
+                                                    key={path}
+                                                    className="flex items-center justify-between gap-2 bg-muted/20 px-2.5 py-2"
+                                                >
+                                                    {existingAttachmentUrls[path] ? (
+                                                        <a
+                                                            href={existingAttachmentUrls[path]}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground hover:underline"
+                                                        >
+                                                            <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                                                            <span className="truncate">Lihat foto {index + 1}</span>
+                                                        </a>
+                                                    ) : (
+                                                        <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                                                            <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                                                            <span className="truncate">Foto tersimpan {index + 1}</span>
+                                                        </span>
+                                                    )}
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                        onClick={() => removeExistingAttachment(path)}
+                                                    >
+                                                        <X className="h-3 w-3" /> Hapus
+                                                    </Button>
+                                                </li>
+                                            ))}
+                                        </ul>
                                     </div>
                                 )}
 
-                                {!attachmentFile && task?.attachment_path && !removeAttachment && (
-                                    <div className="flex items-center justify-between gap-2 rounded-sm border bg-muted/30 px-2.5 py-2">
-                                        {existingAttachmentUrl ? (
-                                            <a
-                                                href={existingAttachmentUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground hover:underline"
+                                {attachmentFiles.length > 0 && (
+                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                        {attachmentFiles.map((file, index) => (
+                                            <div
+                                                key={`${file.name}-${file.lastModified}-${index}`}
+                                                className="overflow-hidden rounded-sm border bg-muted/30"
                                             >
-                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-                                                <span className="truncate">Lihat lampiran</span>
-                                            </a>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" /> Lampiran tersimpan
-                                            </span>
-                                        )}
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                            onClick={clearAttachment}
-                                        >
-                                            <X className="h-3 w-3" /> Hapus
-                                        </Button>
+                                                <LocalAttachmentPreview
+                                                    file={file}
+                                                    alt={`Pratinjau lampiran ${index + 1}`}
+                                                />
+                                                <div className="flex items-center gap-1 border-t px-2 py-1.5">
+                                                    <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground">
+                                                        {file.name}
+                                                    </span>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon-sm"
+                                                        aria-label={`Hapus ${file.name}`}
+                                                        className="h-6 w-6 rounded-sm text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                        onClick={() => removeAttachmentFile(index)}
+                                                    >
+                                                        <X className="h-3 w-3" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
 
-                                {removeAttachment && task?.attachment_path && !attachmentFile && (
-                                    <p className="text-xs text-muted-foreground">
-                                        Lampiran akan dihapus saat Simpan.
+                                {removedAttachmentPaths.length > 0 && (
+                                    <p className="text-[11px] text-muted-foreground">
+                                        {formatNumber(removedAttachmentPaths.length)} foto lama akan
+                                        dihapus saat Simpan.
                                     </p>
                                 )}
-
                             </section>
 
                             <section aria-label="Identitas pengiriman" className="space-y-4 border-t border-border/60 pt-5">
@@ -1738,7 +1808,7 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                     )
                                 })}
                             </div>
-                            {status === "done" && !resolutionFile && (!task?.resolution_attachment_path || removeResolution) && (
+                            {status === "done" && resolutionDocumentCount === 0 && (
                                 <p className="text-xs text-destructive">
                                     Dokumentasi penyelesaian wajib diunggah di bagian bawah form.
                                 </p>
@@ -1815,10 +1885,10 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                         )}
                                     </Label>
                                     <Input
-                                        ref={resolutionInputRef}
                                         id="task-resolution-attachment"
                                         type="file"
                                         accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                                        multiple
                                         aria-required={status === "done"}
                                         onChange={handleResolutionChange}
                                         className="cursor-pointer rounded-sm file:mr-3 file:rounded-sm file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
@@ -1827,66 +1897,87 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                                         {status === "done"
                                             ? "Wajib diunggah saat status Selesai."
                                             : "Opsional, jadi wajib begitu status diubah ke Selesai."}{" "}
-                                        PNG atau JPEG, maksimal 5 MB.
+                                        Bisa pilih lebih dari satu foto, maksimal 5 MB per file.
                                     </p>
                                 </div>
 
-                                {resolutionPreviewUrl && resolutionFile && (
-                                    <div className="overflow-hidden rounded-sm border bg-muted/30">
-                                        <img
-                                            src={resolutionPreviewUrl}
-                                            alt="Pratinjau dokumentasi penyelesaian"
-                                            className="max-h-44 w-full object-contain"
-                                        />
-                                        <div className="flex items-center justify-between gap-2 border-t px-2.5 py-1.5">
-                                            <span className="min-w-0 truncate text-xs text-muted-foreground">
-                                                {resolutionFile.name}
-                                            </span>
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                                onClick={clearResolutionAttachment}
-                                            >
-                                                <X className="h-3 w-3" /> Hapus
-                                            </Button>
-                                        </div>
+                                {keptResolutionPaths.length > 0 && (
+                                    <div className="space-y-1.5">
+                                        <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                            {formatNumber(keptResolutionPaths.length)} dokumentasi tersimpan
+                                        </p>
+                                        <ul className="divide-y divide-border/60 overflow-hidden rounded-sm border border-border/70">
+                                            {keptResolutionPaths.map((path, index) => (
+                                                <li
+                                                    key={path}
+                                                    className="flex items-center justify-between gap-2 bg-muted/20 px-2.5 py-2"
+                                                >
+                                                    {existingResolutionUrls[path] ? (
+                                                        <a
+                                                            href={existingResolutionUrls[path]}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground hover:underline"
+                                                        >
+                                                            <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                                                            <span className="truncate">Lihat dokumentasi {index + 1}</span>
+                                                        </a>
+                                                    ) : (
+                                                        <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                                                            <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                                                            <span className="truncate">Dokumentasi tersimpan {index + 1}</span>
+                                                        </span>
+                                                    )}
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                        onClick={() => removeExistingResolution(path)}
+                                                    >
+                                                        <X className="h-3 w-3" /> Hapus
+                                                    </Button>
+                                                </li>
+                                            ))}
+                                        </ul>
                                     </div>
                                 )}
 
-                                {!resolutionFile && task?.resolution_attachment_path && !removeResolution && (
-                                    <div className="flex items-center justify-between gap-2 rounded-sm border bg-muted/30 px-2.5 py-2">
-                                        {existingResolutionUrl ? (
-                                            <a
-                                                href={existingResolutionUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground hover:underline"
+                                {resolutionFiles.length > 0 && (
+                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                        {resolutionFiles.map((file, index) => (
+                                            <div
+                                                key={`${file.name}-${file.lastModified}-${index}`}
+                                                className="overflow-hidden rounded-sm border bg-muted/30"
                                             >
-                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" />
-                                                <span className="truncate">Lihat dokumentasi penyelesaian</span>
-                                            </a>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                <ImageIcon className="h-3.5 w-3.5 shrink-0" /> Dokumentasi tersimpan
-                                            </span>
-                                        )}
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 shrink-0 gap-1 rounded-sm px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                            onClick={clearResolutionAttachment}
-                                        >
-                                            <X className="h-3 w-3" /> Hapus
-                                        </Button>
+                                                <LocalAttachmentPreview
+                                                    file={file}
+                                                    alt={`Pratinjau dokumentasi ${index + 1}`}
+                                                />
+                                                <div className="flex items-center gap-1 border-t px-2 py-1.5">
+                                                    <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground">
+                                                        {file.name}
+                                                    </span>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon-sm"
+                                                        aria-label={`Hapus ${file.name}`}
+                                                        className="h-6 w-6 rounded-sm text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                        onClick={() => removeResolutionFile(index)}
+                                                    >
+                                                        <X className="h-3 w-3" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
 
-                                {removeResolution && task?.resolution_attachment_path && !resolutionFile && (
-                                    <p className="text-xs text-muted-foreground">
-                                        Dokumentasi penyelesaian akan dihapus saat Simpan.
+                                {removedResolutionPaths.length > 0 && (
+                                    <p className="text-[11px] text-muted-foreground">
+                                        {formatNumber(removedResolutionPaths.length)} dokumentasi lama
+                                        akan dihapus saat Simpan.
                                     </p>
                                 )}
                             </section>
@@ -1900,7 +1991,7 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, salesOption
                     )}
 
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-muted/10 px-5 py-3">
-                        {task ? (
+                        {task && canDelete ? (
                             <Button
                                 type="button"
                                 variant="ghost"

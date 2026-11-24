@@ -92,9 +92,11 @@ async function isTaskAttachment(
   client: SupabaseClient,
   path: string,
 ): Promise<boolean> {
+  // Kolom bisa berisi beberapa path yang dipisah baris baru. Pattern ini
+  // mencocokkan path lama (satu nilai) maupun path di dalam daftar.
   const [original, resolution] = await Promise.all([
-    client.from("tasks").select("id").eq("attachment_path", path).limit(1),
-    client.from("tasks").select("id").eq("resolution_attachment_path", path).limit(1),
+    client.from("tasks").select("id").ilike("attachment_path", `%${path}%`).limit(1),
+    client.from("tasks").select("id").ilike("resolution_attachment_path", `%${path}%`).limit(1),
   ])
   return (
     (!original.error && (original.data?.length ?? 0) > 0) ||

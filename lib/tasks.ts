@@ -31,9 +31,12 @@ export interface Task {
     delivery_no: string | null
     freight_order: string | null
     customer_no: string | null
-    /** Object key foto bukti komplain di Cloudflare R2; null bila tidak ada. */
+    /**
+     * Daftar object key foto bukti komplain di Cloudflare R2, satu path per
+     * baris. Baris lama yang masih berisi satu path tetap terbaca.
+     */
     attachment_path: string | null
-    /** Object key dokumentasi penyelesaian; wajib saat status `done`. */
+    /** Daftar object key dokumentasi penyelesaian; wajib saat status `done`. */
     resolution_attachment_path: string | null
     /** Atribusi otomatis dari sesi Supabase */
     created_by: string | null
@@ -61,8 +64,30 @@ export interface TaskInput {
     resolution_attachment_path: string | null
 }
 
-/** Batas lampiran komplain (PNG/JPEG), sama dengan validasi form dan API. */
+/** Batas per file lampiran komplain (PNG/JPEG), sama dengan validasi form dan API. */
 export const TASK_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024
+
+/**
+ * Satu kolom teks menyimpan beberapa object key, dipisah baris baru. Format
+ * ini kompatibel dengan baris lama yang masih berisi satu path; trigger SQL
+ * memecah daftar untuk memvalidasi path yang benar-benar baru.
+ */
+export function parseTaskAttachmentPaths(value: string | null | undefined): string[] {
+    if (!value) return []
+    return Array.from(
+        new Set(
+            value
+                .split(/\r?\n/)
+                .map((path) => path.trim())
+                .filter(Boolean),
+        ),
+    )
+}
+
+export function serializeTaskAttachmentPaths(paths: readonly string[]): string | null {
+    const unique = Array.from(new Set(paths.map((path) => path.trim()).filter(Boolean)))
+    return unique.length > 0 ? unique.join("\n") : null
+}
 
 /** Pesan validasi saat komplain ditandai selesai tanpa dokumentasi penyelesaian. */
 export const TASK_RESOLUTION_REQUIRED_MESSAGE =

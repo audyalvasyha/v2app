@@ -1158,6 +1158,7 @@ function DashboardContent() {
           <TaskBoard
             search={filters.search ?? ''}
             viewMode={activeView === 'review' ? 'review' : 'board'}
+            canDeleteAll={userRole === 'admin'}
           />
         )}
 
