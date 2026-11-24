@@ -40,13 +40,13 @@ export const ALL_VIEWS: readonly View[] = [
 ]
 
 /**
- * Menu untuk role "terbatas": operasional harian + follow-up komplain + Analisa.
- * Sengaja tanpa data bengkel/biaya (Equipment, Histories, Monitoring, Ban).
- * Dashboard juga tidak termasuk; halaman awal jatuh ke Complaint Board.
+ * Menu untuk role "terbatas": operasional harian + follow-up komplain.
+ * Sengaja tanpa Analisa (khusus admin), data bengkel/biaya (Equipment,
+ * Histories, Monitoring, Ban), dan Dashboard. Halaman awal jatuh ke
+ * Complaint Board.
  */
 const LIMITED_VIEWS: readonly View[] = [
     "tugas",
-    "analisa",
     "skr",
     "pengiriman",
     "weather",
