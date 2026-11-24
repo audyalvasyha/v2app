@@ -100,6 +100,27 @@ $$;
 revoke all on function public.is_app_admin() from public, anon;
 grant execute on function public.is_app_admin() to authenticated;
 
+-- Katalog nopol untuk form Complaint Board. Role terbatas tidak boleh
+-- membaca tabel equipment utuh, tetapi masih perlu mencocokkan nopol saat
+-- membuat komplain. Security definer ini HANYA mengembalikan license_plate
+-- yang tidak kosong — tidak ada status, biaya, atau data bengkel lain.
+create or replace function public.app_equipment_plates()
+returns table (license_plate text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select distinct btrim(e.license_plate) as license_plate
+    from public.equipment e
+   where e.license_plate is not null
+     and btrim(e.license_plate) <> ''
+   order by 1
+$$;
+
+revoke all on function public.app_equipment_plates() from public, anon;
+grant execute on function public.app_equipment_plates() to authenticated;
+
 create policy "authenticated_baca_equipment"
   on public.equipment for select to authenticated
   using (public.is_app_admin());

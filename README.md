@@ -39,6 +39,8 @@ terdaftar yang bisa mengakses:
   `maintenance_histories`, `service_logs`, `armada_outbound`, `skr_detail`,
   dan `customers` — equipment/maintenance/service logs kini **khusus admin
   utama**, sedangkan SKR/outbound/customers tetap bisa dibaca user terbatas.
+  Form Complaint Board tetap bisa menampilkan daftar nopol untuk user terbatas
+  lewat RPC `app_equipment_plates()` yang hanya mengembalikan kolom nopol.
   Tabel customers ini PII (nomor telepon & NIK salesman) dan dikunci
   **per-kolom**: `authenticated` hanya boleh membaca `customer_id` +
   `customer_name`, jadi tidak ada jalur baca (dashboard, chatbot Tanya Data,

@@ -296,20 +296,66 @@ export function TaskBoard({ search }: TaskBoardProps) {
     // diketik manual, jadi tidak perlu memblokir form.
     useEffect(() => {
         let cancelled = false
+
+        /** Rapikan hasil beberapa sumber menjadi satu daftar nopol unik. */
+        function uniquePlates(values: unknown[]): string[] {
+            return Array.from(
+                new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean)),
+            ).sort((a, b) => a.localeCompare(b))
+        }
+
+        async function loadPlateOptions(): Promise<string[]> {
+            // RPC ini hanya mengembalikan nopol, sehingga aman untuk role
+            // terbatas yang tabel equipment-nya sengaja dikunci RLS.
+            try {
+                const { data, error } = await supabase.rpc("app_equipment_plates")
+                if (!error) {
+                    const plates = uniquePlates((data ?? []).map((row: any) => row.license_plate))
+                    if (plates.length > 0) return plates
+                }
+            } catch {
+                // RPC belum dipasang — lanjut ke fallback di bawah.
+            }
+
+            // Sebelum SQL baru dijalankan: admin masih bisa membaca equipment,
+            // sedangkan role terbatas memakai nopol SKR/outbound yang terbuka.
+            const [equipmentRes, outboundRes, skrRes] = await Promise.all([
+                supabase
+                    .from("equipment")
+                    .select("license_plate")
+                    .not("license_plate", "is", null)
+                    .order("license_plate", { ascending: true })
+                    .limit(2000),
+                supabase
+                    .from("armada_outbound")
+                    .select("no_polisi")
+                    .not("no_polisi", "is", null)
+                    .order("no_polisi", { ascending: true })
+                    .limit(2000),
+                supabase
+                    .from("skr_detail")
+                    .select("license_no")
+                    .not("license_no", "is", null)
+                    .order("license_no", { ascending: true })
+                    .limit(2000),
+            ])
+
+            return uniquePlates([
+                ...(equipmentRes.data ?? []).map((row: any) => row.license_plate),
+                ...(outboundRes.data ?? []).map((row: any) => row.no_polisi),
+                ...(skrRes.data ?? []).map((row: any) => row.license_no),
+            ])
+        }
+
         async function loadReferences() {
             try {
-                const [salesRes, plateRes] = await Promise.all([
+                const [salesRes, plates] = await Promise.all([
                     supabase
                         .from("salesman")
                         .select("nik,nama")
                         .order("nama", { ascending: true })
                         .limit(2000),
-                    supabase
-                        .from("equipment")
-                        .select("license_plate")
-                        .not("license_plate", "is", null)
-                        .order("license_plate", { ascending: true })
-                        .limit(2000),
+                    loadPlateOptions(),
                 ])
                 if (cancelled) return
 
@@ -324,16 +370,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                     )
                 }
 
-                if (!plateRes.error) {
-                    const unique = Array.from(
-                        new Set(
-                            (plateRes.data ?? [])
-                                .map((row: any) => String(row.license_plate ?? "").trim())
-                                .filter(Boolean),
-                        ),
-                    )
-                    setPlateOptions(unique)
-                }
+                setPlateOptions(plates)
             } catch {
                 // Tabel master belum tersedia — biarkan kosong, input tetap jalan.
             }
