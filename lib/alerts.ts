@@ -15,11 +15,15 @@ import { elapsedHoursSince, isOutboundLate, OUTBOUND_LATE_HOURS } from "./outbou
 
 export type AlertTone = "danger" | "warning"
 
+/** Kelompok notifikasi untuk tab panel header. */
+export type AlertCategory = "service" | "outbound"
+
 /** Menu tujuan saat notifikasi diklik. */
 export type AlertView = "monitoring" | "pengiriman"
 
 export interface AppAlert {
     id: string
+    category: AlertCategory
     tone: AlertTone
     title: string
     description: string
@@ -85,6 +89,7 @@ export function buildAlerts({
         const late = item.days != null && item.days < 0 ? `${Math.abs(item.days)} hari lewat jadwal` : "lewat jadwal servis"
         alerts.push({
             id: `service-overdue-${item.equipment.equipment_id}`,
+            category: "service",
             tone: "danger",
             title: `Servis terlewat · ${item.equipment.equipment_id}`,
             description: [plate, late].filter(Boolean).join(" · "),
@@ -96,6 +101,7 @@ export function buildAlerts({
     if (remainingOverdue > 0) {
         alerts.push({
             id: "service-overdue-rest",
+            category: "service",
             tone: "danger",
             title: `+${remainingOverdue} unit servis terlewat`,
             description: "Buka Servis Rutin untuk melihat semuanya",
@@ -108,6 +114,7 @@ export function buildAlerts({
         const soon = item.days != null ? `servis dalam ${Math.max(0, item.days)} hari` : "mendekati batas servis"
         alerts.push({
             id: `service-warning-${item.equipment.equipment_id}`,
+            category: "service",
             tone: "warning",
             title: `Servis mendekat · ${item.equipment.equipment_id}`,
             description: [plate, soon].filter(Boolean).join(" · "),
@@ -126,6 +133,7 @@ export function buildAlerts({
         const fo = trip.row.freight_order != null ? `FO ${trip.row.freight_order}` : "Tanpa nomor FO"
         alerts.push({
             id: `outbound-late-${trip.row.freight_order ?? trip.row.created_at ?? plate}`,
+            category: "outbound",
             tone: "danger",
             title: `Belum kembali · ${plate || "unit tanpa nopol"}`,
             description: `${fo} · keluar ${Math.floor(trip.hours)} jam lalu (batas ${OUTBOUND_LATE_HOURS} jam)`,
@@ -137,6 +145,7 @@ export function buildAlerts({
     if (remainingLate > 0) {
         alerts.push({
             id: "outbound-late-rest",
+            category: "outbound",
             tone: "danger",
             title: `+${remainingLate} pengiriman belum kembali`,
             description: `Sudah melewati ${OUTBOUND_LATE_HOURS} jam tanpa jam masuk`,
