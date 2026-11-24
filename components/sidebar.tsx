@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react"
 import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, BotMessageSquare, Layers, ChevronDown, Info, ListChecks, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/utils/supabase"
+import { clearSensitiveBrowserCache } from "@/lib/browser-cache"
 import type { View } from "@/components/templates/dashboard-layout"
 
 interface SidebarProps {
@@ -74,29 +75,16 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
-    try {
-      // Jangan tinggalkan data operasional/percakapan di perangkat bersama.
-      // Preferensi tema & sidebar tidak sensitif, jadi sengaja tidak dihapus.
-      for (const key of [
-        "fleet-cache-v2",
-        "fleet-tasks-v1",
-        "midaa.ai-chat.v1",
-        "analisa-brief-cache-v1",
-        "weather-cache-v1",
-      ]) {
-        localStorage.removeItem(key)
-      }
-    } catch {
-      /* localStorage tidak tersedia — abaikan */
-    }
+    // Jangan tinggalkan data operasional/percakapan di perangkat bersama.
+    clearSensitiveBrowserCache()
   }
 
-  // Panel tetap setinggi dvh supaya tidak ada celah di bawah, tetapi padding
-  // bawah sebesar selisih dvh−svh menahan footer di tempat yang sama saat
-  // address bar mobile sembunyi. Area tambahan tetap berwarna sidebar.
+  // Drawer mengikuti tinggi area konten di bawah header (parent `relative`),
+  // bukan fixed terhadap viewport. Ini yang bikin sisi atas tetap utuh saat
+  // address bar mobile muncul/hilang dan `100dvh` berubah.
   return (
     <aside
-      className={`fixed left-0 top-16 z-40 flex h-[calc(100dvh-4rem)] w-64 flex-col overflow-visible border-r border-sidebar-border bg-sidebar pb-[calc(100dvh-100svh)] text-sidebar-foreground transition-[width,transform] duration-200 ease-in-out lg:z-10 lg:translate-x-0 ${
+      className={`absolute inset-y-0 left-0 z-40 flex w-64 flex-col overflow-visible border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 ease-in-out lg:z-10 lg:translate-x-0 ${
         collapsed ? 'lg:w-16' : 'lg:w-64'
       } ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}
     >

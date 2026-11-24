@@ -560,17 +560,14 @@ function OutboundTableImpl({
                             <PaginationContent>
                                 <PaginationItem>
                                     <PaginationPrevious
-                                        href="#"
-                                        onClick={(e) => {
-                                            e.preventDefault()
-                                            if (currentPage > 1) setPage((p) => p - 1)
-                                        }}
-                                        className={currentPage <= 1 ? "pointer-events-none opacity-50" : ""}
+                                        disabled={currentPage <= 1}
+                                        onClick={() => setPage((p) => Math.max(1, p - 1))}
                                     />
                                 </PaginationItem>
                                 <PaginationItem className="flex items-center gap-2 px-2">
                                     <input
                                         type="number"
+                                        aria-label="Nomor halaman"
                                         min={1}
                                         max={totalPages}
                                         value={currentPage}
@@ -584,12 +581,8 @@ function OutboundTableImpl({
                                 </PaginationItem>
                                 <PaginationItem>
                                     <PaginationNext
-                                        href="#"
-                                        onClick={(e) => {
-                                            e.preventDefault()
-                                            if (currentPage < totalPages) setPage((p) => p + 1)
-                                        }}
-                                        className={currentPage >= totalPages ? "pointer-events-none opacity-50" : ""}
+                                        disabled={currentPage >= totalPages}
+                                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                                     />
                                 </PaginationItem>
                             </PaginationContent>

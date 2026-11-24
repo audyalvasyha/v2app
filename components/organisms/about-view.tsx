@@ -1,4 +1,5 @@
 import React from "react";
+import Image from "next/image";
 import { ArrowUpRight, Mail, Instagram } from "lucide-react";
 
 // Data teknis ditulis sebagai baris spesifikasi (bukan badge) agar terasa seperti
@@ -180,11 +181,12 @@ export function AboutView() {
 
         <div className="mt-8 grid gap-10 md:grid-cols-12">
           <div className="flex min-w-0 items-start gap-5 md:col-span-5">
-            <img
+            <Image
               src="/IMG_20260929_045219.jpg"
               alt="Audy Al Vasyah"
               width={112}
               height={112}
+              sizes="(min-width: 768px) 112px, 96px"
               className="h-24 w-24 shrink-0 rounded-lg border border-border object-cover grayscale transition duration-500 hover:grayscale-0 md:h-28 md:w-28"
             />
             <div className="min-w-0 pt-1">

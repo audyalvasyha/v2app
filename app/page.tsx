@@ -276,6 +276,8 @@ function DashboardContent() {
   /** true bila penyaringan tanggal sudah diterapkan oleh query */
   const [skrDateFiltered, setSkrDateFiltered] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Error khusus riwayat biaya; chart tetap menampilkan cache tapi diberi peringatan. */
+  const [historyError, setHistoryError] = useState<string | null>(null)
 
   const isRefreshing = useRef(false)
 
@@ -380,6 +382,7 @@ function DashboardContent() {
       setHistories([])
       setServiceLogs([])
       setError(null)
+      setHistoryError(null)
       setIsLoading(false)
       return
     }
@@ -402,12 +405,44 @@ function DashboardContent() {
       if (!hasRenderedData) setIsLoading(true)
 
       try {
+        // Tab yang lama terbuka di ponsel bisa memegang access token yang
+        // sudah kedaluwarsa. Refresh dulu sebelum query agar request tidak
+        // jatuh sebagai anon dan membuat chart terus memakai cache lama.
+        try {
+          const { data: authData } = await supabase.auth.getSession()
+          const expiresAt = authData.session?.expires_at
+          if (expiresAt && expiresAt * 1000 - Date.now() < 60_000) {
+            await supabase.auth.refreshSession()
+          }
+        } catch {
+          // Kalau refresh gagal, error query di bawah yang akan dilaporkan.
+        }
+
+        const fetchHistories = async () => {
+          const query = () =>
+            supabase
+              .from('maintenance_histories')
+              .select(HISTORY_COLS)
+              .order('tanggal', { ascending: false })
+              .limit(20000)
+          const first = await query()
+          if (!first.error) return first
+          // Retry sekali setelah refresh token: cukup untuk sesi yang baru
+          // kedaluwarsa atau koneksi seluler yang sempat putus.
+          try {
+            await supabase.auth.refreshSession()
+          } catch {
+            // Query kedua tetap dijalankan; error aslinya yang dilaporkan.
+          }
+          return query()
+        }
+
         const [eqResponse, histResponse, serviceResponse] = await Promise.all([
           supabase.from('equipment').select(equipmentCols()).order('created_at', { ascending: false }),
           // Batas atas menjaga payload tetap wajar. Histories tetap bisa
           // difilter di UI; query tanpa limit adalah jalur OOM/lambat saat
           // data bertambah.
-          supabase.from('maintenance_histories').select(HISTORY_COLS).order('tanggal', { ascending: false }).limit(20000),
+          fetchHistories(),
           supabase.from('service_logs').select(SERVICE_LOG_COLS).order('service_date', { ascending: false }),
         ])
 
@@ -435,7 +470,12 @@ function DashboardContent() {
           setEquipments(eqResponse.data || [])
         }
 
-        if (!histResponse.error) setHistories(histResponse.data || [])
+        if (histResponse.error) {
+          setHistoryError(histResponse.error.message)
+        } else {
+          setHistoryError(null)
+          setHistories(histResponse.data || [])
+        }
         if (!serviceResponse.error) setServiceLogs(serviceResponse.data || [])
 
         if (!eqResponse.error && !histResponse.error && !serviceResponse.error) {
@@ -443,7 +483,9 @@ function DashboardContent() {
         }
       } catch (fetchError) {
         // Misal env Supabase belum terisi atau jaringan gagal — tampilkan pesan, jangan crash
-        setError(fetchError instanceof Error ? fetchError.message : 'Gagal memuat data')
+        const message = fetchError instanceof Error ? fetchError.message : 'Gagal memuat data'
+        setError(message)
+        setHistoryError(message)
       } finally {
         hasRenderedData = true
         setIsLoading(false)
@@ -466,15 +508,21 @@ function DashboardContent() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') refreshIfVisible()
     }
+    const handleManualRefresh = () => {
+      lastRefreshStartedAt = Date.now()
+      void fetchData()
+    }
 
     lastRefreshStartedAt = Date.now()
     fetchData()
     window.addEventListener('focus', refreshIfVisible)
     window.addEventListener('online', refreshIfVisible)
+    window.addEventListener('fleet:refresh-data', handleManualRefresh)
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       window.removeEventListener('focus', refreshIfVisible)
       window.removeEventListener('online', refreshIfVisible)
+      window.removeEventListener('fleet:refresh-data', handleManualRefresh)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [roleLoaded, userRole])
@@ -1095,6 +1143,7 @@ function DashboardContent() {
               skrDetails={skrDetails}
               skrError={skrError}
               outboundError={outboundError}
+              historyError={historyError}
               isLoading={isLoading}
               onNavigate={handleViewChange}
             />

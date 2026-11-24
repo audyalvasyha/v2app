@@ -112,7 +112,7 @@ export function SkrMonthChart({
         <div className="flex h-full flex-col">
             <ChartContainer
                 config={chartConfig}
-                className="aspect-auto h-[300px] w-full overflow-visible px-1 sm:px-2"
+                className="aspect-auto h-[300px] w-full overflow-visible px-0 sm:px-2"
             >
                 <ComposedChart
                     data={data}

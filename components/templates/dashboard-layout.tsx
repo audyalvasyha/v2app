@@ -118,18 +118,19 @@ function DashboardLayoutImpl({
         onOpenSidebar={() => setMobileOpen((open) => !open)}
       />
 
-      {mobileOpen && (
-        <button
-          type="button"
-          aria-label="Tutup menu"
-          onClick={() => setMobileOpen(false)}
-          className="fixed inset-x-0 bottom-0 top-16 z-30 bg-black/40 backdrop-blur-[1px] lg:hidden"
-        />
-      )}
+      {/* Area konten ini yang jadi acuan drawer, bukan viewport. Dengan begitu
+          saat address bar mobile berubah tinggi, drawer tetap menempel tepat
+          di bawah header — bukan bergeser/terpotong karena `top` versi fixed. */}
+      <div className="relative flex min-h-0 flex-1">
+        {mobileOpen && (
+          <button
+            type="button"
+            aria-label="Tutup menu"
+            onClick={() => setMobileOpen(false)}
+            className="absolute inset-0 z-30 bg-black/40 backdrop-blur-[1px] lg:hidden"
+          />
+        )}
 
-      {/* Sidebar fixed (selalu terlihat di bawah header); konten utama punya
-          scroll container sendiri supaya body tetap diam. */}
-      <div className="flex min-h-0 flex-1">
         <Sidebar
           activeView={activeView}
           onViewChange={handleViewChange}

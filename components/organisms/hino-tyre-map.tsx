@@ -790,11 +790,12 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
             ))}
           </svg>
 
-          <img
+          <Image
             src={HINO_IMAGE.src}
             alt="Peta posisi ban rangka Hino dilihat dari atas"
             width={HINO_IMAGE.width}
             height={HINO_IMAGE.height}
+            sizes="(min-width: 768px) 52vw, 100vw"
             draggable={false}
             className="absolute select-none rounded-xl border border-border/60 shadow-sm z-0"
             style={{
@@ -847,11 +848,12 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
         {/* Peta mobile: gambar + titik roda, panel bergrid di bawahnya */}
         <div className="md:hidden space-y-3">
           <div className="relative w-full">
-            <img
+            <Image
               src={HINO_IMAGE.src}
               alt="Peta posisi ban rangka Hino dilihat dari atas"
               width={HINO_IMAGE.width}
               height={HINO_IMAGE.height}
+              sizes="100vw"
               draggable={false}
               className="block w-full select-none rounded-xl border border-border/60 shadow-sm"
             />

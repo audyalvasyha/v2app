@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
     CheckCircle2,
+    ChevronLeft,
     ChevronRight,
     Circle,
     Clock,
@@ -73,6 +74,37 @@ const STATUS_ICON: Record<TaskStatus, React.ComponentType<{ className?: string }
     // kolomnya sudah tidak ditampilkan lagi.
     blocked: Clock,
     done: CheckCircle2,
+}
+
+/** Semua kategori dibatasi per halaman supaya board tidak memanjang terus. */
+const PAGE_SIZE = 5
+
+const INITIAL_PAGES: Record<TaskStatus, number> = {
+    todo: 1,
+    progress: 1,
+    blocked: 1,
+    done: 1,
+}
+
+interface TaskPage {
+    cards: Task[]
+    page: number
+    pageCount: number
+    startIndex: number
+    endIndex: number
+}
+
+function paginateTasks(tasks: Task[], requestedPage: number): TaskPage {
+    const pageCount = Math.max(1, Math.ceil(tasks.length / PAGE_SIZE))
+    const page = Math.min(Math.max(1, requestedPage), pageCount)
+    const startIndex = (page - 1) * PAGE_SIZE
+    return {
+        cards: tasks.slice(startIndex, startIndex + PAGE_SIZE),
+        page,
+        pageCount,
+        startIndex,
+        endIndex: Math.min(startIndex + PAGE_SIZE, tasks.length),
+    }
 }
 
 /** Request ke route server R2 dengan access token Supabase user aktif. */
@@ -182,6 +214,8 @@ export function TaskBoard({ search }: TaskBoardProps) {
     const [priorityFilter, setPriorityFilter] = useState<"all" | TaskPriority>("all")
     /** Tab status yang sedang dibuka di mobile; desktop tetap menampilkan semua kolom. */
     const [mobileStatus, setMobileStatus] = useState<TaskStatus>("todo")
+    /** Halaman aktif per kategori (1-based). */
+    const [pages, setPages] = useState<Record<TaskStatus, number>>(INITIAL_PAGES)
     /** Komplain yang sedang dibuka di dialog; null = dialog komplain baru */
     const [editing, setEditing] = useState<Task | null>(null)
     /** Status awal saat dialog dibuka dari aksi "pindah ke Selesai". */
@@ -440,6 +474,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
         const patch = attributionPatch(task, status, userEmail)
         const next = previous.map((t) => (t.id === task.id ? ({ ...t, status, ...patch } as Task) : t))
         setTasks(next)
+        setPages((prev) => ({ ...prev, [status]: 1 }))
         setError(null)
 
         if (mode === "local") {
@@ -522,14 +557,50 @@ export function TaskBoard({ search }: TaskBoardProps) {
     const byStatus = useMemo(() => {
         const map: Record<TaskStatus, Task[]> = { todo: [], progress: [], blocked: [], done: [] }
         for (const task of visible) {
-            // `blocked` lama masuk ke kolom Di Proses; data lama tidak
+            // `blocked` lama masuk ke kolom Diproses; data lama tidak
             // dihapus dan akan tersimpan sebagai progress saat diedit ulang.
             const column = map[normalizeTaskStatus(task.status)]
             if (column) column.push(task)
         }
         for (const status of TASK_STATUSES) map[status.id].sort(sortTasks)
+        // Arsip selesai dibaca dari yang paling baru diselesaikan. Urutan
+        // lama (prioritas lalu paling lama) membuat halaman pertama justru
+        // berisi komplain selesai paling usang.
+        map.done.sort((a, b) => {
+            const at = a.resolved_at ?? a.created_at ?? ""
+            const bt = b.resolved_at ?? b.created_at ?? ""
+            return bt.localeCompare(at)
+        })
         return map
     }, [visible])
+
+    const pagedByStatus = useMemo(() => {
+        const result = {} as Record<TaskStatus, TaskPage>
+        for (const status of TASK_STATUSES) {
+            result[status.id] = paginateTasks(byStatus[status.id], pages[status.id])
+        }
+        return result
+    }, [byStatus, pages])
+
+    // Filter baru selalu mulai dari halaman 1; saat data menyusut, halaman
+    // aktif dijepit agar tidak menunjuk halaman kosong.
+    useEffect(() => {
+        setPages(INITIAL_PAGES)
+    }, [searchLower, priorityFilter])
+    useEffect(() => {
+        setPages((prev) => {
+            let changed = false
+            const next = { ...prev }
+            for (const status of TASK_STATUSES) {
+                const pageCount = Math.max(1, Math.ceil(byStatus[status.id].length / PAGE_SIZE))
+                if (next[status.id] > pageCount) {
+                    next[status.id] = pageCount
+                    changed = true
+                }
+            }
+            return changed ? next : prev
+        })
+    }, [byStatus])
 
     if (isLoading) {
         return <BoardPageSkeleton />
@@ -584,7 +655,11 @@ export function TaskBoard({ search }: TaskBoardProps) {
                         value={priorityFilter}
                         onChange={setPriorityFilter}
                     />
-                    <Button size="sm" className="w-full gap-1.5 sm:w-auto" onClick={openCreate}>
+                    <Button
+                        size="sm"
+                        className="h-[42px] w-full gap-1.5 px-4 sm:w-auto"
+                        onClick={openCreate}
+                    >
                         <Plus className="h-4 w-4" /> Komplain baru
                     </Button>
                 </div>
@@ -608,17 +683,14 @@ export function TaskBoard({ search }: TaskBoardProps) {
                             aria-controls={`task-panel-${status.id}`}
                             onClick={() => setMobileStatus(status.id)}
                             className={cn(
-                                "flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] font-medium leading-tight transition-colors",
+                                "flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium leading-tight transition-colors",
                                 active
                                     ? "bg-background text-foreground shadow-sm"
                                     : "text-muted-foreground hover:text-foreground",
                             )}
                         >
-                            <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
-                            <span className="w-full text-center">{status.label}</span>
-                            <span className="text-[10px] tabular-nums opacity-60">
-                                {byStatus[status.id].length}
-                            </span>
+                            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="truncate">{status.label}</span>
                         </button>
                     )
                 })}
@@ -629,6 +701,8 @@ export function TaskBoard({ search }: TaskBoardProps) {
                 {TASK_STATUSES.map((status) => {
                     const Icon = STATUS_ICON[status.id]
                     const column = byStatus[status.id]
+                    const paged = pagedByStatus[status.id]
+                    const displayed = paged.cards
                     return (
                         <section
                             key={status.id}
@@ -669,7 +743,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                             </header>
 
                             <div className="flex flex-col gap-2">
-                                {column.map((task) => {
+                                {displayed.map((task) => {
                                     const escalated = isEscalated(task)
                                     const priority = effectivePriority(task)
                                     const next = nextStatus(task.status)
@@ -740,13 +814,13 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                                 )}
                                             </div>
 
-                                            {task.description && (
+                                            {task.description && task.status !== "done" && (
                                                 <p className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-muted-foreground">
                                                     {task.description}
                                                 </p>
                                             )}
 
-                                            {(task.license_plate || task.delivery_no || task.freight_order) && (
+                                            {(task.license_plate || task.delivery_no || task.freight_order) && task.status !== "done" && (
                                                 <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                                                     {task.license_plate && (
                                                         <span className="min-w-0 break-words" title="No. plat mobil">{task.license_plate}</span>
@@ -766,7 +840,7 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                                 </div>
                                             )}
 
-                                            {(task.sales_name || task.customer_no) && (
+                                            {(task.sales_name || task.customer_no) && task.status !== "done" && (
                                                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                                                     {task.sales_name && (
                                                         <span className="min-w-0 break-words" title="Nama sales">{task.sales_name}</span>
@@ -792,12 +866,13 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                                 </div>
                                             )}
 
-                                            {/* Footer satu baris: prioritas + user terakhir. */}
+                                            {/* Footer: prioritas + indikator lampiran, lalu pelaku terakhir.
+                                                flex-wrap mencegah ikon dan nama saling menimpa di kartu sempit. */}
                                             <div
-                                                className="mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-border/60 pt-2 text-xs leading-snug text-muted-foreground"
+                                                className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-border/60 pt-2 text-xs leading-snug text-muted-foreground"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
-                                                <div className="flex min-w-0 items-center gap-1.5">
+                                                <div className="flex shrink-0 items-center gap-2">
                                                     <Badge
                                                         variant="outline"
                                                         title={
@@ -810,21 +885,31 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                                         <Flag className="h-2.5 w-2.5" />
                                                         {priorityLabel(priority)}
                                                     </Badge>
-                                                    {task.attachment_path && (
-                                                        <span title="Ada foto bukti komplain">
-                                                            <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />
-                                                            <span className="sr-only">Ada foto bukti komplain</span>
-                                                        </span>
-                                                    )}
-                                                    {task.resolution_attachment_path && (
-                                                        <span title="Ada dokumentasi penyelesaian">
-                                                            <ImageIcon className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                                                            <span className="sr-only">Ada dokumentasi penyelesaian</span>
-                                                        </span>
+                                                    {(task.attachment_path || task.resolution_attachment_path) && (
+                                                        <div className="flex items-center gap-1.5 border-l border-border/60 pl-2">
+                                                            {task.attachment_path && (
+                                                                <span
+                                                                    title="Ada foto bukti komplain"
+                                                                    className="inline-flex h-4 w-4 items-center justify-center"
+                                                                >
+                                                                    <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                                                    <span className="sr-only">Ada foto bukti komplain</span>
+                                                                </span>
+                                                            )}
+                                                            {task.resolution_attachment_path && (
+                                                                <span
+                                                                    title="Ada dokumentasi penyelesaian"
+                                                                    className="inline-flex h-4 w-4 items-center justify-center"
+                                                                >
+                                                                    <ImageIcon className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                                                    <span className="sr-only">Ada dokumentasi penyelesaian</span>
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     )}
                                                 </div>
                                                 <span
-                                                    className="flex min-w-0 items-center gap-1 overflow-hidden"
+                                                    className="ml-auto flex min-w-0 max-w-full items-center gap-1 overflow-hidden whitespace-nowrap"
                                                     title={`${latestAudit.label} ${displayNameFor(latestAudit.email, userNames)}`}
                                                 >
                                                     <LatestAuditIcon
@@ -847,6 +932,50 @@ export function TaskBoard({ search }: TaskBoardProps) {
                                     <p className="rounded-lg border border-dashed border-border/70 px-3 py-6 text-center text-xs text-muted-foreground">
                                         {status.id === "todo" ? "Belum ada komplain" : "Kosong"}
                                     </p>
+                                )}
+
+                                {column.length > PAGE_SIZE && (
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-1 pt-2">
+                                        <p className="text-[11px] tabular-nums text-muted-foreground">
+                                            {paged.startIndex + 1}–{paged.endIndex} dari{" "}
+                                            {formatNumber(column.length)}
+                                        </p>
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                variant="outline"
+                                                size="icon-sm"
+                                                className="h-9 w-9 bg-card sm:h-8 sm:w-8"
+                                                aria-label={`Halaman ${status.label} sebelumnya`}
+                                                disabled={paged.page <= 1}
+                                                onClick={() =>
+                                                    setPages((prev) => ({
+                                                        ...prev,
+                                                        [status.id]: Math.max(1, paged.page - 1),
+                                                    }))
+                                                }
+                                            >
+                                                <ChevronLeft className="h-3.5 w-3.5" />
+                                            </Button>
+                                            <span className="min-w-10 text-center text-[11px] tabular-nums text-muted-foreground">
+                                                {paged.page}/{paged.pageCount}
+                                            </span>
+                                            <Button
+                                                variant="outline"
+                                                size="icon-sm"
+                                                className="h-9 w-9 bg-card sm:h-8 sm:w-8"
+                                                aria-label={`Halaman ${status.label} berikutnya`}
+                                                disabled={paged.page >= paged.pageCount}
+                                                onClick={() =>
+                                                    setPages((prev) => ({
+                                                        ...prev,
+                                                        [status.id]: Math.min(paged.pageCount, paged.page + 1),
+                                                    }))
+                                                }
+                                            >
+                                                <ChevronRight className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         </section>

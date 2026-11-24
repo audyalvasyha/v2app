@@ -555,7 +555,7 @@ function SkrViewImpl({
                                     batang qty · garis nilai
                                 </p>
                             </div>
-                            <div className="flex min-w-0 flex-1 flex-col p-4">
+                            <div className="flex min-w-0 flex-1 flex-col px-0.5 py-4 sm:p-4">
                                 <SkrMonthChart
                                     currentRows={chartRows}
                                     previousRows={chartRows}

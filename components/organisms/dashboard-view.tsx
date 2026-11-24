@@ -25,6 +25,7 @@ import {
   durationMinutesFromTimestamps,
   elapsedHoursSince,
   formatDuration,
+  hasJam,
   isOutboundLate,
   outboundStatus,
 } from "@/lib/outbound-status";
@@ -35,6 +36,7 @@ import {
   ticketAgeDays,
   type Task,
 } from "@/lib/tasks";
+import { isMaintenanceStatus } from "@/lib/unit-status";
 import { cn } from "@/lib/utils";
 import type { View } from "@/components/templates/dashboard-layout";
 import { AlertTriangle, ArrowRight, CheckCircle2, MessageSquareText, Wrench } from "lucide-react";
@@ -47,11 +49,18 @@ interface DashboardViewProps {
   skrDetails: any[];
   skrError?: string | null;
   outboundError?: string | null;
+  /** Request riwayat biaya gagal; chart tetap memakai cache + menampilkan peringatan. */
+  historyError?: string | null;
   isLoading: boolean;
   onNavigate?: (view: View) => void;
 }
 
 const DAY_MS = 86_400_000;
+
+/** Plat equipment tidak konsisten ber-spasi, sedangkan outbound memakainya. */
+function normalizePlate(value: unknown): string {
+  return String(value ?? "").replace(/\s+/g, "").toUpperCase();
+}
 
 /**
  * Dashboard ini sengaja menjawab tiga pertanyaan operasional:
@@ -184,14 +193,14 @@ function SectionHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-12 items-center justify-between gap-3 border-b px-4 py-2.5">
-      <div className="min-w-0">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        {description && (
-          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
-        )}
+    <div className="border-b px-4 py-2.5">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <h2 className="min-w-0 text-sm font-semibold leading-tight">{title}</h2>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {description && (
+        <p className="mt-1 text-xs leading-snug text-muted-foreground">{description}</p>
+      )}
     </div>
   );
 }
@@ -244,15 +253,7 @@ function FleetStatusCard({
 }) {
   return (
     <Card className="h-full overflow-hidden gap-0 py-0 shadow-none">
-      <SectionHeader
-        title="Armada hari ini"
-        description="Status unit saat ini, bukan hasil filter."
-        action={
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
-            {formatNumber(total)} unit
-          </span>
-        }
-      />
+      <SectionHeader title="Armada hari ini" />
       <dl className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
         <MetricCell label="Total" value={formatNumber(total)} />
         <MetricCell
@@ -706,12 +707,15 @@ function DashboardContent({
   skrDetails,
   skrError,
   outboundError,
+  historyError,
   onNavigate,
 }: DashboardViewProps) {
   const today = useMemo(() => new Date(), []);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [tasksUnavailable, setTasksUnavailable] = useState(false);
+  /** Trip yang sudah keluar dan belum kembali; sumber status "Dipakai". */
+  const [activeOutbounds, setActiveOutbounds] = useState<any[]>([]);
 
   // Komplain adalah sinyal harian. Query-nya kecil dan hanya hidup saat
   // Dashboard terbuka; bila tabel belum dibuat, pakai mode lokal yang sama
@@ -740,6 +744,25 @@ function DashboardContent({
     };
   }, []);
 
+  // Query kecil khusus status armada. Jangan memakai `outbounds` dari menu
+  // Pengiriman karena isinya bisa sedang difilter ke rentang tanggal lama.
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from("armada_outbound")
+      .select("no_polisi,jam_out,jam_in")
+      .is("jam_in", null)
+      .not("jam_out", "is", null)
+      .limit(500)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setActiveOutbounds(error ? [] : data ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const analytics = useMemo(() => {
     const todayStart = startOfZonedDay(today);
     const cutoff30 = todayStart - 30 * DAY_MS;
@@ -751,12 +774,24 @@ function DashboardContent({
     let maintenance = 0;
     let other = 0;
 
+    // `equipment.status` hanya berisi Available/Maintenance; status "dipakai"
+    // datang dari trip yang sudah keluar dan belum punya jam masuk. Cocokkan
+    // lewat plat tanpa spasi karena kedua tabel menulisnya dengan format beda.
+    const activePlates = new Set<string>();
+    for (const row of activeOutbounds) {
+      if (hasJam(row.jam_out) && !hasJam(row.jam_in)) {
+        const plate = normalizePlate(row.no_polisi);
+        if (plate) activePlates.add(plate);
+      }
+    }
+
     for (const eq of equipments) {
       total += 1;
       const status = String(eq.status ?? "").trim().toLowerCase();
-      if (status === "available") available += 1;
-      else if (status === "in use") inUse += 1;
-      else if (status === "maintenance") maintenance += 1;
+      const inUseStatus = status === "in use" || status === "inuse" || status === "in_use";
+      if (isMaintenanceStatus(status)) maintenance += 1;
+      else if (inUseStatus || activePlates.has(normalizePlate(eq.license_plate))) inUse += 1;
+      else if (status === "available") available += 1;
       else other += 1;
     }
 
@@ -898,7 +933,7 @@ function DashboardContent({
       skrOldestDays:
         skrOldest != null ? Math.max(0, Math.floor((todayStart - skrOldest) / DAY_MS)) : null,
     };
-  }, [equipments, histories, serviceLogs, outbounds, skrDetails, today]);
+  }, [equipments, histories, serviceLogs, outbounds, activeOutbounds, skrDetails, today]);
 
   const openTasks = useMemo(
     () => tasks.filter((task) => task.status !== "done").sort(sortTasks),
@@ -976,8 +1011,8 @@ function DashboardContent({
       </div>
 
       <Card className="shrink-0 gap-0 py-0 shadow-none">
-        <div className="min-h-[460px] p-4 sm:p-5">
-          <MaintenanceCostTrendChart histories={histories} />
+        <div className="min-h-[460px] px-3 py-4 sm:p-5">
+          <MaintenanceCostTrendChart histories={histories} error={historyError} />
         </div>
       </Card>
 

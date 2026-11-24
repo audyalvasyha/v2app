@@ -466,12 +466,8 @@ function ServiceMonitoringTableImpl({
                             <PaginationContent>
                                 <PaginationItem>
                                     <PaginationPrevious
-                                        href="#"
-                                        onClick={(e) => {
-                                            e.preventDefault()
-                                            if (currentPage > 1) setPage((p) => p - 1)
-                                        }}
-                                        className={currentPage <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                        disabled={currentPage <= 1}
+                                        onClick={() => setPage((p) => Math.max(1, p - 1))}
                                     />
                                 </PaginationItem>
                                 <PaginationItem className="flex items-center gap-2 px-2">
@@ -491,12 +487,8 @@ function ServiceMonitoringTableImpl({
                                 </PaginationItem>
                                 <PaginationItem>
                                     <PaginationNext
-                                        href="#"
-                                        onClick={(e) => {
-                                            e.preventDefault()
-                                            if (currentPage < totalPages) setPage((p) => p + 1)
-                                        }}
-                                        className={currentPage >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                        disabled={currentPage >= totalPages}
+                                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                                     />
                                 </PaginationItem>
                             </PaginationContent>

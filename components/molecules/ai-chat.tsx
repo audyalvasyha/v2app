@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import {
   ArrowUp,
+  BookmarkPlus,
   Brain,
   Check,
   ChevronDown,
@@ -597,7 +598,7 @@ export function AIChat({
         ask(input);
       }}
       className={pageMode
-        ? "w-full rounded-lg border border-input bg-card p-2 transition-[border-color,box-shadow] focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/15"
+        ? "flex w-full items-end gap-1.5 rounded-[28px] border border-input bg-card p-1.5 pl-2 shadow-sm transition-[border-color,box-shadow] focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/15"
         : "flex gap-2 border-t border-ai-panel-foreground/10 bg-ai-panel-foreground/[0.04] p-3"}
     >
       <textarea
@@ -610,42 +611,36 @@ export function AIChat({
             ask(input);
           }
         }}
-        rows={pageMode ? 2 : 1}
+        rows={1}
         maxLength={1000}
         disabled={loading}
         aria-label="Pertanyaan untuk asisten AI"
-        placeholder={rememberNext ? "Ketik yang mau diingat…" : pageMode ? "Tanya Midaa tentang armada, SKR, pengiriman…" : "Tanya apa saja… (Enter kirim, Shift+Enter baris baru)"}
+        placeholder={pageMode ? "Tanya apa saja." : rememberNext ? "Ketik yang mau diingat…" : "Tanya apa saja… (Enter kirim, Shift+Enter baris baru)"}
         className={pageMode
-          ? "max-h-40 min-h-16 w-full resize-none overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-transparent px-2.5 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none disabled:opacity-50"
+          ? "max-h-40 min-h-10 flex-1 resize-none overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-transparent px-2 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none disabled:opacity-50"
           : "max-h-[120px] min-h-[2.25rem] flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"}
       />
       {pageMode ? (
-        <div className="flex items-center justify-between gap-2 px-1 pt-1">
-          <div className="flex min-w-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              disabled={loading}
-              onClick={() => setRememberNext((v) => !v)}
-              title="Simpan pertanyaan ini ke ingatan Midaa"
-              aria-pressed={rememberNext}
-              className={`h-8 w-8 shrink-0 rounded-md ${rememberNext ? "text-primary" : "text-muted-foreground"}`}
-            >
-              <Brain className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`} />
-            </Button>
-            <span className="hidden truncate text-xs text-muted-foreground sm:inline">
-              {rememberNext
-                ? "Pertanyaan ini akan disimpan ke ingatan Midaa"
-                : "Enter kirim · Shift+Enter baris baru"}
-            </span>
-          </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={loading}
+            onClick={() => setRememberNext((v) => !v)}
+            title={rememberNext ? "Pertanyaan ini akan disimpan ke ingatan Midaa" : "Simpan pertanyaan ini ke ingatan Midaa"}
+            aria-label="Simpan pertanyaan ini ke ingatan Midaa"
+            aria-pressed={rememberNext}
+            className={`h-10 w-10 shrink-0 rounded-full ${rememberNext ? "text-primary" : "text-muted-foreground"}`}
+          >
+            <BookmarkPlus className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`} />
+          </Button>
           <Button
             type="submit"
             size="icon"
             aria-label="Kirim pertanyaan"
             disabled={loading || !input.trim()}
-            className="h-9 w-9 shrink-0 rounded-xl"
+            className="h-10 w-10 shrink-0 rounded-full"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
           </Button>
@@ -662,7 +657,7 @@ export function AIChat({
             aria-pressed={rememberNext}
             className={rememberNext ? "shrink-0 text-primary" : "shrink-0 text-muted-foreground"}
           >
-            <Brain className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`} />
+            <BookmarkPlus className={`h-4 w-4 ${rememberNext ? "fill-current" : ""}`} />
           </Button>
           <Button type="submit" size="icon" disabled={loading || !input.trim()}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -919,7 +914,12 @@ export function AIChat({
                     Apa yang ingin dianalisis?
                   </h2>
                   <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">
-                    Ajukan pertanyaan soal armada, servis, biaya, SKR, atau pengiriman. Jawaban dihitung dari data, bukan tebakan.
+                    <span className="sm:hidden">
+                      Tanyakan kondisi armada, servis, biaya, atau pengiriman—jawabannya diambil dari data operasional terkini.
+                    </span>
+                    <span className="hidden sm:inline">
+                      Tanyakan kondisi armada, jadwal servis, biaya perbaikan, sisa kiriman, atau pengiriman. Pilih topik cepat di bawah atau tulis pertanyaan langsung—Midaa menyusun jawabannya dari data operasional terkini, bukan perkiraan.
+                    </span>
                   </p>
                   <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                     {PAGE_STARTERS.map((starter) => (

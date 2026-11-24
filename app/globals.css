@@ -141,7 +141,6 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-ai-panel: var(--ai-panel);
   --color-ai-panel-foreground: var(--ai-panel-foreground);
-  --font-serif: 'Source Serif 4', 'Source Serif 4 Fallback';
   /* computed shadow variables below - do not modify */
   --shadow-2xs: var(--shadow-x) var(--shadow-y) color-mix(in srgb, var(--shadow-color) calc(var(--shadow-opacity) * 100%), transparent);
   --shadow-xs: var(--shadow-x) var(--shadow-y) var(--shadow-blur) var(--shadow-spread) color-mix(in srgb, var(--shadow-color) calc(var(--shadow-opacity) * 100%), transparent);
@@ -157,6 +156,7 @@
   --shadow-blur: var(--shadow-blur);
   --shadow-y: var(--shadow-y);
   --shadow-x: var(--shadow-x);
+  --font-serif: 'Source Serif 4', 'Source Serif 4 Fallback';
 }
 
 @layer base {
@@ -232,6 +232,22 @@ pre {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-muted-foreground);
+}
+
+/* Di ponsel, scrollbar desktop memakan lebar dan terlihat mengganggu.
+   Sembunyikan visualnya saja — overflow tetap aktif, jadi semua area
+   (halaman, dialog, tabel, dan panel chat) masih bisa digeser normal. */
+@media (max-width: 639px) {
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
 }
 
 /* Sembunyikan scrollbar pembungkus pada halaman chat Analisa tanpa mematikan scroll. */

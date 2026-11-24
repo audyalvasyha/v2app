@@ -17,7 +17,14 @@ function getClient(): SupabaseClient | null {
     return null
   }
 
-  cachedClient = createClient(supabaseUrl, supabaseAnonKey)
+  cachedClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      // PostgREST tidak mengirim Cache-Control. Tanpa ini Safari bisa
+      // menyajikan respons GET lama, sehingga data bulan berjalan tidak
+      // pernah sampai ke chart meskipun database sudah berubah.
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
+  })
   return cachedClient
 }
 

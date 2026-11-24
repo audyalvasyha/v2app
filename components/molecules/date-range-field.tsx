@@ -137,7 +137,11 @@ export function DateRangeField({ idPrefix, from, to, onApply, isFetching, classN
                 </PopoverTrigger>
             </div>
 
-            <PopoverContent align="start" className="w-[340px] rounded-xl p-3">
+            <PopoverContent
+                align="start"
+                collisionPadding={8}
+                className="w-[min(340px,calc(100vw_-_1.5rem))] rounded-xl p-3"
+            >
                 <div className="flex items-end gap-2">
                     <div className="min-w-0 flex-1 space-y-1">
                         <Label htmlFor={fromId} className="text-xs text-muted-foreground">

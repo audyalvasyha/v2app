@@ -146,7 +146,10 @@ export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSe
           if (!open) setSearchOpen(false)
         }}
       >
-        <DialogContent className="top-3 w-[calc(100%-1rem)] max-w-lg translate-y-0 gap-3 p-3">
+        <DialogContent
+          showCloseButton={false}
+          className="top-3 w-[calc(100%-1rem)] max-w-lg translate-y-0 gap-3 p-3"
+        >
           <DialogHeader className="sr-only">
             <DialogTitle>Cari data</DialogTitle>
             <DialogDescription>
@@ -154,44 +157,56 @@ export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSe
             </DialogDescription>
           </DialogHeader>
 
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              autoFocus
-              value={searchTerm}
-              onChange={(e) => onSearchChange(e.target.value)}
-              onFocus={() => setSearchOpen(true)}
-              onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)}
-              placeholder={searchPlaceholder ?? "Cari data…"}
-              className="h-10 rounded-full pl-9 pr-9"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onSearchChange("")
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                autoFocus
+                value={searchTerm}
+                onChange={(e) => onSearchChange(e.target.value)}
+                onFocus={() => setSearchOpen(true)}
+                onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)}
+                placeholder={searchPlaceholder ?? "Cari data…"}
+                className="h-10 rounded-full pl-9 pr-10"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onSearchChange("")
+                    setSearchOpen(false)
+                  }}
+                  aria-label="Bersihkan pencarian"
+                  className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+
+              <GlobalSearchDropdown
+                open={searchOpen && mobileSearchOpen}
+                hasQuery={searchTerm.trim().length > 0}
+                items={searchItems}
+                counts={searchCounts}
+                onSelect={(view) => {
+                  onSearchSelect(view)
+                  setMobileSearchOpen(false)
                   setSearchOpen(false)
                 }}
-                aria-label="Bersihkan pencarian"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-
-            <GlobalSearchDropdown
-              open={searchOpen && mobileSearchOpen}
-              hasQuery={searchTerm.trim().length > 0}
-              items={searchItems}
-              counts={searchCounts}
-              onSelect={(view) => {
-                onSearchSelect(view)
+                onClose={() => setSearchOpen(false)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
                 setMobileSearchOpen(false)
                 setSearchOpen(false)
               }}
-              onClose={() => setSearchOpen(false)}
-            />
+              className="shrink-0 rounded-md px-1 py-2 text-sm font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Batal
+            </button>
           </div>
         </DialogContent>
       </Dialog>

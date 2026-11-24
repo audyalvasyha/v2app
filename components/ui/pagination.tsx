@@ -12,7 +12,7 @@ function Pagination({ className, ...props }: React.ComponentProps<'nav'>) {
   return (
     <nav
       role="navigation"
-      aria-label="pagination"
+      aria-label="Navigasi halaman"
       data-slot="pagination"
       className={cn('mx-auto flex w-full justify-center', className)}
       {...props}
@@ -39,18 +39,27 @@ function PaginationItem({ ...props }: React.ComponentProps<'li'>) {
 
 type PaginationLinkProps = {
   isActive?: boolean
+  disabled?: boolean
 } & Pick<React.ComponentProps<typeof Button>, 'size'> &
-  React.ComponentProps<'a'>
+  React.ComponentProps<'button'>
 
+/**
+ * Paginasi aplikasi ini memakai state klien, bukan URL. Karena itu kontrol
+ * harus berupa <button> agar bisa disabled secara semantik; link `href="#"`
+ * tetap bisa difokus keyboard dan mengubah hash walau halaman tidak berubah.
+ */
 function PaginationLink({
   className,
   isActive,
   size = 'icon',
+  disabled,
   ...props
 }: PaginationLinkProps) {
   return (
-    <a
+    <button
+      type="button"
       aria-current={isActive ? 'page' : undefined}
+      disabled={disabled}
       data-slot="pagination-link"
       data-active={isActive}
       className={cn(
@@ -58,6 +67,7 @@ function PaginationLink({
           variant: isActive ? 'outline' : 'ghost',
           size,
         }),
+        'cursor-pointer',
         className,
       )}
       {...props}
@@ -71,13 +81,12 @@ function PaginationPrevious({
 }: React.ComponentProps<typeof PaginationLink>) {
   return (
     <PaginationLink
-      aria-label="Go to previous page"
-      size="default"
-      className={cn('gap-1 px-2.5 sm:pl-2.5', className)}
+      aria-label="Halaman sebelumnya"
+      size="icon"
+      className={cn('size-8', className)}
       {...props}
     >
       <ChevronLeftIcon />
-      <span className="hidden sm:block">Previous</span>
     </PaginationLink>
   )
 }
@@ -88,12 +97,11 @@ function PaginationNext({
 }: React.ComponentProps<typeof PaginationLink>) {
   return (
     <PaginationLink
-      aria-label="Go to next page"
-      size="default"
-      className={cn('gap-1 px-2.5 sm:pr-2.5', className)}
+      aria-label="Halaman berikutnya"
+      size="icon"
+      className={cn('size-8', className)}
       {...props}
     >
-      <span className="hidden sm:block">Next</span>
       <ChevronRightIcon />
     </PaginationLink>
   )

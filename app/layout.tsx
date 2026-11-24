@@ -27,7 +27,6 @@ export const metadata: Metadata = {
   title: "Midaa - Transport Management System",
   description:
     "Midaa — sistem manajemen armada: inventaris equipment, riwayat maintenance, monitoring jadwal servis, pengiriman, dan ringkasan sisa kiriman SKR.",
-    generator: 'v0.app',
   // File ikon berada di public/ sehingga tidak otomatis dideteksi Next.js — ditautkan manual
   icons: {
     icon: [

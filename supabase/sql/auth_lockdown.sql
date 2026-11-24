@@ -71,9 +71,13 @@ security definer
 set search_path = public
 as $$
 declare
-  email text := lower(coalesce(auth.jwt() ->> 'email', ''));
+  -- Jangan beri nama variabel ini `email`: PL/pgSQL menganggapnya bentrok
+  -- dengan kolom app_users.email saat query di bawah dijalankan, dan fungsi
+  -- gagal dengan "column reference email is ambiguous". Dampaknya seluruh
+  -- SELECT admin ditolak RLS.
+  v_email text := lower(coalesce(auth.jwt() ->> 'email', ''));
 begin
-  if email <> lower('audyal.vasyah@pekanbaru-dr.com') then
+  if v_email <> lower('audyal.vasyah@pekanbaru-dr.com') then
     return false;
   end if;
 
@@ -86,7 +90,7 @@ begin
   return coalesce(
     (select u.role = 'admin'
        from public.app_users u
-      where lower(u.email) = email
+      where lower(u.email) = v_email
       limit 1),
     true
   );

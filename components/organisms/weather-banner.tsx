@@ -49,7 +49,7 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
 
     return (
         <Card className="gap-0 overflow-hidden border-border/70 py-0 shadow-none">
-            <CardContent className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 px-4 py-3 sm:flex sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-2.5">
                     <CloudSun className="h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400" />
                     <div className="min-w-0">
@@ -60,47 +60,49 @@ function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
                     </div>
                 </div>
 
-                {isLoading && !hasData ? (
-                    <div className="flex min-w-0 flex-1 items-center gap-3 sm:justify-center">
-                        <Skeleton className="h-6 w-16" />
-                        <Skeleton className="h-6 w-32" />
-                        <Skeleton className="h-6 w-24" />
-                    </div>
-                ) : !focus || !focusRisk || !outlook ? (
-                    <p className="min-w-0 flex-1 text-xs text-muted-foreground sm:text-center">
-                        {error ?? "Data cuaca belum tersedia."}
-                    </p>
-                ) : (
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground sm:justify-center">
-                        <span className="text-base font-semibold tabular-nums text-foreground">
-                            {focus.current.temperature != null ? `${Math.round(focus.current.temperature)}°C` : "—"}
-                        </span>
-                        <span>{desc?.label}</span>
-                        <Badge variant="outline" className={cn("gap-1.5", RISK_TONE[focusRisk.level].badge)}>
-                            <RiskDot level={focusRisk.level} />
-                            {RISK_TONE[focusRisk.level].label}
-                        </Badge>
-                        <span>
-                            Hujan{" "}
-                            <span className="font-medium tabular-nums text-foreground">
-                                {outlook.maxProb != null ? `${Math.round(outlook.maxProb)}%` : "—"}
+                <div className="col-span-2 row-start-2 min-w-0 sm:order-2 sm:flex-1">
+                    {isLoading && !hasData ? (
+                        <div className="flex min-w-0 flex-1 items-center gap-3 sm:justify-center">
+                            <Skeleton className="h-6 w-16" />
+                            <Skeleton className="h-6 w-32" />
+                            <Skeleton className="h-6 w-24" />
+                        </div>
+                    ) : !focus || !focusRisk || !outlook ? (
+                        <p className="min-w-0 flex-1 text-xs text-muted-foreground sm:text-center">
+                            {error ?? "Data cuaca belum tersedia."}
+                        </p>
+                    ) : (
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground sm:justify-center">
+                            <span className="text-base font-semibold tabular-nums text-foreground">
+                                {focus.current.temperature != null ? `${Math.round(focus.current.temperature)}°C` : "—"}
                             </span>
-                        </span>
-                        {depart && (
+                            <span>{desc?.label}</span>
+                            <Badge variant="outline" className={cn("gap-1.5", RISK_TONE[focusRisk.level].badge)}>
+                                <RiskDot level={focusRisk.level} />
+                                {RISK_TONE[focusRisk.level].label}
+                            </Badge>
                             <span>
-                                Berangkat{" "}
-                                <span className="font-medium tabular-nums text-foreground">{depart}</span>
+                                Hujan{" "}
+                                <span className="font-medium tabular-nums text-foreground">
+                                    {outlook.maxProb != null ? `${Math.round(outlook.maxProb)}%` : "—"}
+                                </span>
                             </span>
-                        )}
-                        <span className="hidden xl:inline">
-                            {summary.alertCount > 0
-                                ? `${summary.alertCount}/${summary.totalLocations} daerah waspada`
-                                : `${summary.totalLocations} daerah aman`}
-                        </span>
-                    </div>
-                )}
+                            {depart && (
+                                <span>
+                                    Berangkat{" "}
+                                    <span className="font-medium tabular-nums text-foreground">{depart}</span>
+                                </span>
+                            )}
+                            <span className="hidden xl:inline">
+                                {summary.alertCount > 0
+                                    ? `${summary.alertCount}/${summary.totalLocations} daerah waspada`
+                                    : `${summary.totalLocations} daerah aman`}
+                            </span>
+                        </div>
+                    )}
+                </div>
 
-                <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
+                <div className="col-start-2 row-start-1 flex shrink-0 items-center gap-1 sm:order-3">
                     <Button
                         variant="ghost"
                         size="icon"

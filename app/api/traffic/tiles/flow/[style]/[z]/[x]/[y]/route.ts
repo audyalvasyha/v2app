@@ -95,8 +95,9 @@ export async function GET(req: Request, ctx: TileParams) {
       status: 200,
       headers: {
         "Content-Type": "image/png",
-        // 60 detik: data live, tapi aman untuk pan/zoom dalam satu sesi.
-        "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+        // 60 detik di browser DAN edge. Tanpa s-maxage, setiap request tile
+        // tetap sampai ke function dan memakai kuota TomTom meski URL-nya sama.
+        "Cache-Control": "public, max-age=60, s-maxage=60, stale-while-revalidate=300",
       },
     });
   } catch {

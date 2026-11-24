@@ -74,15 +74,15 @@ export function isTaskAttachmentType(type: string): boolean {
 }
 
 export const TASK_STATUSES: { id: TaskStatus; label: string }[] = [
-    { id: "todo", label: "Baru masuk" },
-    { id: "progress", label: "Di Proses" },
+    { id: "todo", label: "Baru" },
+    { id: "progress", label: "Diproses" },
     { id: "done", label: "Selesai" },
 ]
 
 /**
  * `blocked` adalah status lama "Menunggu toko" yang sudah dihapus dari papan.
  * Baris lama tetap harus muncul, jadi status itu diperlakukan sebagai
- * "Di Proses" sampai user menyimpannya ulang.
+ * "Diproses" sampai user menyimpannya ulang.
  */
 export function normalizeTaskStatus(status: TaskStatus): TaskStatus {
     return status === "blocked" ? "progress" : status

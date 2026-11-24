@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,7 +15,12 @@ import { KEYBOARD_SHORTCUTS } from "@/hooks/use-keyboard-shortcuts"
 import { Badge } from "@/components/ui/badge"
 
 export function KeyboardShortcutsDialog() {
-  const isMac = typeof window !== "undefined" && navigator.platform.toUpperCase().indexOf("MAC") >= 0
+  // Dibaca setelah mount agar render server dan klien pertama identik.
+  // Menghitung navigator saat render membuat label ⌘/Ctrl bisa hydration mismatch.
+  const [isMac, setIsMac] = useState(false)
+  useEffect(() => {
+    setIsMac(/mac|iphone|ipad|ipod/i.test(navigator.platform))
+  }, [])
   const ctrlKey = isMac ? "⌘" : "Ctrl"
 
   return (

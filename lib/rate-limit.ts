@@ -22,8 +22,20 @@ const windows = new Map<string, WindowRecord>();
 /** Peta dibuang saat menumpuk agar tidak jadi kebocoran memori. */
 const MAX_TRACKED = 5000;
 
-/** Ambil identitas klien: IP pertama di chain XFF (dipakai terakhir). */
+/**
+ * Ambil identitas klien. Di Vercel, `x-real-ip` diisi platform dan tidak bisa
+ * dipalsukan lewat request browser; `x-forwarded-for` bisa memuat nilai dari
+ * klien, jadi jangan langsung percaya elemen pertamanya. Header platform
+ * dipakai lebih dulu, baru XFF sebagai fallback untuk reverse proxy lain.
+ */
 export function clientIpOf(request: Request): string {
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+
+  const vercelForwarded = request.headers.get("x-vercel-forwarded-for");
+  const vercelIp = vercelForwarded?.split(",")[0]?.trim();
+  if (vercelIp) return vercelIp;
+
   const forwarded = request.headers.get("x-forwarded-for") ?? "";
   const first = forwarded.split(",")[0]?.trim();
   return first || "unknown";

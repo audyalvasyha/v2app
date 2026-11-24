@@ -4,6 +4,7 @@ import Image from "next/image"
 import React, { useEffect, useState } from "react"
 import { LogIn, ShieldCheck } from "lucide-react"
 import { supabase } from "@/utils/supabase"
+import { clearSensitiveBrowserCache } from "@/lib/browser-cache"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -38,9 +39,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             .then(({ data }) => setUserEmail(data.session?.user.email ?? null))
             .catch(() => setUserEmail(null))
             .finally(() => setChecking(false))
-        const { data: sub } = supabase.auth.onAuthStateChange((_event, s) =>
-            setUserEmail(s?.user.email ?? null),
-        )
+        const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+            setUserEmail(s?.user.email ?? null)
+            // Sesi bisa berakhir tanpa lewat tombol Keluar (expired/revoked di
+            // tab lain). Jangan biarkan cache operasional tertinggal di perangkat.
+            if (event === "SIGNED_OUT" || !s) clearSensitiveBrowserCache()
+        })
         return () => sub.subscription.unsubscribe()
     }, [])
 

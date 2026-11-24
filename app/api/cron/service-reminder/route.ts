@@ -6,6 +6,7 @@ import {
     evaluateServiceStatus,
     scheduleDetailLabel,
 } from "@/lib/service-status"
+import { isMaintenanceStatus } from "@/lib/unit-status"
 
 /**
  * Reminder email harian untuk jadwal servis (dipicu Vercel Cron).
@@ -113,6 +114,9 @@ export async function GET(request: Request) {
 
         const today = new Date()
         const rows = (eqRes.data ?? [])
+            // Unit yang sudah di bengkel tidak perlu ditagih jadwal servisnya;
+            // peringatan hanya untuk armada yang siap/beroperasi.
+            .filter((eq) => !isMaintenanceStatus(eq.status))
             .map((eq) => ({
                 eq,
                 status: evaluateServiceStatus(eq, latestLog.get(eq.equipment_id) ?? null, today),
@@ -121,7 +125,7 @@ export async function GET(request: Request) {
             .sort((a, b) => a.status.rank - b.status.rank || (a.status.remainingDays ?? 999) - (b.status.remainingDays ?? 999))
 
         if (rows.length === 0) {
-            return NextResponse.json({ sent: false, reason: "Semua unit aman — tidak ada yang perlu direminder" })
+            return NextResponse.json({ sent: false, reason: "Tidak ada unit operasional yang perlu direminder" })
         }
 
         const apiKey = process.env.RESEND_API_KEY

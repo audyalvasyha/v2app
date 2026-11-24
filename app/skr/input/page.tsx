@@ -4,6 +4,7 @@ import React, { useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { FileUp, LogOut, ShieldCheck, Upload, Download, TriangleAlert } from "lucide-react"
 import { supabase } from "@/utils/supabase"
+import { clearSensitiveBrowserCache } from "@/lib/browser-cache"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -45,9 +46,10 @@ export default function SkrInputPage() {
             .then(({ data }) => setSession(data.session ? { email: data.session.user.email } : null))
             .catch(() => setSession(null))
             .finally(() => setChecking(false))
-        const { data: sub } = supabase.auth.onAuthStateChange((_event, s) =>
-            setSession(s ? { email: s.user.email } : null),
-        )
+        const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+            setSession(s ? { email: s.user.email } : null)
+            if (event === "SIGNED_OUT" || !s) clearSensitiveBrowserCache()
+        })
         return () => sub.subscription.unsubscribe()
     }, [])
 
@@ -102,6 +104,7 @@ export default function SkrInputPage() {
 
     const handleSignOut = async () => {
         await supabase.auth.signOut()
+        clearSensitiveBrowserCache()
         setRows(null)
         setParseSummary(null)
         setIsAdmin(false)

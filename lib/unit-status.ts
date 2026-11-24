@@ -48,11 +48,17 @@ const TONES: Record<"available" | "inuse" | "maintenance" | "other", UnitStatusT
     },
 }
 
+/** Unit yang sedang maintenance/repair tidak siap jalan dan tidak perlu direminder servis. */
+export function isMaintenanceStatus(status: unknown): boolean {
+    const s = String(status ?? "").toLowerCase().trim()
+    return s.includes("maintenance") || s.includes("repair")
+}
+
 export function unitStatusTone(status: string | null | undefined): UnitStatusTone {
     const s = String(status ?? "").toLowerCase().trim()
     if (s === "available") return TONES.available
     if (s === "in use" || s === "inuse" || s === "in_use") return TONES.inuse
-    if (s.includes("maintenance") || s.includes("repair")) return TONES.maintenance
+    if (isMaintenanceStatus(s)) return TONES.maintenance
     return TONES.other
 }
 
