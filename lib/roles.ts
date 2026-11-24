@@ -42,14 +42,12 @@ export const ALL_VIEWS: readonly View[] = [
 
 /**
  * Menu untuk role "terbatas": operasional harian + follow-up komplain.
- * Review ikut terbuka karena sumbernya sama dengan papan yang memang boleh
- * mereka kelola. Sengaja tanpa Analisa (khusus admin), data
- * bengkel/biaya (Equipment, Histories, Monitoring, Ban), dan Dashboard.
- * Halaman awal jatuh ke Complaint Board.
+ * Review khusus admin karena dipakai untuk evaluasi lintas nopol. Sengaja
+ * tanpa Analisa (khusus admin), data bengkel/biaya (Equipment, Histories,
+ * Monitoring, Ban), dan Dashboard. Halaman awal jatuh ke Complaint Board.
  */
 const LIMITED_VIEWS: readonly View[] = [
     "tugas",
-    "review",
     "skr",
     "pengiriman",
     "weather",
