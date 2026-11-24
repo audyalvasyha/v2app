@@ -30,7 +30,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { BoardPageSkeleton } from "@/components/molecules/view-skeleton"
+import { BoardPageSkeleton, ReviewPageSkeleton } from "@/components/molecules/view-skeleton"
 import { ComplaintPlateSummary } from "@/components/organisms/complaint-plate-summary"
 import { complaintPlateKey } from "@/lib/complaint-summary"
 import { Textarea } from "@/components/ui/textarea"
@@ -666,7 +666,7 @@ export function TaskBoard({ search, viewMode = "board" }: TaskBoardProps) {
     }, [byStatus])
 
     if (isLoading) {
-        return <BoardPageSkeleton />
+        return viewMode === "review" ? <ReviewPageSkeleton /> : <BoardPageSkeleton />
     }
 
     const reviewDetailOpen =
