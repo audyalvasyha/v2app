@@ -36,7 +36,7 @@ import {
     durationSecondsFromTimestamps,
     elapsedHoursSince,
     elapsedSecondsSince,
-    formatClockDuration,
+    formatClockDurationShort,
     formatDuration,
     isOutboundOvernight,
     outboundStatus,
@@ -216,10 +216,10 @@ function OutboundTableImpl({
 
     // ── EXPORT CSV ────────────────────────────────────────────────────────
     const handleExportCsv = () => {
-        const header = ["Freight Order", "No. Polisi", "Jam Out", "Jam In", "Durasi (hh:mm:ss)", "Durasi berjalan (hh:mm:ss)", "Status"]
+        const header = ["Freight Order", "No. Polisi", "Jam Out", "Jam In", "Durasi (hh:mm)", "Durasi berjalan (hh:mm)", "Status"]
         const lines = rows.map((row) => {
             const info = outboundStatus(row.jam_out, row.jam_in)
-            // Durasi diekspor dalam hh:mm:ss agar identik dengan kolom tabel;
+            // Durasi diekspor dalam hh:mm agar identik dengan kolom tabel;
             // baris tanpa jam masuk tetap dikosongkan, bukan diberi "—".
             const durasi = durationSecondsFromTimestamps(row.jam_out, row.jam_in)
             const berjalan = info.status === "berjalan"
@@ -236,8 +236,8 @@ function OutboundTableImpl({
                 escape(String(row.no_polisi ?? "")),
                 escape(row.jam_out ?? ""),
                 escape(row.jam_in ?? ""),
-                durasi == null ? "" : formatClockDuration(durasi),
-                berjalan == null ? "" : formatClockDuration(berjalan),
+                durasi == null ? "" : formatClockDurationShort(durasi),
+                berjalan == null ? "" : formatClockDurationShort(berjalan),
                 escape(info.label),
             ].join(",")
         })
@@ -331,7 +331,7 @@ function OutboundTableImpl({
                 <Table className="min-w-[760px] table-fixed">
                     <TableHeader className="bg-muted/40">
                         <TableRow className="hover:bg-transparent">
-                            <TableHead className="w-12 text-center text-xs">#</TableHead>
+                            <TableHead className="w-12 text-center">#</TableHead>
                             <TableHead className="w-[160px] text-center whitespace-nowrap">
                                 <button
                                     type="button"
@@ -371,7 +371,7 @@ function OutboundTableImpl({
                                 const hoursOut = elapsedHoursSince(row.jam_out, now)
                                 return (
                                     <TableRow key={rowKey(row, i)} className="transition-colors hover:bg-muted/40">
-                                        <TableCell className="py-2.5 text-center font-mono text-xs tabular-nums text-muted-foreground">
+                                        <TableCell className="py-2.5 text-center font-mono text-sm tabular-nums text-muted-foreground">
                                             {(currentPage - 1) * pageSize + i + 1}
                                         </TableCell>
                                         <TableCell className="py-2.5 text-center">
@@ -424,22 +424,22 @@ function OutboundTableImpl({
                                                 <span
                                                     title="Durasi sejak jam keluar"
                                                     className={cn(
-                                                        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-1.5 py-1 text-xs tabular-nums",
+                                                        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-1.5 py-1 text-sm tabular-nums",
                                                         menginap
                                                             ? "bg-amber-500/10 font-medium text-amber-700 dark:text-amber-400"
                                                             : "text-muted-foreground",
                                                     )}
                                                 >
-                                                    {formatClockDuration(berjalanDetik)}
+                                                    {formatClockDurationShort(berjalanDetik)}
                                                 </span>
                                             ) : (
-                                                <span className="text-muted-foreground">
-                                                    {formatClockDuration(durasiDetik)}
+                                                <span className="text-sm text-muted-foreground">
+                                                    {formatClockDurationShort(durasiDetik)}
                                                 </span>
                                             )}
                                         </TableCell>
                                         <TableCell className="py-2.5 text-center">
-                                            <Badge variant="outline" className={cn("shrink-0", info.className)}>
+                                            <Badge variant="outline" className={cn("shrink-0 text-sm", info.className)}>
                                                 {info.label}
                                             </Badge>
                                         </TableCell>

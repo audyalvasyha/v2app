@@ -108,7 +108,7 @@ export function elapsedHoursSince(
     return diff >= 0 ? diff / 3_600_000 : null
 }
 
-/** Detik sejak jam keluar sampai sekarang — untuk durasi berjalan hh:mm:ss. */
+/** Detik sejak jam keluar sampai sekarang — untuk durasi berjalan ringkas hh:mm. */
 export function elapsedSecondsSince(
     jamOut: string | null | undefined,
     now: number = Date.now(),
@@ -164,8 +164,8 @@ export function formatDuration(minutes: number | null): string {
 
 /**
  * Durasi tempuh dalam DETIK dari pasangan timestamp ISO.
- * Dipakai kolom Durasi berformat hh:mm:ss — menit yang sudah dibulatkan tidak
- * cukup untuk itu karena detiknya akan selalu 00.
+ * Dipakai formatter durasi ringkas hh:mm supaya selisih detik tidak hilang
+ * sebelum dipotong ke menit.
  */
 export function durationSecondsFromTimestamps(
     jamOut: string | null | undefined,
@@ -190,4 +190,16 @@ export function formatClockDuration(seconds: number | null): string {
     const m = Math.floor((total % 3600) / 60)
     const s = total % 60
     return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":")
+}
+
+/**
+ * Detik → "hh:mm" untuk tampilan ringkas tanpa presisi detik.
+ * Jam tetap tidak dipotong ke 24 supaya trip lintas hari terbaca utuh.
+ */
+export function formatClockDurationShort(seconds: number | null): string {
+    if (seconds == null) return "—"
+    const totalMinutes = Math.floor(Math.max(0, seconds) / 60)
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    return [h, m].map((n) => String(n).padStart(2, "0")).join(":")
 }
