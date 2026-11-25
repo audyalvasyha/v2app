@@ -212,6 +212,12 @@ jawaban supaya jawabannya selalu bisa diperiksa.
   berapa?”) punya referensinya. Ada tombol **Bersihkan** di kepala panel.
   Kuota dibatasi 8 pertanyaan per menit per user (429 bila lewat) supaya
   kuota Gemini tidak habis oleh spam.
+- **Complaint Board**: Midaa bisa membaca ringkasan komplain lewat view
+  `ai_tasks` — isi komplain, status, umur tiket, nopol, dan nomor pengiriman.
+  Path attachment dan email user tidak ikut terekspos ke model.
+- **Halaman Tentang**: pertanyaan tentang fitur, versi, atau pengembang
+  dijawab dari konten yang sama dengan halaman Tentang (`lib/about.ts`),
+  bukan tebakan model.
 - **Keamanan**: query hanya bisa `SELECT`, dibatasi 200 baris dan timeout
   8 detik. Dijalankan dengan **JWT milik user yang sedang login**, bukan
   service role, sehingga RLS dari `auth_lockdown.sql` tetap berlaku —
@@ -221,10 +227,11 @@ jawaban supaya jawabannya selalu bisa diperiksa.
 
 1. Jalankan berurutan di SQL Editor (semua aman diulang):
    `auth_lockdown.sql` → `salesman.sql` → `skr_ringkasan.sql` →
-   `ai_query.sql` → `ai_memory.sql`.
+   `ai_query.sql` → `tasks.sql` → `ai_tasks.sql` → `ai_memory.sql`.
    Urutan itu penting: `auth_lockdown.sql` prepares grant untuk
    `authenticated`, `skr_ringkasan.sql` me-join ke tabel `salesman`, dan
-   `ai_query.sql` membaca keduanya. `ai_memory.sql` opsional — tanpa
+   `ai_query.sql` membaca keduanya. `ai_tasks.sql` membaca tabel `tasks`,
+   jadi jalankan setelah `tasks.sql`. `ai_memory.sql` opsional — tanpa
    script ini Tanya Midaa tetap jalan normal, hanya tidak mengingat
    apa-apa (panel **Ingatan** akan menampilkan petunjuk setup).
 2. Isi `GOOGLE_API_KEY` di Vercel (Project → Settings → Environment

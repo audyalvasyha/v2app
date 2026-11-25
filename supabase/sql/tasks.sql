@@ -18,6 +18,9 @@
 --  Jika script ini BELUM dijalankan: menu Complaint Board tetap terbuka dalam
 --  mode lokal (localStorage browser itu) dan UI menampilkan penanda.
 --
+--  Untuk membaca papan ini lewat Tanya Midaa, jalankan ai_tasks.sql
+--  setelah script ini.
+--
 --  Aman diulang, termasuk pada tabel versi pertama (kolom baru
 --  ditambahkan lewat ALTER di bagian bawah).
 -- ═══════════════════════════════════════════════════════════════

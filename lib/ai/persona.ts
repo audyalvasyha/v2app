@@ -21,6 +21,15 @@
  */
 
 import { KPI_MATRIKS } from "@/lib/analisa-kpi"
+import {
+  ABOUT_CAPABILITIES,
+  ABOUT_PROCESS_NOTE,
+  ABOUT_PROFILE,
+  ABOUT_SKILLS,
+  ABOUT_SPECS,
+  ABOUT_SUMMARY,
+  ABOUT_VERSION,
+} from "@/lib/about"
 
 export interface ConversationTurn {
   role: "user" | "assistant"
@@ -151,6 +160,44 @@ export function buildKpiBlock(): string {
     "- KPI yang sumbernya tertulis belum tersedia JANGAN disandingkan dengan",
     "  angka apa pun; sebut jujur datanya belum ada di app, dan kalau relevan,",
     "  data apa yang dibutuhkan supaya KPI itu bisa dihitung.",
+  ].join("\n")
+}
+
+/**
+ * Konteks halaman Tentang untuk pertanyaan non-database.
+ *
+ * Isinya diambil dari `lib/about.ts`, sumber yang sama dengan halaman
+ * Tentang, jadi saat fitur/versi/profil diubah, jawaban Midaa ikut berubah.
+ * Jangan menambahkan fakta baru khusus di sini: kalau pertanyaannya tidak
+ * tercakup, Midaa harus bilang tidak tahu, bukan mengarang.
+ */
+export function buildAboutBlock(): string {
+  const specs = ABOUT_SPECS.map((s) => `- ${s.label}: ${s.value}`).join("\n")
+  const capabilities = ABOUT_CAPABILITIES.map(
+    (c) => `- ${c.title}: ${c.desc}`,
+  ).join("\n")
+
+  return [
+    "",
+    "## Tentang aplikasi (halaman Tentang)",
+    `Midaa — Transport Management System, versi ${ABOUT_VERSION}.`,
+    ABOUT_SUMMARY,
+    "",
+    "Spesifikasi teknis:",
+    specs,
+    "",
+    "Cakupan fitur:",
+    capabilities,
+    "",
+    `Dikembangkan oleh ${ABOUT_PROFILE.name} — ${ABOUT_PROFILE.role}.`,
+    ABOUT_PROFILE.bio.replace(/\*/g, ""),
+    `Skill: ${ABOUT_SKILLS.join(", ")}.`,
+    `Kontak: ${ABOUT_PROFILE.email} · Instagram ${ABOUT_PROFILE.instagramHandle}.`,
+    "",
+    `Catatan proses: ${ABOUT_PROCESS_NOTE.replace(/\*/g, "")}`,
+    "",
+    "Gunakan bagian ini untuk pertanyaan tentang aplikasi, fitur, versi,",
+    "atau pengembang. Jangan mengarang fitur atau detail yang tidak ada di sini.",
   ].join("\n")
 }
 

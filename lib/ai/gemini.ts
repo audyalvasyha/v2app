@@ -3,6 +3,7 @@ import { callOpenKey, OpenKeyError } from "./openkey"
 import {
   AI_PERSONA,
   AI_USER_CONTEXT,
+  buildAboutBlock,
   buildHistoryBlock,
   buildKpiBlock,
   buildMemoryBlock,
@@ -486,6 +487,10 @@ function buildSqlPrompt(
     "singkatnya. JANGAN memaksakan query yang tidak nyambung. Pertanyaan umum",
     "TETAP dijawab (tahap berikutnya yang menuliskannya) — hanya bukan diminta",
     "lewat query.",
+    "",
+    "Pertanyaan tentang aplikasi, fitur, halaman Tentang, versi, atau pengembang",
+    "juga BUKAN query database. Tulis \"sql\": \"\" dan biarkan tahap narasi",
+    "menjawab dari konteks halaman Tentang.",
   )
 
   return parts.join("\n")
@@ -536,6 +541,7 @@ async function answerChatQuestion(
       "",
       AI_USER_CONTEXT,
       buildKpiBlock(),
+      buildAboutBlock(),
       ...(viewBlock ? ["", viewBlock] : []),
       "",
       buildMemoryBlock(memories),
@@ -550,6 +556,8 @@ async function answerChatQuestion(
       "  datanya perlu dicek ulang di dasbor, dan tawarkan bentuk",
       "  pertanyaan yang bisa dijawab dari data (mis. rentang waktunya,",
       "  plat atau rute yang dicek).",
+      "- Pertanyaan tentang aplikasi, fitur, versi, atau pengembang:",
+      "  jawab dari blok Tentang di atas; jangan mengarang fitur baru.",
       "- Pertanyaan tentang kamu atau user: jawab dari persona + ingatan,",
       "  jangan mengarang identitas baru.",
       "",

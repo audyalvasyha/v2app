@@ -477,6 +477,10 @@ export function AIChat({
 
       setInput("");
       setLoading(true);
+      // Kembalikan fokus ke kolom yang sama setelah kirim. Textarea tidak
+      // lagi di-disable selama loading, jadi caret tetap hidup dan user
+      // bisa menyiapkan pertanyaan berikutnya sambil menunggu jawaban.
+      inputRef.current?.focus();
       // Tombol "ingat ini" hanya berlaku untuk satu pertanyaan, jadi
       // langsung dimatikan lagi supaya kalimat berikutnya tidak ikut
       // tersimpan tanpa disadari.
@@ -562,7 +566,8 @@ export function AIChat({
         // Pertanyaan dikembalikan ke kolom input: kalau jawabannya error,
         // user biasanya mau mengulang atau merapikan kalimatnya — tanpa ini
         // dia harus mengetik ulang dari nol (input sudah dikosongkan di awal).
-        setInput(trimmed);
+        // Jangan timpa draft baru yang sempat diketik selama menunggu.
+        setInput((current) => (current.trim() ? current : trimmed));
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -613,12 +618,11 @@ export function AIChat({
         }}
         rows={1}
         maxLength={1000}
-        disabled={loading}
         aria-label="Pertanyaan untuk asisten AI"
         placeholder={pageMode ? "Tanya apa saja." : rememberNext ? "Ketik yang mau diingat…" : "Tanya apa saja… (Enter kirim, Shift+Enter baris baru)"}
         className={pageMode
-          ? "max-h-40 min-h-10 flex-1 resize-none overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-transparent px-2 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none disabled:opacity-50"
-          : "max-h-[120px] min-h-[2.25rem] flex-1 resize-none rounded-sm border border-input bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"}
+          ? "max-h-40 min-h-10 flex-1 resize-none overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-transparent px-2 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none"
+          : "max-h-[120px] min-h-[2.25rem] flex-1 resize-none rounded-sm border border-input bg-transparent px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"}
       />
       {pageMode ? (
         <div className="flex shrink-0 items-center gap-1">
