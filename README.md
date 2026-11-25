@@ -346,7 +346,7 @@ kedua wajib diunggah saat status diubah ke **Selesai**. Jalankan ulang
 `supabase/sql/tasks.sql` agar constraint database yang menolak status Selesai
 tanpa dokumentasi ikut terpasang.
 
-Variabel cron reminder email (Vercel Cron, `api/cron/service-reminder`):
+Variabel cron email (Vercel Cron):
 
 ```bash
 # WAJIB — endpoint menolak semua request tanpa header ini (fail-closed).
@@ -354,10 +354,17 @@ Variabel cron reminder email (Vercel Cron, `api/cron/service-reminder`):
 # sebagai `Authorization: Bearer <CRON_SECRET>`.
 CRON_SECRET=<string-acak-panjang>
 
-RESEND_API_KEY=<resend-api-key>      # wajib agar email terkirim
-REMINDER_EMAIL_TO=<penerima>          # opsional
-REMINDER_EMAIL_CC=<cc-koma-koma>      # opsional
+RESEND_API_KEY=<resend-api-key>       # wajib agar email terkirim
+REMINDER_EMAIL_TO=<penerima>           # opsional, reminder servis
+REMINDER_EMAIL_CC=<cc-koma-koma>       # opsional, reminder servis
+COMPLAINT_REMINDER_TO=<email-admin>    # opsional, default admin utama
 ```
+
+`api/cron/service-reminder` mengirim jadwal servis tiap 09.00 WIB.
+`api/cron/complaint-reminder` mengirim digest komplain tiap 08.00 WIB hanya
+jika ada tiket berumur 3 hari+; tiket 7 hari+ ditandai terlambat. Penerima
+digest default adalah admin utama dan bisa dioverride lewat
+`COMPLAINT_REMINDER_TO`.
 
 Dua variabel pertama wajib; service-role baru dibutuhkan setelah akses data
 dikunci khusus user terdaftar (sebelum itu cron masih berjalan dengan klien

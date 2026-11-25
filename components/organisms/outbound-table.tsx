@@ -30,7 +30,7 @@ import {
 import { FilterToolbar } from "@/components/molecules/filter-toolbar"
 import { FilterChips } from "@/components/molecules/filter-chips"
 import { cn } from "@/lib/utils"
-import { APP_TIMEZONE, formatNumber, startOfZonedDay } from "@/lib/format"
+import { APP_TIMEZONE, formatNumber } from "@/lib/format"
 import {
     durationMinutesFromTimestamps,
     durationSecondsFromTimestamps,
@@ -62,7 +62,6 @@ type StatusFilter = "all" | OutboundStatus | "menginap"
 
 const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
     { id: "all", label: "Semua" },
-    { id: "menunggu", label: "Menunggu" },
     { id: "berjalan", label: "Berjalan" },
     { id: "menginap", label: "Menginap" },
     { id: "selesai", label: "Selesai" },
@@ -203,27 +202,6 @@ function OutboundTableImpl({
         return arr
     }, [filtered, sortKey])
 
-    // Ritase hari ini — jumlah trip yang sudah keluar sejak 00:00 WIB,
-    // dikelompokkan per nopol supaya terlihat unit mana yang paling produktif.
-    const ritase = useMemo(() => {
-        const dayStart = startOfZonedDay(new Date(now))
-        const dayEnd = dayStart + 86_400_000
-        const byPlate = new Map<string, number>()
-        let total = 0
-        for (const row of outbounds) {
-            if (!row.jam_out) continue
-            const t = new Date(row.jam_out).getTime()
-            if (Number.isNaN(t) || t < dayStart || t >= dayEnd) continue
-            total += 1
-            const plate = String(row.no_polisi ?? "").trim() || "Tanpa nopol"
-            byPlate.set(plate, (byPlate.get(plate) ?? 0) + 1)
-        }
-        const units = Array.from(byPlate.entries())
-            .map(([plate, count]) => ({ plate, count }))
-            .sort((a, b) => b.count - a.count)
-        return { total, units, activeUnits: units.length }
-    }, [outbounds, now])
-
     const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
     const currentPage = Math.min(page, totalPages)
 
@@ -290,41 +268,6 @@ function OutboundTableImpl({
 
     return (
         <div className="space-y-4">
-            {/* Ritase hari ini — produktivitas per unit sejak 00:00 WIB */}
-            {ritase.total > 0 && (
-                <div className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                            <p className="text-xs font-semibold text-muted-foreground">
-                                Ritase hari ini
-                            </p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                                {formatNumber(ritase.total)} trip dari {formatNumber(ritase.activeUnits)} unit sejak 00:00 WIB
-                            </p>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                            {ritase.units.slice(0, 6).map((unit) => (
-                                <Badge
-                                    key={unit.plate}
-                                    variant="outline"
-                                    className="gap-1.5 bg-muted/30"
-                                >
-                                    {unit.plate}
-                                    <span className="rounded-[2px] bg-background px-1 py-px font-mono text-[9px] tracking-normal">
-                                        {unit.count}×
-                                    </span>
-                                </Badge>
-                            ))}
-                            {ritase.units.length > 6 && (
-                                <Badge variant="outline" className="bg-muted/30">
-                                    +{ritase.units.length - 6} unit
-                                </Badge>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* KONTROL — kiri: rentang tanggal; kanan: reset + export + urutan + paginasi */}
             <FilterToolbar
                 date={{
@@ -335,21 +278,11 @@ function OutboundTableImpl({
                     isFetching,
                 }}
                 actions={
-                    <>
-                        {statusFilter !== "all" && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 gap-1.5 text-muted-foreground"
-                                onClick={() => setStatusFilter("all")}
-                            >
-                                <X className="h-3.5 w-3.5" /> Bersihkan filter
-                            </Button>
-                        )}
+                    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                         <Button
                             variant="outline"
                             size="sm"
-                            className="h-8 gap-1.5 bg-card"
+                            className="col-span-2 h-9 w-full gap-1.5 bg-card sm:col-span-1 sm:h-8 sm:w-auto"
                             onClick={handleExportCsv}
                             disabled={rows.length === 0}
                         >
@@ -357,7 +290,7 @@ function OutboundTableImpl({
                         </Button>
 
                         <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
-                            <SelectTrigger className="h-8 w-[150px] bg-card">
+                            <SelectTrigger className="h-9 w-full bg-card sm:h-8 sm:w-[150px]">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -369,7 +302,7 @@ function OutboundTableImpl({
                         </Select>
 
                         <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
-                            <SelectTrigger className="h-8 w-[112px] bg-card">
+                            <SelectTrigger className="h-9 w-full bg-card sm:h-8 sm:w-[112px]">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -380,7 +313,7 @@ function OutboundTableImpl({
                                 ))}
                             </SelectContent>
                         </Select>
-                    </>
+                    </div>
                 }
             />
 
@@ -390,6 +323,7 @@ function OutboundTableImpl({
                 options={STATUS_FILTERS}
                 value={statusFilter}
                 onChange={setStatusFilter}
+                className="w-full flex-wrap overflow-visible"
             />
 
             {/* TABEL */}

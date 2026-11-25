@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import dynamic from "next/dynamic"
 import { ArrowUpRight } from "lucide-react"
 import { useTheme } from "@/hooks/use-theme"
+import { useComplaintAlerts } from "@/hooks/use-complaint-alerts"
+
 import { supabase } from "@/utils/supabase"
 import type { EquipmentFilters } from "@/components/search-bar"
 import type { GlobalSearchItem, GlobalSearchGroupCount } from "@/components/molecules/global-search-dropdown"
@@ -361,6 +363,21 @@ function DashboardContent() {
 
   /** Menu yang boleh dibuka peran aktif — dipakai sidebar, search, dan guard. */
   const permittedViews = useMemo(() => allowedViews(userRole), [userRole])
+
+  // Tautan email digest memakai ?view=tugas. Terapkan sekali setelah role
+  // diketahui supaya link eksternal langsung membuka papan yang dimaksud,
+  // tanpa membuat hydration mismatch saat halaman masih dirender server.
+  const deepLinkApplied = useRef(false)
+  useEffect(() => {
+    if (!roleLoaded || deepLinkApplied.current) return
+    deepLinkApplied.current = true
+    const requested = new URLSearchParams(window.location.search).get('view') as View | null
+    if (!requested || !permittedViews.includes(requested)) return
+    setActiveView(requested)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('view')
+    window.history.replaceState({}, '', url)
+  }, [roleLoaded, permittedViews])
 
   // Guard: menu di luar izin (mis. dari shortcut/notifikasi) dipulangkan ke
   // dashboard untuk admin, atau menu pertama yang diizinkan untuk role terbatas.
@@ -1166,8 +1183,8 @@ function DashboardContent() {
   // Root "Midaa" bukan rute terpisah; parent menandai grup menu di sidebar.
   const breadcrumbTrail: Record<View, string[]> = {
     dashboard: ['Midaa', 'Dashboard'],
-    tugas: ['Midaa', 'Complaint Board'],
-    review: ['Midaa', 'Review'],
+    tugas: ['Midaa', 'Ekspedisi', 'Complaint Board'],
+    review: ['Midaa', 'Ekspedisi', 'Review'],
     equipment: ['Midaa', 'Fleet', 'Equipment'],
     maintenance: ['Midaa', 'Fleet', 'Histories'],
     monitoring: ['Midaa', 'Fleet', 'Servis Rutin'],
@@ -1195,16 +1212,31 @@ function DashboardContent() {
   usePageTitle(headerInfo[activeView].title)
 
   // Peringatan operasional untuk lonceng di header. Dihitung ulang tiap 5
-  // menit supaya ambang keterlambatan pengiriman ikut berjalan tanpa reload.
+  // menit supaya ambang keterlambatan pengiriman dan umur komplain ikut
+  // berjalan tanpa reload.
   const [alertTick, setAlertTick] = useState(0)
   useEffect(() => {
     const id = window.setInterval(() => setAlertTick((t) => t + 1), 5 * 60 * 1000)
     return () => window.clearInterval(id)
   }, [])
+  // Tiket komplain dimuat terpisah dari papan karena lonceng hidup di semua
+  // menu; hook ini mendengarkan perubahan dari papan.
+  const complaintAlertTasks = useComplaintAlerts()
   const alerts = useMemo(
-    () => buildAlerts({ equipments, serviceLogs, outbounds }),
+    () => buildAlerts({
+      equipments,
+      serviceLogs,
+      outbounds,
+      tasks: complaintAlertTasks,
+    }),
     // alertTick sengaja jadi pemicu hitung ulang, bukan dipakai di dalam.
-    [equipments, serviceLogs, outbounds, alertTick],
+    [equipments, serviceLogs, outbounds, complaintAlertTasks, alertTick],
+  )
+  // Role terbatas hanya boleh membuka Complaint Board; jangan tampilkan alert
+  // servis/pengiriman yang menuju menu khusus admin.
+  const visibleAlerts = useMemo(
+    () => (userRole === 'admin' ? alerts : alerts.filter((alert) => alert.view === 'tugas')),
+    [alerts, userRole],
   )
 
   return (
@@ -1223,9 +1255,10 @@ function DashboardContent() {
       searchItems={searchResults.items}
       searchCounts={searchResults.counts}
       onSearchSelect={handleViewChange}
-      alerts={alerts}
-      // Lonceng hanya untuk admin: hampir semua peringatan menuju menu Fleet.
-      onSelectAlert={userRole === 'admin' ? handleViewChange : undefined}
+      alerts={visibleAlerts}
+      // Admin melihat semua kategori; role terbatas hanya alert komplain yang
+      // memang boleh dibuka dari sidebar-nya.
+      onSelectAlert={handleViewChange}
     >
       <div
         className={

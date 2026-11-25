@@ -120,7 +120,7 @@ export function DateRangeField({ idPrefix, from, to, onApply, isFetching, classN
                         type="button"
                         variant="outline"
                         className={cn(
-                            "h-9 gap-2 rounded-sm bg-card px-3 font-mono text-sm",
+                            "h-9 w-full justify-start gap-2 rounded-sm bg-card px-3 font-mono text-sm sm:w-auto",
                             open && "border-primary/50 ring-1 ring-primary/25",
                         )}
                     >

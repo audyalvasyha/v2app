@@ -51,7 +51,7 @@ export function FilterToolbar({
       )}
     >
       <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
-        <DateRangeField {...date} />
+        <DateRangeField {...date} className="w-full sm:w-auto" />
         {search && (
           /* Search boleh melebar (max-w-lg, bukan sm): kolom tengah
                       biasanya punya banyak sisa ruang, dan kotak 24rem yang

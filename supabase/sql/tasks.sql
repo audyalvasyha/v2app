@@ -67,8 +67,10 @@ alter table public.tasks
   add column if not exists resolved_by    text,
   add column if not exists resolved_at    timestamptz;
 
--- Tidak ada kolom tenggat: tiket yang belum selesai 3 hari otomatis
--- ditampilkan prioritas Tinggi, dihitung aplikasi dari created_at.
+-- Tidak ada kolom tenggat: tiket yang belum selesai otomatis naik ke
+-- "Perlu FU" setelah 3 hari dan "Terlambat" setelah 7 hari, dihitung
+-- aplikasi dari created_at. Kolom priority dipertahankan untuk data lama,
+-- tetapi tidak lagi dipakai UI.
 -- Status Selesai tidak boleh lolos tanpa dokumentasi penyelesaian. Form
 -- sudah memvalidasi, tetapi constraint ini menjaga jalur tulis langsung ke
 -- tabel/API tetap aman. NOT VALID membuat baris lama tidak memblokir migrasi;

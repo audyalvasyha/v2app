@@ -12,10 +12,11 @@ import {
 } from "@/lib/complaint-summary"
 import { formatDateShort, formatDateTimeWIB, formatNumber } from "@/lib/format"
 import {
-    effectivePriority,
     normalizeTaskStatus,
     shortUser,
     statusLabel,
+    ticketAgeLabel,
+    ticketAgeLevel,
     type Task,
 } from "@/lib/tasks"
 import { cn } from "@/lib/utils"
@@ -280,7 +281,7 @@ function ReviewDetail({
                                 task.status,
                             ) as ComplaintDisplayStatus
                             const meta = STATUS_META[status]
-                            const priority = effectivePriority(task)
+                            const ageLevel = ticketAgeLevel(task)
                             return (
                                 <li key={task.id} className="relative pb-5 pl-4 last:pb-0">
                                     <span
@@ -307,9 +308,18 @@ function ReviewDetail({
                                             <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
                                                 {formatDateShort(task.created_at)}
                                             </span>
-                                            {priority === "high" && (
-                                                <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-rose-700 dark:text-rose-400">
-                                                    Prioritas tinggi
+                                            {status !== "done" && (
+                                                <span
+                                                    className={cn(
+                                                        "text-[9px] font-semibold uppercase tracking-[0.12em]",
+                                                        ageLevel === "overdue"
+                                                            ? "text-rose-700 dark:text-rose-400"
+                                                            : ageLevel === "attention"
+                                                              ? "text-amber-700 dark:text-amber-400"
+                                                              : "text-muted-foreground",
+                                                    )}
+                                                >
+                                                    {ticketAgeLabel(task)}
                                                 </span>
                                             )}
                                         </span>

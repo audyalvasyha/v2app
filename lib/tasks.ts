@@ -24,6 +24,7 @@ export interface Task {
     /** Catatan tindakan / hasil follow up */
     description: string | null
     status: TaskStatus
+    /** Kolom warisan; UI memakai level umur tiket, bukan prioritas manual. */
     priority: TaskPriority
     /** Identitas pengiriman yang dikomplain */
     sales_name: string | null
@@ -54,7 +55,6 @@ export interface TaskInput {
     title: string
     description: string | null
     status: TaskStatus
-    priority: TaskPriority
     sales_name: string | null
     license_plate: string | null
     delivery_no: string | null
@@ -113,36 +113,16 @@ export function normalizeTaskStatus(status: TaskStatus): TaskStatus {
     return status === "blocked" ? "progress" : status
 }
 
-export const TASK_PRIORITIES: { id: TaskPriority; label: string }[] = [
-    { id: "high", label: "Tinggi" },
-    { id: "normal", label: "Sedang" },
-    { id: "low", label: "Rendah" },
-]
-
 export function statusLabel(status: TaskStatus): string {
     return TASK_STATUSES.find((s) => s.id === normalizeTaskStatus(status))?.label ?? status
 }
 
-export function priorityLabel(priority: TaskPriority): string {
-    return TASK_PRIORITIES.find((p) => p.id === priority)?.label ?? priority
-}
-
-/**
- * Warna badge prioritas mengikuti tingkat urgensi: rendah hijau, sedang
- * kuning, tinggi merah — sama seperti palet status di papan.
- */
-export function priorityClass(priority: TaskPriority): string {
-    if (priority === "high") {
-        return "border-rose-600/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
-    }
-    if (priority === "low") {
-        return "border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-    }
-    return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-}
-
-/** Ambang otomatis naik ke prioritas Tinggi (hari sejak tiket dibuat). */
+/** Ambang tiket belum selesai mulai perlu di-FU (hari sejak dibuat). */
 export const ESCALATION_DAYS = 3
+/** Ambang tiket dianggap terlambat dan dieskalasi ke admin. */
+export const OVERDUE_DAYS = 7
+
+export type TaskAgeLevel = "fresh" | "attention" | "overdue"
 
 const DAY_MS = 86_400_000
 
@@ -157,21 +137,47 @@ export function ticketAgeDays(
 }
 
 /**
- * Prioritas EFEKTIF yang ditampilkan: tiket yang belum selesai lebih dari
- * `ESCALATION_DAYS` hari otomatis dianggap "high". Nilai `priority` di
- * database tidak ditimpa, jadi riwayat pilihan user tetap utuh.
+ * Tingkat umur tiket yang dipakai seluruh UI. Prioritas manual tidak lagi
+ * dibaca: tiket yang belum selesai otomatis naik ke "attention" setelah 3
+ * hari dan "overdue" setelah 7 hari, sehingga tidak ada nilai yang perlu
+ * dirawat manual dan semua tampilan memakai ambang yang sama.
  */
-export function effectivePriority(
-    task: Pick<Task, "status" | "priority" | "created_at">,
+export function ticketAgeLevel(
+    task: Pick<Task, "status" | "created_at">,
     now: number = Date.now(),
-): TaskPriority {
-    if (task.status !== "done" && ticketAgeDays(task, now) >= ESCALATION_DAYS) {
-        return "high"
-    }
-    return task.priority
+): TaskAgeLevel {
+    if (task.status === "done") return "fresh"
+    const days = ticketAgeDays(task, now)
+    if (days >= OVERDUE_DAYS) return "overdue"
+    if (days >= ESCALATION_DAYS) return "attention"
+    return "fresh"
 }
 
-/** True bila tiket sudah melewati ambang eskalasi dan belum selesai. */
+/** Label umur tiket untuk badge papan, Review, dan digest email. */
+export function ticketAgeLabel(
+    task: Pick<Task, "status" | "created_at">,
+    now: number = Date.now(),
+): string {
+    const days = Math.floor(ticketAgeDays(task, now))
+    const level = ticketAgeLevel(task, now)
+    if (level === "overdue") return `Terlambat ${days} hari`
+    if (level === "attention") return `Perlu FU ${days} hari`
+    if (days <= 0) return "Hari ini"
+    return `${days} hari`
+}
+
+/** Warna badge umur tiket: netral, kuning, lalu merah saat terlambat. */
+export function ticketAgeClass(level: TaskAgeLevel): string {
+    if (level === "overdue") {
+        return "border-rose-600/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+    }
+    if (level === "attention") {
+        return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+    }
+    return "border-border/70 bg-muted/40 text-muted-foreground"
+}
+
+/** True bila tiket sudah melewati ambang "perlu FU" dan belum selesai. */
 export function isEscalated(
     task: Pick<Task, "status" | "created_at">,
     now: number = Date.now(),
@@ -179,13 +185,21 @@ export function isEscalated(
     return task.status !== "done" && ticketAgeDays(task, now) >= ESCALATION_DAYS
 }
 
-/** Urutan dalam kolom: prioritas efektif, lalu yang paling lama menunggu. */
-const PRIORITY_WEIGHT: Record<TaskPriority, number> = { high: 0, normal: 1, low: 2 }
+/** True bila tiket sudah melewati ambang terlambat (7 hari). */
+export function isOverdue(
+    task: Pick<Task, "status" | "created_at">,
+    now: number = Date.now(),
+): boolean {
+    return task.status !== "done" && ticketAgeDays(task, now) >= OVERDUE_DAYS
+}
+
+/** Urutan dalam kolom: yang paling terlambat, lalu paling lama menunggu. */
+const AGE_WEIGHT: Record<TaskAgeLevel, number> = { overdue: 0, attention: 1, fresh: 2 }
 
 export function sortTasks(a: Task, b: Task, now: number = Date.now()): number {
-    const pa = PRIORITY_WEIGHT[effectivePriority(a, now)] ?? 1
-    const pb = PRIORITY_WEIGHT[effectivePriority(b, now)] ?? 1
-    if (pa !== pb) return pa - pb
+    const la = ticketAgeLevel(a, now)
+    const lb = ticketAgeLevel(b, now)
+    if (la !== lb) return AGE_WEIGHT[la] - AGE_WEIGHT[lb]
     return (a.created_at ?? "").localeCompare(b.created_at ?? "")
 }
 
@@ -249,6 +263,14 @@ export function withTaskSchemaHint(message: string): string {
         (m.includes("schema cache") || m.includes("does not exist"))
     if (!missingColumn) return message
     return `${message} — jalankan ulang supabase/sql/tasks.sql untuk menambah kolom baru.`
+}
+
+/** Event internal: data komplain berubah dan lonceng perlu memuat ulang. */
+export const TASKS_CHANGED_EVENT = "midaa:tasks-changed"
+
+export function announceTasksChanged(): void {
+    if (typeof window === "undefined") return
+    window.dispatchEvent(new Event(TASKS_CHANGED_EVENT))
 }
 
 /** "budi@perusahaan.com" → "budi" — email utuh tetap ada di tooltip. */

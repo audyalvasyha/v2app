@@ -39,7 +39,7 @@ import {
 import { isMaintenanceStatus } from "@/lib/unit-status";
 import { cn } from "@/lib/utils";
 import type { View } from "@/components/templates/dashboard-layout";
-import { AlertTriangle, ArrowRight, CheckCircle2, MessageSquareText, Wrench } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, CheckCircle2, ListChecks } from "lucide-react";
 
 interface DashboardViewProps {
   equipments: any[];
@@ -114,19 +114,23 @@ function DashboardHeader({ onNavigate }: { onNavigate?: (view: View) => void }) 
         <Button
           size="sm"
           variant="outline"
-          className="w-full gap-1.5 bg-card sm:w-auto"
+          className="w-full gap-2 bg-card sm:w-auto"
           onClick={() => onNavigate?.("tugas")}
         >
-          <MessageSquareText className="h-3.5 w-3.5" />
-          Papan komplain
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border border-border/70 bg-muted/50">
+            <ListChecks className="h-3 w-3" />
+          </span>
+          Complain board
         </Button>
         <Button
           size="sm"
           variant="outline"
-          className="w-full gap-1.5 bg-card sm:w-auto"
+          className="w-full gap-2 bg-card sm:w-auto"
           onClick={() => onNavigate?.("monitoring")}
         >
-          <Wrench className="h-3.5 w-3.5" />
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border border-border/70 bg-muted/50">
+            <Activity className="h-3 w-3" />
+          </span>
           Servis
         </Button>
       </div>
@@ -361,9 +365,9 @@ function AttentionCard({
   const complaintDetail = tasksLoading
     ? "Memuat komplain…"
     : tasksUnavailable
-      ? "Papan komplain belum tersambung"
+      ? "Complain board belum tersambung"
       : openTasks.length > 0
-        ? `${formatNumber(escalatedCount)} eskalasi${oldestTaskDays != null ? ` · tertua ${Math.floor(oldestTaskDays)} hari` : ""}`
+        ? `${formatNumber(escalatedCount)} perlu FU${oldestTaskDays != null ? ` · tertua ${Math.floor(oldestTaskDays)} hari` : ""}`
         : "Tidak ada komplain terbuka";
   const lateDetail =
     lateTrips.length > 0
@@ -766,7 +770,7 @@ function DashboardContent({
     setTasksLoading(true);
     supabase
       .from("tasks")
-      .select("id,title,status,priority,customer_no,license_plate,delivery_no,freight_order,created_at")
+      .select("id,title,status,customer_no,license_plate,delivery_no,freight_order,created_at")
       // Dashboard hanya memakai komplain terbuka; jangan bawa arsip Selesai.
       .neq("status", "done")
       .order("created_at", { ascending: true })

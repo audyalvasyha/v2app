@@ -3,6 +3,10 @@
         {
             "path": "/api/cron/service-reminder",
             "schedule": "0 2 * * *"
+        },
+        {
+            "path": "/api/cron/complaint-reminder",
+            "schedule": "0 1 * * *"
         }
     ]
 }

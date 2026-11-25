@@ -218,16 +218,24 @@ export function WeatherView() {
 
     return (
         <div className="space-y-4">
-            {/* Bar status: sumber data + waktu pembaruan + refresh manual */}
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>
+            {/* Bar status: waktu pembaruan di kiri, refresh ringkas di kanan.
+                Di ponsel tombol jadi ikon saja supaya tidak turun baris. */}
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span className="min-w-0 truncate">
                     Diperbarui {formatTime(updatedAt)} WIB
                     {" · "}
                     <span className="tabular-nums">{WEATHER_LOCATIONS.length} titik pantau</span>
                 </span>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={refresh}>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 shrink-0 gap-1.5 px-2.5 sm:px-3"
+                    onClick={refresh}
+                    title="Muat ulang perkiraan cuaca"
+                    aria-label="Muat ulang perkiraan cuaca"
+                >
                     <RefreshCw className="h-3.5 w-3.5" />
-                    Muat ulang
+                    <span className="hidden sm:inline">Muat ulang</span>
                 </Button>
             </div>
 

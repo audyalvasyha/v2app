@@ -113,26 +113,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           />
         )}
 
-        {can('tugas') && (
-          <SidebarButton
-            icon={ListChecks}
-            label="Complaint Board"
-            active={activeView === 'tugas'}
-            collapsed={collapsed}
-            onClick={() => onViewChange('tugas')}
-          />
-        )}
-
-        {can('review') && (
-          <SidebarButton
-            icon={ClipboardCheck}
-            label="Review"
-            active={activeView === 'review'}
-            collapsed={collapsed}
-            onClick={() => onViewChange('review')}
-          />
-        )}
-
         {(can('monitoring') || can('equipment') || can('maintenance') || can('ban')) && (
           <>
             {collapsed && <SidebarSectionLabel label="Fleet" collapsed />}
@@ -204,16 +184,6 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
 
         <SidebarSectionLabel label="Ekspedisi" collapsed={collapsed} />
 
-        {can('analisa') && (
-          <SidebarButton
-            icon={BotMessageSquare}
-            label="Analisa"
-            active={activeView === 'analisa'}
-            collapsed={collapsed}
-            onClick={() => onViewChange('analisa')}
-          />
-        )}
-
         {can('skr') && (
           <SidebarButton
             icon={Boxes}
@@ -224,6 +194,26 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
           />
         )}
 
+        {can('tugas') && (
+          <SidebarButton
+            icon={ListChecks}
+            label="Complaint Board"
+            active={activeView === 'tugas'}
+            collapsed={collapsed}
+            onClick={() => onViewChange('tugas')}
+          />
+        )}
+
+        {can('review') && (
+          <SidebarButton
+            icon={ClipboardCheck}
+            label="Review"
+            active={activeView === 'review'}
+            collapsed={collapsed}
+            onClick={() => onViewChange('review')}
+          />
+        )}
+
         {can('pengiriman') && (
           <SidebarButton
             icon={Send}
@@ -231,6 +221,16 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
             active={activeView === 'pengiriman'}
             collapsed={collapsed}
             onClick={() => onViewChange('pengiriman')}
+          />
+        )}
+
+        {can('analisa') && (
+          <SidebarButton
+            icon={BotMessageSquare}
+            label="Analisa"
+            active={activeView === 'analisa'}
+            collapsed={collapsed}
+            onClick={() => onViewChange('analisa')}
           />
         )}
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, Bell, PackageX, Wrench, X } from "lucide-react"
+import { AlertTriangle, Bell, PackageX, Repeat, Wrench, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -12,6 +12,7 @@ type AlertFilter = "all" | AlertCategory
 
 const FILTERS: { id: AlertFilter; label: string }[] = [
     { id: "all", label: "Semua" },
+    { id: "complaint", label: "Komplain" },
     { id: "service", label: "Servis" },
     { id: "outbound", label: "Pengiriman" },
 ]
@@ -32,7 +33,13 @@ function TabCount({ count, active }: { count: number; active: boolean }) {
 
 function AlertItem({ alert, onSelect }: { alert: AppAlert; onSelect: (view: AlertView) => void }) {
     const Icon =
-        alert.category === "outbound" ? PackageX : alert.tone === "danger" ? AlertTriangle : Wrench
+        alert.category === "complaint"
+            ? PackageX
+            : alert.category === "outbound"
+              ? Repeat
+              : alert.tone === "danger"
+                ? AlertTriangle
+                : Wrench
 
     return (
         <li>
@@ -73,23 +80,32 @@ function AlertList({
     const visible = filter === "all" ? alerts : alerts.filter((alert) => alert.category === filter)
 
     if (visible.length === 0) {
-        const EmptyIcon = filter === "service" ? Wrench : filter === "outbound" ? PackageX : Bell
+        const EmptyIcon =
+            filter === "complaint"
+                ? PackageX
+                : filter === "service"
+                  ? Wrench
+                  : filter === "outbound"
+                    ? Repeat
+                    : Bell
         return (
             <div className="px-4 py-7 text-center">
                 <EmptyIcon aria-hidden="true" className="mx-auto h-4 w-4 text-muted-foreground/70" />
                 <p className="mt-2 text-[11px] text-muted-foreground">
-                    {filter === "service"
-                        ? "Tidak ada servis yang perlu perhatian."
-                        : filter === "outbound"
-                          ? "Tidak ada pengiriman yang terlambat."
-                          : "Tidak ada notifikasi."}
+                    {filter === "complaint"
+                        ? "Tidak ada komplain yang perlu follow-up."
+                        : filter === "service"
+                          ? "Tidak ada servis yang perlu perhatian."
+                          : filter === "outbound"
+                            ? "Tidak ada pengiriman yang terlambat."
+                            : "Tidak ada notifikasi."}
                 </p>
             </div>
         )
     }
 
     return (
-        <ul className="max-h-[min(50dvh,19rem)] divide-y divide-border/40 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ul className="max-h-[min(60dvh,22.8rem)] divide-y divide-border/40 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {visible.map((alert) => (
                 <AlertItem key={alert.id} alert={alert} onSelect={onSelect} />
             ))}
@@ -101,9 +117,10 @@ function AlertList({
  * Lonceng notifikasi operasional di header.
  *
  * Isinya bukan feed aktivitas, melainkan hal yang benar-benar perlu ditindak
- * hari ini: servis terlewat/mendekat dan unit yang belum kembali dari
- * pengiriman. Tab memisahkan kedua kategori supaya panel tetap terbaca saat
- * jumlah alert bertambah. Setiap item mengarah ke menu sumbernya.
+ * hari ini: servis terlewat/mendekat, unit yang belum kembali dari pengiriman,
+ * dan komplain yang mandek lebih dari 3 hari. Tab memisahkan kategori supaya
+ * panel tetap terbaca saat jumlah alert bertambah. Setiap item mengarah ke
+ * menu sumbernya.
  */
 export function NotificationsBell({
     alerts,
@@ -118,6 +135,7 @@ export function NotificationsBell({
 
     const counts: Record<AlertFilter, number> = {
         all: alerts.length,
+        complaint: alerts.filter((alert) => alert.category === "complaint").length,
         service: alerts.filter((alert) => alert.category === "service").length,
         outbound: alerts.filter((alert) => alert.category === "outbound").length,
     }
@@ -167,7 +185,7 @@ export function NotificationsBell({
                 sideOffset={8}
                 collisionPadding={12}
                 aria-label="Notifikasi"
-                className="w-[calc(100vw_-_1.5rem)] overflow-hidden rounded-lg border-border/70 p-0 shadow-md sm:w-[21.5rem]"
+                className="w-[calc(100vw_-_1.5rem)] overflow-hidden rounded-lg border-border/70 p-0 shadow-md sm:w-[25.8rem]"
             >
                 <div className="flex items-center justify-between gap-3 px-3.5 pb-1 pt-3.5">
                     <p className="text-sm font-medium leading-none tracking-tight">Notifikasi</p>

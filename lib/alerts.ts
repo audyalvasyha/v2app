@@ -1,25 +1,27 @@
 /**
  * Sumber tunggal peringatan operasional untuk lonceng notifikasi di header.
  *
- * Dua kelompok yang benar-benar butuh tindakan hari ini:
+ * Tiga kelompok yang benar-benar butuh tindakan hari ini:
  *  1. Jadwal servis  — unit terlewat atau mendekati batas tanggal/odometer.
  *  2. Pengiriman     — unit sudah keluar melewati ambang tapi belum kembali.
+ *  3. Komplain       — tiket belum selesai yang sudah berumur 3 hari atau 7 hari.
  *
- * Aturan statusnya sama persis dengan tabel & dashboard karena memakai
- * `evaluateServiceStatus` dan `isOutboundLate` yang sama — tidak ada logika
- * kedua yang bisa meleset dari tampilan menu.
+ * Aturan statusnya sama persis dengan tabel, papan, dan digest email karena
+ * memakai helper bersama — tidak ada logika kedua yang bisa meleset dari
+ * tampilan menu.
  */
 
 import { evaluateServiceStatus } from "./service-status"
 import { elapsedHoursSince, isOutboundLate, OUTBOUND_LATE_HOURS } from "./outbound-status"
+import { ticketAgeDays, ticketAgeLevel, type Task } from "./tasks"
 
 export type AlertTone = "danger" | "warning"
 
 /** Kelompok notifikasi untuk tab panel header. */
-export type AlertCategory = "service" | "outbound"
+export type AlertCategory = "service" | "outbound" | "complaint"
 
 /** Menu tujuan saat notifikasi diklik. */
-export type AlertView = "monitoring" | "pengiriman"
+export type AlertView = "monitoring" | "pengiriman" | "tugas"
 
 export interface AppAlert {
     id: string
@@ -30,16 +32,23 @@ export interface AppAlert {
     view: AlertView
 }
 
+type ComplaintAlertTask = Pick<
+    Task,
+    "id" | "title" | "status" | "created_at" | "license_plate" | "delivery_no"
+>
+
 interface BuildAlertsInput {
     equipments: any[]
     serviceLogs: any[]
     outbounds: any[]
+    tasks?: ComplaintAlertTask[]
     now?: number
 }
 
 /** Batas jumlah kartu per kategori supaya panel tidak memanjang tanpa ujung. */
 const MAX_SERVICE_ALERTS = 4
 const MAX_OUTBOUND_ALERTS = 3
+const MAX_COMPLAINT_ALERTS = 4
 
 function latestLogByUnit(serviceLogs: any[]): Map<string, any> {
     const latest = new Map<string, any>()
@@ -58,6 +67,7 @@ export function buildAlerts({
     equipments,
     serviceLogs,
     outbounds,
+    tasks = [],
     now = Date.now(),
 }: BuildAlertsInput): AppAlert[] {
     const alerts: AppAlert[] = []
@@ -150,6 +160,53 @@ export function buildAlerts({
             title: `+${remainingLate} pengiriman belum kembali`,
             description: `Sudah melewati ${OUTBOUND_LATE_HOURS} jam tanpa jam masuk`,
             view: "pengiriman",
+        })
+    }
+
+    // ── 3. Komplain yang mandek ───────────────────────────────────────
+    // Hanya tiket yang sudah melewati ambang 3 hari (perlu FU) atau 7 hari
+    // (terlambat). Tiket baru tidak dimasukkan supaya lonceng tidak berisik.
+    const staleComplaints = tasks
+        .filter((task) => task.status !== "done")
+        .map((task) => ({
+            task,
+            days: Math.floor(ticketAgeDays(task, now)),
+            level: ticketAgeLevel(task, now),
+        }))
+        .filter((row) => row.level !== "fresh")
+        .sort((a, b) => b.days - a.days)
+
+    for (const row of staleComplaints.slice(0, MAX_COMPLAINT_ALERTS)) {
+        const identity = [
+            row.task.license_plate?.trim() || null,
+            row.task.delivery_no ? `DO ${row.task.delivery_no}` : null,
+        ]
+            .filter(Boolean)
+            .join(" · ")
+        const ageLabel =
+            row.level === "overdue"
+                ? `Terlambat ${row.days} hari`
+                : `Belum selesai ${row.days} hari`
+        alerts.push({
+            id: `complaint-${row.task.id}`,
+            category: "complaint",
+            tone: row.level === "overdue" ? "danger" : "warning",
+            title: `${ageLabel} · ${identity || "tanpa nopol"}`,
+            description: row.task.title,
+            view: "tugas",
+        })
+    }
+
+    const remainingComplaints =
+        staleComplaints.length - Math.min(staleComplaints.length, MAX_COMPLAINT_ALERTS)
+    if (remainingComplaints > 0) {
+        alerts.push({
+            id: "complaint-stale-rest",
+            category: "complaint",
+            tone: "warning",
+            title: `+${remainingComplaints} komplain perlu follow-up`,
+            description: "Buka Complaint Board untuk melihat semuanya",
+            view: "tugas",
         })
     }
 

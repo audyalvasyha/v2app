@@ -7,7 +7,6 @@ import { CheckCircle2, ChevronLeft,
     Clock,
     Database,
     FileText,
-    Flag,
     Hash,
     ImageIcon,
     Paperclip,
@@ -29,40 +28,33 @@ import {
 } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import { BoardPageSkeleton, ReviewPageSkeleton } from "@/components/molecules/view-skeleton"
 import { ComplaintPlateSummary } from "@/components/organisms/complaint-plate-summary"
 import { complaintPlateKey } from "@/lib/complaint-summary"
 import { Textarea } from "@/components/ui/textarea"
 import { SuggestField, type Suggestion } from "@/components/molecules/suggest-field"
-import { FilterChips } from "@/components/molecules/filter-chips"
 import { supabase } from "@/utils/supabase"
 import { cn } from "@/lib/utils"
 import { formatDateShort, formatDateTimeWIB, formatNumber } from "@/lib/format"
 import {
+    announceTasksChanged,
     attributionPatch,
     ESCALATION_DAYS,
-    effectivePriority,
-    isEscalated,
     isMissingTaskTable,
     nextStatus,
     normalizeTaskStatus,
-    priorityClass,
-    priorityLabel,
+    OVERDUE_DAYS,
     readLocalTasks,
     shortUser,
     sortTasks,
     statusLabel,
     TASK_ATTACHMENT_MAX_BYTES,
-    TASK_PRIORITIES,
     TASK_RESOLUTION_REQUIRED_MESSAGE,
     TASK_STATUSES,
+    ticketAgeClass,
+    ticketAgeDays,
+    ticketAgeLabel,
+    ticketAgeLevel,
     isTaskAttachmentType,
     parseTaskAttachmentPaths,
     serializeTaskAttachmentPaths,
@@ -70,7 +62,6 @@ import {
     writeLocalTasks,
     type Task,
     type TaskInput,
-    type TaskPriority,
     type TaskStatus,
 } from "@/lib/tasks"
 
@@ -240,7 +231,6 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
     const [mode, setMode] = useState<StorageMode>("remote")
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [priorityFilter, setPriorityFilter] = useState<"all" | TaskPriority>("all")
     /** Nopol yang sedang dibuka di halaman detail Review; null = daftar nopol. */
     const [reviewPlate, setReviewPlate] = useState<string | null>(null)
     /** Tab status yang sedang dibuka di mobile; desktop tetap menampilkan semua kolom. */
@@ -286,9 +276,6 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
         if (viewMode !== "review") {
             setReviewPlate(null)
         } else {
-            // Filter prioritas tidak ditampilkan di Review, jadi jangan biarkan
-            // filter dari papan ikut menyaring daftar nopol secara diam-diam.
-            setPriorityFilter("all")
             scrollAppToTop()
         }
     }, [viewMode])
@@ -494,6 +481,8 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
                         id: crypto.randomUUID(),
                         created_at: new Date().toISOString(),
                         created_by: userEmail,
+                        // Kolom warisan; UI memakai umur tiket, bukan prioritas manual.
+                        priority: "normal",
                         followed_up_by: null,
                         followed_up_at: null,
                         resolved_by: null,
@@ -505,6 +494,7 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
                 ]
             setTasks(next)
             writeLocalTasks(next)
+            announceTasksChanged()
             return null
         }
 
@@ -520,6 +510,7 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
                 setTasks((prev) =>
                     prev.map((t) => (t.id === target.id ? ((data ?? t) as Task) : t)),
                 )
+                announceTasksChanged()
                 return null
             }
 
@@ -530,6 +521,7 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
                 .single()
             if (insertError) return withTaskSchemaHint(insertError.message)
             if (data) setTasks((prev) => [data as Task, ...prev])
+            announceTasksChanged()
             return null
         } catch (e) {
             return e instanceof Error ? e.message : "Gagal menyimpan komplain"
@@ -541,6 +533,7 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
             const next = tasks.filter((t) => t.id !== target.id)
             setTasks(next)
             writeLocalTasks(next)
+            announceTasksChanged()
             for (const path of [
                 ...parseTaskAttachmentPaths(target.attachment_path),
                 ...parseTaskAttachmentPaths(target.resolution_attachment_path),
@@ -554,6 +547,7 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
             const { error: deleteError } = await supabase.from("tasks").delete().eq("id", target.id)
             if (deleteError) return deleteError.message
             setTasks((prev) => prev.filter((t) => t.id !== target.id))
+            announceTasksChanged()
             for (const path of [
                 ...parseTaskAttachmentPaths(target.attachment_path),
                 ...parseTaskAttachmentPaths(target.resolution_attachment_path),
@@ -583,6 +577,7 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
 
         if (mode === "local") {
             writeLocalTasks(next)
+            announceTasksChanged()
             return
         }
 
@@ -594,6 +589,8 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
             if (updateError) {
                 setTasks(previous)
                 setError(updateError.message)
+            } else {
+                announceTasksChanged()
             }
         } catch (e) {
             setTasks(previous)
@@ -640,7 +637,6 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
 
     const visible = useMemo(() => {
         return tasks.filter((t) => {
-            if (priorityFilter !== "all" && effectivePriority(t) !== priorityFilter) return false
             if (!searchLower) return true
             return [
                 t.title,
@@ -656,7 +652,7 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
                 t.resolved_by,
             ].some((value) => String(value ?? "").toLowerCase().includes(searchLower))
         })
-    }, [tasks, priorityFilter, searchLower, customerNames])
+    }, [tasks, searchLower, customerNames])
 
     const byStatus = useMemo(() => {
         const map: Record<TaskStatus, Task[]> = { todo: [], progress: [], blocked: [], done: [] }
@@ -690,7 +686,7 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
     // aktif dijepit agar tidak menunjuk halaman kosong.
     useEffect(() => {
         setPages(INITIAL_PAGES)
-    }, [searchLower, priorityFilter])
+    }, [searchLower])
     useEffect(() => {
         setPages((prev) => {
             let changed = false
@@ -750,21 +746,9 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                     <p className="min-w-0 text-xs tabular-nums text-muted-foreground">
                         {formatNumber(visible.length)} komplain ditampilkan
-                        {searchLower || priorityFilter !== "all" ? " (terfilter)" : ""}
+                        {searchLower ? " (terfilter)" : ""}
                     </p>
                     <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
-                        <FilterChips
-                            ariaLabel="Filter prioritas"
-                            className="w-full sm:w-auto"
-                            options={
-                                [
-                                    { id: "all", label: "Semua" },
-                                    ...TASK_PRIORITIES,
-                                ] as { id: "all" | TaskPriority; label: string }[]
-                            }
-                            value={priorityFilter}
-                            onChange={setPriorityFilter}
-                        />
                         <Button
                             size="sm"
                             className="h-[42px] w-full gap-1.5 px-4 sm:w-auto"
@@ -875,8 +859,9 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
 
                             <div className="flex flex-col gap-2">
                                 {displayed.map((task) => {
-                                    const escalated = isEscalated(task)
-                                    const priority = effectivePriority(task)
+                                    const ageLevel = ticketAgeLevel(task)
+                                    const ageLabel = ticketAgeLabel(task)
+                                    const ageDays = Math.floor(ticketAgeDays(task))
                                     const next = nextStatus(task.status)
                                     // Aksi terakhir: selesai → FU → dibuat.
                                     const latestAudit = task.resolved_by
@@ -911,7 +896,8 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
                                             onClick={() => openEdit(task)}
                                             className={cn(
                                                 "group cursor-pointer rounded-lg border bg-card p-3 transition-colors hover:border-primary/40",
-                                                escalated && "border-l-2 border-l-destructive",
+                                                ageLevel === "overdue" && "border-l-2 border-l-destructive",
+                                                ageLevel === "attention" && "border-l-2 border-l-amber-500",
                                                 task.status === "done" && "bg-card/60",
                                             )}
                                         >
@@ -997,25 +983,22 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
                                                 </div>
                                             )}
 
-                                            {/* Footer: prioritas + indikator lampiran, lalu pelaku terakhir.
+                                            {/* Footer: umur tiket + indikator lampiran, lalu pelaku terakhir.
                                                 flex-wrap mencegah ikon dan nama saling menimpa di kartu sempit. */}
                                             <div
                                                 className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-border/60 pt-2 text-xs leading-snug text-muted-foreground"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
                                                 <div className="flex shrink-0 items-center gap-2">
-                                                    <Badge
-                                                        variant="outline"
-                                                        title={
-                                                            escalated
-                                                                ? `Otomatis Tinggi — belum selesai ${ESCALATION_DAYS} hari+`
-                                                                : "Prioritas"
-                                                        }
-                                                        className={cn("shrink-0", priorityClass(priority))}
-                                                    >
-                                                        <Flag className="h-2.5 w-2.5" />
-                                                        {priorityLabel(priority)}
-                                                    </Badge>
+                                                    {task.status !== "done" && (
+                                                        <Badge
+                                                            variant="outline"
+                                                            title={`Umur tiket: ${ageLabel}. Perlu FU setelah ${ESCALATION_DAYS} hari, terlambat setelah ${OVERDUE_DAYS} hari.`}
+                                                            className={cn("shrink-0", ticketAgeClass(ageLevel))}
+                                                        >
+                                                            {ageDays} hari
+                                                        </Badge>
+                                                    )}
                                                     {(task.attachment_path || task.resolution_attachment_path) && (
                                                         <div className="flex items-center gap-1.5 border-l border-border/60 pl-2">
                                                             {task.attachment_path && (
@@ -1165,7 +1148,6 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, canDelete, 
     const [status, setStatus] = useState<TaskStatus>(
         normalizeTaskStatus(initialStatus ?? task?.status ?? "todo"),
     )
-    const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "normal")
     const [salesName, setSalesName] = useState(task?.sales_name ?? "")
     const [licensePlate, setLicensePlate] = useState(task?.license_plate ?? "")
     const [deliveryNo, setDeliveryNo] = useState((task?.delivery_no ?? "").toUpperCase())
@@ -1480,7 +1462,6 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, canDelete, 
                 title: cleanTitle,
                 description: description.trim() || null,
                 status,
-                priority,
                 sales_name: cleanSales,
                 license_plate: licensePlate.trim() || null,
                 delivery_no: deliveryNo.trim().toUpperCase() || null,
@@ -1554,27 +1535,28 @@ function TaskSheet({ task, initialStatus, onClose, onSave, onDelete, canDelete, 
                                     />
                                 </div>
 
-                                <div className="max-w-[200px] space-y-1.5">
+                                <div className="space-y-1.5">
                                     <Label className="text-[11px] font-medium text-muted-foreground">
-                                        Prioritas
+                                        Umur tiket
                                     </Label>
-                                    <Select value={priority} onValueChange={(v) => setPriority(v as TaskPriority)}>
-                                        <SelectTrigger className="w-full rounded-sm">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent className="rounded-sm">
-                                            {TASK_PRIORITIES.map((p) => (
-                                                <SelectItem key={p.id} value={p.id}>
-                                                    {p.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {task && isEscalated(task) && (
-                                        <p className="text-xs text-amber-700 dark:text-amber-400">
-                                            Otomatis Tinggi — belum selesai {ESCALATION_DAYS} hari+.
-                                        </p>
-                                    )}
+                                    <Badge
+                                        variant="outline"
+                                        className={cn(
+                                            "w-fit",
+                                            ticketAgeClass(task ? ticketAgeLevel(task) : "fresh"),
+                                        )}
+                                    >
+                                        <Clock className="h-2.5 w-2.5" />
+                                        {task
+                                            ? task.status === "done"
+                                                ? "Selesai"
+                                                : ticketAgeLabel(task)
+                                            : "Hari ini"}
+                                    </Badge>
+                                    <p className="max-w-md text-[11px] leading-relaxed text-muted-foreground">
+                                        Prioritas mengikuti umur tiket: perlu FU setelah {ESCALATION_DAYS} hari,
+                                        terlambat setelah {OVERDUE_DAYS} hari. Tidak ada prioritas manual.
+                                    </p>
                                 </div>
                             </section>
 
