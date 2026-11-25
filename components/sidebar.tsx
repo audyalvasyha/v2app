@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, BotMessageSquare, Layers, ChevronDown, Info, ListChecks, ChartColumn, type LucideIcon } from "lucide-react"
+import { Settings, History, Activity, LayoutDashboard, User, PanelLeftClose, PanelLeftOpen, Boxes, Send, Disc3, CloudSun, LogOut, MapPin, BotMessageSquare, Layers, ChevronDown, Info, ListChecks, ClipboardCheck, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/utils/supabase"
 import { clearSensitiveBrowserCache } from "@/lib/browser-cache"
@@ -125,7 +125,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
 
         {can('review') && (
           <SidebarButton
-            icon={ChartColumn}
+            icon={ClipboardCheck}
             label="Review"
             active={activeView === 'review'}
             collapsed={collapsed}

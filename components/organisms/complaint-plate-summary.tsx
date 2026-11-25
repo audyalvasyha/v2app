@@ -1,7 +1,9 @@
 "use client"
 
-import React, { useMemo } from "react"
-import { ArrowLeft, ChevronRight } from "lucide-react"
+import React, { useEffect, useMemo, useState } from "react"
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
 
 import {
     summarizeComplaintsByPlate,
@@ -43,6 +45,9 @@ const STATUS_META: Record<
 }
 
 const STATUS_ORDER: ComplaintDisplayStatus[] = ["todo", "progress", "done"]
+
+/** Daftar nopol dibatasi supaya register tetap pendek dan cepat dipindai. */
+const PLATE_PAGE_SIZE = 8
 
 function actorName(
     email: string | null | undefined,
@@ -445,9 +450,25 @@ export function ComplaintPlateSummary({
         () => summarizeComplaintsByPlate(visibleTasks),
         [visibleTasks],
     )
+    const [page, setPage] = useState(1)
+    const pageCount = Math.max(1, Math.ceil(listSummary.groups.length / PLATE_PAGE_SIZE))
+    const currentPage = Math.min(Math.max(1, page), pageCount)
+    const pageStart = (currentPage - 1) * PLATE_PAGE_SIZE
+    const pageGroups = listSummary.groups.slice(pageStart, pageStart + PLATE_PAGE_SIZE)
+    const pageEnd = Math.min(pageStart + PLATE_PAGE_SIZE, listSummary.groups.length)
     const selected = selectedKey
         ? fullSummary.groups.find((group) => group.key === selectedKey) ?? null
         : null
+
+    // Filter/pencarian baru selalu mulai dari halaman pertama; saat data
+    // menyusut, halaman aktif dijepit agar tidak menunjuk halaman kosong.
+    useEffect(() => {
+        setPage(1)
+    }, [visibleTasks])
+
+    useEffect(() => {
+        setPage((prev) => Math.min(prev, pageCount))
+    }, [pageCount])
 
     if (selected) {
         return (
@@ -489,10 +510,6 @@ export function ComplaintPlateSummary({
                             </div>
                         </div>
 
-                        <p className="mt-5 max-w-xl text-[11px] leading-relaxed text-muted-foreground">
-                            Daftar di bawah hanya berisi nopol. Pilih satu nopol untuk membuka
-                            berkas komplain, riwayat, dan tindakannya.
-                        </p>
                     </div>
 
                     <dl className="grid grid-cols-3 divide-x divide-border/70 border-t border-border/70 lg:block lg:divide-x-0 lg:divide-y lg:border-l lg:border-t-0">
@@ -532,7 +549,7 @@ export function ComplaintPlateSummary({
                             Daftar nopol
                         </h2>
                         <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                            {formatNumber(listSummary.groups.length)} baris
+                            {formatNumber(listSummary.groups.length)} nopol
                         </span>
                     </div>
                     <p className="hidden text-[9px] uppercase tracking-[0.12em] text-muted-foreground sm:block">
@@ -549,23 +566,90 @@ export function ComplaintPlateSummary({
                         </p>
                     </div>
                 ) : (
-                    <ul className="divide-y divide-border/70 border-b border-border/70">
-                        {listSummary.groups.map((group) => (
+                    <ul
+                        className={cn(
+                            "divide-y divide-border/70",
+                            listSummary.groups.length <= PLATE_PAGE_SIZE && "border-b border-border/70",
+                        )}
+                    >
+                        {pageGroups.map((group) => (
                             <li key={group.key}>
                                 <button
                                     type="button"
                                     onClick={() => onSelectPlate(group.key)}
-                                    aria-label={`Buka detail komplain nopol ${group.plate}`}
+                                    aria-label={`Buka detail komplain nopol ${group.plate}, ${group.total} total komplain, ${group.open} aktif`}
                                     className="group flex w-full min-w-0 items-center justify-between gap-3 px-3 py-3.5 text-left transition-colors hover:bg-card focus-visible:bg-card focus-visible:outline-none"
                                 >
                                     <span className="min-w-0 font-mono text-[15px] font-semibold tracking-[-0.02em] [overflow-wrap:anywhere]">
                                         {group.plate}
+                                    </span>
+                                    <span className="flex shrink-0 items-center divide-x divide-border/70">
+                                        <span className="pr-3 text-right">
+                                            <span className="block text-[8px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+                                                Total
+                                            </span>
+                                            <span className="mt-0.5 block font-mono text-xs font-semibold leading-none tabular-nums">
+                                                {formatNumber(group.total)}
+                                            </span>
+                                        </span>
+                                        <span className="pl-3 text-right">
+                                            <span className="block text-[8px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+                                                Aktif
+                                            </span>
+                                            <span
+                                                className={cn(
+                                                    "mt-0.5 block font-mono text-xs font-semibold leading-none tabular-nums",
+                                                    group.open > 0
+                                                        ? "text-amber-700 dark:text-amber-400"
+                                                        : "text-muted-foreground",
+                                                )}
+                                            >
+                                                {formatNumber(group.open)}
+                                            </span>
+                                        </span>
                                     </span>
                                     <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                                 </button>
                             </li>
                         ))}
                     </ul>
+                )}
+
+                {listSummary.groups.length > PLATE_PAGE_SIZE && (
+                    <nav
+                        aria-label="Navigasi halaman daftar nopol"
+                        className="flex flex-wrap items-center justify-between gap-2 border-y border-border/70 px-3 py-2.5"
+                    >
+                        <p className="text-[10px] tabular-nums text-muted-foreground">
+                            {formatNumber(pageStart + 1)}–{formatNumber(pageEnd)} dari{" "}
+                            {formatNumber(listSummary.groups.length)} nopol
+                        </p>
+                        <div className="flex items-center gap-1">
+                            <Button
+                                variant="outline"
+                                size="icon-sm"
+                                className="h-9 w-9 bg-card sm:h-8 sm:w-8"
+                                aria-label="Halaman nopol sebelumnya"
+                                disabled={currentPage <= 1}
+                                onClick={() => setPage(Math.max(1, currentPage - 1))}
+                            >
+                                <ChevronLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <span className="min-w-10 text-center text-[11px] tabular-nums text-muted-foreground">
+                                {currentPage}/{pageCount}
+                            </span>
+                            <Button
+                                variant="outline"
+                                size="icon-sm"
+                                className="h-9 w-9 bg-card sm:h-8 sm:w-8"
+                                aria-label="Halaman nopol berikutnya"
+                                disabled={currentPage >= pageCount}
+                                onClick={() => setPage(Math.min(pageCount, currentPage + 1))}
+                            >
+                                <ChevronRight className="h-3.5 w-3.5" />
+                            </Button>
+                        </div>
+                    </nav>
                 )}
 
                 {listSummary.withoutPlateCount > 0 && (

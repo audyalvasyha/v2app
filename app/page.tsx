@@ -22,6 +22,7 @@ import {
 } from "@/components/molecules/view-skeleton"
 
 import { DashboardLayout, type View } from "@/components/templates/dashboard-layout"
+import { PageBreadcrumb } from "@/components/molecules/page-breadcrumb"
 import { AuthGate } from "@/components/auth-gate"
 import { buildAlerts } from "@/lib/alerts"
 import { allowedViews, roleForUser, type AppRole } from "@/lib/roles"
@@ -169,6 +170,17 @@ function isViewUnavailableError(message: string): boolean {
 }
 
 const CACHE_KEY = "fleet-cache-v2"
+/** Batas aman sebelum parse/setItem; cache yang lebih besar lebih lambat dari manfaatnya. */
+const CACHE_MAX_CHARS = 1_500_000
+
+/** Load awal hanya membawa riwayat yang dipakai dashboard + chart 3 bulan. */
+const HISTORY_INITIAL_DAYS = 120
+
+function historyCutoffDate(): string {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - HISTORY_INITIAL_DAYS)
+  return cutoff.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })
+}
 
 interface FleetCache {
   equipments: any[]
@@ -181,6 +193,12 @@ function readCache(): FleetCache | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
     if (!raw) return null
+    if (raw.length > CACHE_MAX_CHARS) {
+      // Cache versi lama bisa berisi arsip penuh. Jangan blokir first paint
+      // dengan JSON.parse puluhan ribu baris; buang dan mulai dari network.
+      localStorage.removeItem(CACHE_KEY)
+      return null
+    }
     const parsed = JSON.parse(raw)
     if (
       !Array.isArray(parsed?.equipments) ||
@@ -200,11 +218,26 @@ function readCache(): FleetCache | null {
 
 function writeCache(equipments: any[], histories: any[], serviceLogs: any[]) {
   if (typeof window === "undefined") return
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ equipments, histories, serviceLogs }))
-  } catch {
-    // Kuota localStorage penuh dsb — cache bersifat opsional, abaikan
+  // Jangan stringify ribuan baris di jalur render. Cache boleh menyusul saat
+  // main thread idle; data yang tampil tidak menunggu localStorage.
+  const persist = async () => {
+    try {
+      // Jangan tulis ulang data operasional setelah logout. Callback idle
+      // bisa datang terlambat, sesudah clearSensitiveBrowserCache() jalan.
+      const { data } = await supabase.auth.getSession()
+      if (!data.session) return
+      const serialized = JSON.stringify({ equipments, histories, serviceLogs })
+      if (serialized.length > CACHE_MAX_CHARS) return
+      localStorage.setItem(CACHE_KEY, serialized)
+    } catch {
+      // Kuota localStorage penuh / sesi hilang — cache opsional, abaikan
+    }
   }
+  const w = window as Window & {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+  }
+  if (w.requestIdleCallback) w.requestIdleCallback(() => void persist(), { timeout: 2000 })
+  else window.setTimeout(() => void persist(), 0)
 }
 
 /**
@@ -280,6 +313,13 @@ function DashboardContent() {
   const [historyError, setHistoryError] = useState<string | null>(null)
 
   const isRefreshing = useRef(false)
+  /** Cache lokal sudah dirender — prefetch sekunder boleh jalan paralel. */
+  const cacheLoaded = useRef(false)
+  /** Riwayat penuh sudah dimuat; refresh berikutnya tidak perlu window lagi. */
+  const historiesComplete = useRef(false)
+  const historyFullFetching = useRef(false)
+  /** Naik setiap refresh utama selesai, memicu pengecekan full-history. */
+  const [dataEpoch, setDataEpoch] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -390,6 +430,7 @@ function DashboardContent() {
     // 1. Cache-first: render data terakhir seketika, tanpa menunggu network
     const cached = readCache()
     if (cached) {
+      cacheLoaded.current = true
       setEquipments(cached.equipments)
       setHistories(cached.histories)
       setServiceLogs(cached.serviceLogs)
@@ -419,12 +460,18 @@ function DashboardContent() {
         }
 
         const fetchHistories = async () => {
-          const query = () =>
-            supabase
+          const query = () => {
+            const request = supabase
               .from('maintenance_histories')
               .select(HISTORY_COLS)
               .order('tanggal', { ascending: false })
               .limit(20000)
+            // First paint tidak boleh menunggu seluruh arsip. Riwayat penuh
+            // dimuat on-demand setelah dashboard tampil.
+            return historiesComplete.current
+              ? request
+              : request.gte('tanggal', historyCutoffDate())
+          }
           const first = await query()
           if (!first.error) return first
           // Retry sekali setelah refresh token: cukup untuk sesi yang baru
@@ -443,7 +490,11 @@ function DashboardContent() {
           // difilter di UI; query tanpa limit adalah jalur OOM/lambat saat
           // data bertambah.
           fetchHistories(),
-          supabase.from('service_logs').select(SERVICE_LOG_COLS).order('service_date', { ascending: false }),
+          supabase
+            .from('service_logs')
+            .select(SERVICE_LOG_COLS)
+            .order('service_date', { ascending: false })
+            .limit(5000),
         ])
 
         if (eqResponse.error) {
@@ -478,7 +529,14 @@ function DashboardContent() {
         }
         if (!serviceResponse.error) setServiceLogs(serviceResponse.data || [])
 
-        if (!eqResponse.error && !histResponse.error && !serviceResponse.error) {
+        if (
+          !historiesComplete.current &&
+          !eqResponse.error &&
+          !histResponse.error &&
+          !serviceResponse.error
+        ) {
+          // Cache sengaja menyimpan window ringan saja; arsip penuh tidak
+          // dimasukkan supaya localStorage tidak cepat penuh.
           writeCache(eqResponse.data || [], histResponse.data || [], serviceResponse.data || [])
         }
       } catch (fetchError) {
@@ -490,6 +548,7 @@ function DashboardContent() {
         hasRenderedData = true
         setIsLoading(false)
         isRefreshing.current = false
+        setDataEpoch((value) => value + 1)
       }
     }
 
@@ -526,6 +585,37 @@ function DashboardContent() {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [roleLoaded, userRole])
+
+  // Arsip penuh dimuat hanya saat dibutuhkan: menu yang menghitung biaya
+  // sepanjang waktu, atau search lintas menu. Dashboard dan chart sudah cukup
+  // dengan window 120 hari di atas.
+  useEffect(() => {
+    if (!roleLoaded || userRole !== 'admin') return
+    if (isLoading || isRefreshing.current) return
+    const needsFullHistory =
+      activeView === 'equipment' || activeView === 'maintenance' || !!searchLower
+    if (!needsFullHistory || historiesComplete.current || historyFullFetching.current) return
+
+    historyFullFetching.current = true
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('maintenance_histories')
+          .select(HISTORY_COLS)
+          .order('tanggal', { ascending: false })
+          .limit(20000)
+        if (error) {
+          setHistoryError(error.message)
+          return
+        }
+        historiesComplete.current = true
+        setHistories(data || [])
+        setHistoryError(null)
+      } finally {
+        historyFullFetching.current = false
+      }
+    })()
+  }, [roleLoaded, userRole, activeView, searchLower, isLoading, dataEpoch])
 
   //_Nama toko untuk menu SKR — hanya id + nama yang diambil, lewat view
   //customers_ringkas supaya telephone_number & nik_salesman tidak ikut
@@ -632,7 +722,7 @@ function DashboardContent() {
   // Dashboard SKR membaca view `skr_ringkasan` yang mengupah parsing pod_date &
   // skr_value ke database. Bila view belum dibuat, aplikasi otomatis turun ke
   // mode cadangan: baca kolom mentah lalu parsing di sisi browser.
-  const fetchSkr = useCallback(async (from: string, to: string) => {
+  const fetchSkr = useCallback(async (from: string, to: string, includeComparison = true) => {
     setIsSkrFetching(true)
     // Tiga bulan kalender terakhir (WIB) — bulan berjalan, bulan sebelumnya,
     // dan dua bulan yang lalu. Grafik bisa membandingkan Sep vs Agu saat
@@ -678,7 +768,9 @@ function DashboardContent() {
         // auto-shift awal bulan). Bila rentang filter sudah mencakup ketiga
         // bulan, komponen cukup memakai data yang sama — tandai dengan prev
         // bulan kosong. Kalau tidak, fetch tiga jendela bulan terpisah.
-        if (from <= prev2From && to >= curTo) {
+        // Dashboard/cari global hanya butuh agregat rentang aktif, jadi jangan
+        // ikut menembak tiga query bulanan tambahan (bisa sampai 60k baris).
+        if (!includeComparison || (from <= prev2From && to >= curTo)) {
           setSkrPrevMonth([])
         } else {
           const cols = skrViewCols()
@@ -804,7 +896,9 @@ function DashboardContent() {
     if (isSkrView) {
       fetchSkr(skrRange.from, skrRange.to)
     } else {
-      fetchSkr('', '') // pencarian lintas menu pakai jendela penuh (tanpa batas tanggal)
+      // Pencarian lintas menu cukup memindai rentang utama; data grafik
+      // bulanan baru dimuat saat menu SKR benar-benar dibuka.
+      fetchSkr('', '', false)
     }
   }, [fetchSkr, activeView, skrRange.from, skrRange.to, searchLower, skrDetails.length])
 
@@ -821,15 +915,30 @@ function DashboardContent() {
   // jalan (bug yang kemarin bikin kartu selalu tampil "belum dimuat").
   const dashboardHydrated = useRef(false)
   useEffect(() => {
-    if (activeView !== 'dashboard') return
-    const t = setTimeout(() => {
-      if (dashboardHydrated.current) return
+    if (activeView !== 'dashboard' || !roleLoaded) return
+
+    let t: number | null = null
+    let disposed = false
+    const attempt = () => {
+      if (disposed || dashboardHydrated.current) return
+      // Cold start: tunggu refresh utama selesai. Sebelumnya timer 800ms bisa
+      // menembak SKR/outbound saat histories 20k masih diunduh, sehingga data
+      // yang menahan dashboard justru berebut bandwidth. Kalau cache sudah
+      // tampil, prefetch boleh paralel karena konten utama sudah terlihat.
+      if (isRefreshing.current && !cacheLoaded.current) {
+        t = window.setTimeout(attempt, 800)
+        return
+      }
       dashboardHydrated.current = true
       if (outbounds.length === 0) fetchOutbounds(outboundRange.from, outboundRange.to)
-      if (skrDetails.length === 0) fetchSkr(skrRange.from, skrRange.to)
-    }, 800)
-    return () => clearTimeout(t)
-  }, [activeView, outbounds.length, skrDetails.length, fetchOutbounds, fetchSkr, outboundRange.from, outboundRange.to, skrRange.from, skrRange.to])
+      if (skrDetails.length === 0) fetchSkr(skrRange.from, skrRange.to, false)
+    }
+    t = window.setTimeout(attempt, 1200)
+    return () => {
+      disposed = true
+      if (t != null) window.clearTimeout(t)
+    }
+  }, [activeView, roleLoaded, outbounds.length, skrDetails.length, fetchOutbounds, fetchSkr, outboundRange.from, outboundRange.to, skrRange.from, skrRange.to])
 
   const equipmentByPlate = useMemo(() => {
     const map = new Map<string, { equipment_id?: string; description?: string }>()
@@ -1052,6 +1161,25 @@ function DashboardContent() {
     analisa: { title: 'Analisa', desc: 'Asisten AI data operasional.' },
   }
 
+  // Jejak halaman menggantikan judul + subjudul. SKR tetap memakai heading
+  // sendiri, dan Cuaca menampilkan breadcrumb sekaligus heading.
+  // Root "Midaa" bukan rute terpisah; parent menandai grup menu di sidebar.
+  const breadcrumbTrail: Record<View, string[]> = {
+    dashboard: ['Midaa', 'Dashboard'],
+    tugas: ['Midaa', 'Complaint Board'],
+    review: ['Midaa', 'Review'],
+    equipment: ['Midaa', 'Fleet', 'Equipment'],
+    maintenance: ['Midaa', 'Fleet', 'Histories'],
+    monitoring: ['Midaa', 'Fleet', 'Servis Rutin'],
+    ban: ['Midaa', 'Fleet', 'Ban'],
+    analisa: ['Midaa', 'Ekspedisi', 'Analisa'],
+    skr: ['Midaa', 'Ekspedisi', 'SKR'],
+    pengiriman: ['Midaa', 'Ekspedisi', 'Pengiriman'],
+    weather: ['Midaa', 'Ekspedisi', 'Perkiraan Cuaca'],
+    traffic: ['Midaa', 'Ekspedisi', 'Traffic'],
+    about: ['Midaa', 'Tentang Aplikasi'],
+  }
+
   // Placeholder search global di header, mengikuti konteks menu aktif
   const searchPlaceholder =
     activeView === 'tugas' || activeView === 'review'
@@ -1107,30 +1235,40 @@ function DashboardContent() {
         }
       >
 
-        {/* Header Dinamis — Dashboard punya kepala sendiri di dalam
-            DashboardView supaya tanggal dan aksi tidak tampil dua kali. */}
-        {activeView !== 'about' && activeView !== 'analisa' && activeView !== 'dashboard' && (
+        {/* SKR tetap memakai heading + subjudul; Cuaca memakai keduanya
+            sekaligus breadcrumb; menu lain cukup breadcrumb. */}
+        {activeView === 'skr' ? (
           <div className="shrink-0 pb-1">
             <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-              {headerInfo[activeView].title}
-              {/* Menu SKR: pintasan ke sub-app import CSV (subdomain) */}
-              {activeView === 'skr' && (
-                <a
-                  href="https://skr.transportbaganbatu.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Buka halaman import data SKR"
-                  aria-label="Buka halaman import data SKR"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
-                >
-                  <ArrowUpRight className="h-4 w-4" />
-                </a>
-              )}
+              {headerInfo.skr.title}
+              {/* Pintasan ke sub-app import CSV (subdomain) */}
+              <a
+                href="https://skr.transportbaganbatu.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Buka halaman import data SKR"
+                aria-label="Buka halaman import data SKR"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
+              >
+                <ArrowUpRight className="h-4 w-4" />
+              </a>
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {headerInfo[activeView].desc}
+              {headerInfo.skr.desc}
             </p>
           </div>
+        ) : activeView === 'weather' ? (
+          <div className="shrink-0 pb-1">
+            <PageBreadcrumb items={breadcrumbTrail.weather} />
+            <h1 className="mt-3 text-2xl font-semibold tracking-tight">
+              {headerInfo.weather.title}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {headerInfo.weather.desc}
+            </p>
+          </div>
+        ) : (
+          <PageBreadcrumb items={breadcrumbTrail[activeView]} className="shrink-0 pb-1" />
         )}
 
         {/* Render Konten Sesuai View */}

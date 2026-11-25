@@ -54,7 +54,7 @@ export function Header({ theme, themePreference, onToggleTheme, searchTerm, onSe
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   return (
     <header className="sticky top-0 z-20 shrink-0 border-b border-border bg-background/90 backdrop-blur-md">
-      <div className="flex h-16 items-center gap-2 px-4 sm:px-6">
+      <div className="flex h-16 items-center gap-2 px-3 sm:px-4 lg:px-5">
         <div className="flex items-center gap-3">
           {onOpenSidebar && (
             <Button

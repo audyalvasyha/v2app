@@ -92,14 +92,8 @@ const SKILLS = [
 export function AboutView() {
   return (
     <div className="mx-auto w-full overflow-x-clip pb-16">
-      {/* Masthead: penanda seksi + versi, dipisah satu garis rambut */}
-      <div className="flex items-center justify-between border-b border-border pb-4">
-        <div className="flex items-center gap-3">
-          <span className="h-2 w-2 bg-primary" aria-hidden="true" />
-          <span className="text-[11px] font-medium uppercase tracking-[0.28em] text-muted-foreground">
-            Tentang Aplikasi
-          </span>
-        </div>
+      {/* Label halaman sudah pindah ke breadcrumb; masthead menyisakan versi. */}
+      <div className="flex items-center justify-end border-b border-border pb-4">
         <span className="font-mono text-[11px] tabular-nums uppercase tracking-[0.28em] text-muted-foreground">
           v2.2
         </span>

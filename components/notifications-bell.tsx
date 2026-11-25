@@ -89,7 +89,7 @@ function AlertList({
     }
 
     return (
-        <ul className="max-h-[min(50vh,19rem)] divide-y divide-border/40 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ul className="max-h-[min(50dvh,19rem)] divide-y divide-border/40 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {visible.map((alert) => (
                 <AlertItem key={alert.id} alert={alert} onSelect={onSelect} />
             ))}
@@ -165,8 +165,9 @@ export function NotificationsBell({
             <PopoverContent
                 align="end"
                 sideOffset={8}
+                collisionPadding={12}
                 aria-label="Notifikasi"
-                className="w-[min(92vw,21.5rem)] overflow-hidden rounded-lg border-border/70 p-0 shadow-md"
+                className="w-[calc(100vw_-_1.5rem)] overflow-hidden rounded-lg border-border/70 p-0 shadow-md sm:w-[21.5rem]"
             >
                 <div className="flex items-center justify-between gap-3 px-3.5 pb-1 pt-3.5">
                     <p className="text-sm font-medium leading-none tracking-tight">Notifikasi</p>

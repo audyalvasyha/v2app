@@ -33,7 +33,9 @@ export interface WeatherBannerProps {
 }
 
 function WeatherBannerImpl({ onOpenDetail }: WeatherBannerProps) {
-    const { locations, isLoading, error, refresh } = useWeather()
+    // Banner ada di bawah fold dashboard; tunda fetch agar tidak berebut
+    // koneksi dengan query utama saat aplikasi pertama dibuka.
+    const { locations, isLoading, error, refresh } = useWeather({ deferMs: 3000 })
     const summary = useMemo(() => regionWeatherSummary(locations), [locations])
     const focus: LocationWeather | null =
         locations.find((l) => l.def.id === FOCUS_ID) ?? locations[0] ?? null

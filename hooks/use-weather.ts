@@ -75,7 +75,7 @@ export interface UseWeatherResult {
     refresh: () => void
 }
 
-export function useWeather(): UseWeatherResult {
+export function useWeather({ deferMs = 0 }: { deferMs?: number } = {}): UseWeatherResult {
     const [locations, setLocations] = useState<LocationWeather[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -86,6 +86,7 @@ export function useWeather(): UseWeatherResult {
 
     useEffect(() => {
         let cancelled = false
+        let timer: ReturnType<typeof setTimeout> | null = null
 
         // 1. Cache-first: tampilkan data terakhir seketika
         const cached = readCache()
@@ -104,30 +105,38 @@ export function useWeather(): UseWeatherResult {
             }
         }
 
-        ;(async () => {
-            try {
-                const res = await fetch(weatherApiUrl())
-                if (!res.ok) throw new Error(`Open-Meteo menjawab HTTP ${res.status}`)
-                const json = await res.json()
-                const parsed = parseWeatherPayload(json)
-                if (parsed.length === 0) throw new Error("Respons Open-Meteo tidak berisi lokasi yang dikenali")
-                if (cancelled) return
-                setLocations(parsed)
-                setUpdatedAt(Date.now())
-                setError(null)
-                writeCache(parsed)
-            } catch (e) {
-                if (cancelled) return
-                setError(e instanceof Error ? e.message : "Gagal memuat perkiraan cuaca")
-            } finally {
-                if (!cancelled) setIsLoading(false)
-            }
-        })()
+        const run = () => {
+            void (async () => {
+                try {
+                    const res = await fetch(weatherApiUrl())
+                    if (!res.ok) throw new Error(`Open-Meteo menjawab HTTP ${res.status}`)
+                    const json = await res.json()
+                    const parsed = parseWeatherPayload(json)
+                    if (parsed.length === 0) throw new Error("Respons Open-Meteo tidak berisi lokasi yang dikenali")
+                    if (cancelled) return
+                    setLocations(parsed)
+                    setUpdatedAt(Date.now())
+                    setError(null)
+                    writeCache(parsed)
+                } catch (e) {
+                    if (cancelled) return
+                    setError(e instanceof Error ? e.message : "Gagal memuat perkiraan cuaca")
+                } finally {
+                    if (!cancelled) setIsLoading(false)
+                }
+            })()
+        }
+
+        // Banner cuaca ada di bawah fold. Tunda request eksternalnya supaya
+        // tidak berebut koneksi dengan query operasional saat first load.
+        if (deferMs > 0 && !manual) timer = setTimeout(run, deferMs)
+        else run()
 
         return () => {
             cancelled = true
+            if (timer != null) clearTimeout(timer)
         }
-    }, [refreshTick])
+    }, [refreshTick, deferMs])
 
     // Auto-refresh tiap 15 menit selama tab terbuka
     useEffect(() => {

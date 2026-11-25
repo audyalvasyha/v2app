@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useEffect, useMemo, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -99,22 +99,17 @@ const MaintenanceCostTrendChart = dynamic(
 function DashboardHeader({ onNavigate }: { onNavigate?: (view: View) => void }) {
   const today = useMemo(() => new Date(), []);
   return (
-    <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
-      <div className="min-w-0 space-y-0.5">
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-          Dashboard
-        </h1>
-        <p className="text-xs text-muted-foreground sm:text-sm">
-          Operasional hari ini ·{" "}
-          {today.toLocaleDateString("id-ID", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-            timeZone: APP_TIMEZONE,
-          })}
-        </p>
-      </div>
+    <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+      <p className="text-xs text-muted-foreground sm:text-sm">
+        Operasional hari ini ·{" "}
+        {today.toLocaleDateString("id-ID", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          timeZone: APP_TIMEZONE,
+        })}
+      </p>
       <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
         <Button
           size="sm"
@@ -217,7 +212,7 @@ function MetricCell({
   tone?: "danger" | "warning" | "success";
 }) {
   return (
-    <div className="bg-card px-3 py-2.5 sm:px-4 sm:py-3">
+    <div className="min-w-0 bg-card px-3 py-2.5 sm:px-4 sm:py-3">
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd
         className={cn(
@@ -685,6 +680,52 @@ function CostCard({
   );
 }
 
+function DeferredCostChart({
+  histories,
+  error,
+}: {
+  histories: any[];
+  error?: string | null;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setVisible(true);
+        observer.disconnect();
+      },
+      { rootMargin: "240px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref}>
+      {visible ? (
+        <MaintenanceCostTrendChart histories={histories} error={error} />
+      ) : (
+        <div className="space-y-3" aria-hidden="true">
+          <div className="border-b pb-3">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="mt-2 h-3 w-56 max-w-full" />
+          </div>
+          <Skeleton className="h-[360px] w-full rounded-lg sm:h-[400px]" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DashboardViewImpl(props: DashboardViewProps) {
   return (
     <div className="flex flex-col gap-3 pb-2 sm:gap-4">
@@ -726,7 +767,10 @@ function DashboardContent({
     supabase
       .from("tasks")
       .select("id,title,status,priority,customer_no,license_plate,delivery_no,freight_order,created_at")
+      // Dashboard hanya memakai komplain terbuka; jangan bawa arsip Selesai.
+      .neq("status", "done")
       .order("created_at", { ascending: true })
+      .limit(500)
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error) {
@@ -1012,7 +1056,7 @@ function DashboardContent({
 
       <Card className="shrink-0 gap-0 py-0 shadow-none">
         <div className="min-h-[460px] px-3 py-4 sm:p-5">
-          <MaintenanceCostTrendChart histories={histories} error={historyError} />
+          <DeferredCostChart histories={histories} error={historyError} />
         </div>
       </Card>
 
