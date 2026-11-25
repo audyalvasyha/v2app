@@ -777,7 +777,7 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
                 role="tablist"
                 aria-label="Kategori komplain"
                 className={cn(
-                    "grid grid-cols-3 gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 md:hidden",
+                    "grid grid-cols-3 gap-1 rounded-lg md:hidden",
                     viewMode !== "board" && "hidden",
                 )}
             >
@@ -795,11 +795,11 @@ export function TaskBoard({ search, viewMode = "board", canDeleteAll = false }: 
                             className={cn(
                                 "flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium leading-tight transition-colors",
                                 active
-                                    ? "bg-background text-foreground shadow-sm"
-                                    : "text-muted-foreground hover:text-foreground",
+                                    ? "bg-card text-foreground shadow-sm ring-1 ring-border/70 dark:bg-secondary"
+                                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
                             )}
                         >
-                            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <Icon className={cn("h-3.5 w-3.5 shrink-0", active ? "text-foreground" : "text-muted-foreground")} />
                             <span className="truncate">{status.label}</span>
                         </button>
                     )

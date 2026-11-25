@@ -86,7 +86,7 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
     <aside
       className={`absolute inset-y-0 left-0 z-40 flex w-64 flex-col overflow-visible border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 ease-in-out lg:z-10 lg:translate-x-0 ${
         collapsed ? 'lg:w-16' : 'lg:w-64'
-      } ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}
+      } ${mobileOpen ? 'translate-x-0 shadow-overlay' : '-translate-x-full'}`}
     >
       <div className={`flex items-center border-b border-sidebar-border p-4 ${collapsed ? 'justify-center px-2' : 'justify-between'}`}>
         {!collapsed && <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Menu Utama</h2>}
@@ -279,8 +279,8 @@ export function Sidebar({ activeView, onViewChange, equipmentCounts, collapsed, 
 
         {accountOpen && (
           <div className={collapsed
-            ? "absolute bottom-0 left-full z-20 ml-2 w-44 rounded-md border bg-popover p-1 shadow-md"
-            : "absolute bottom-full left-0 right-0 z-20 mb-1 rounded-md border bg-popover p-1 shadow-md"}
+            ? "absolute bottom-0 left-full z-20 ml-2 w-44 rounded-md border bg-popover p-1 shadow-overlay"
+            : "absolute bottom-full left-0 right-0 z-20 mb-1 rounded-md border bg-popover p-1 shadow-overlay"}
           >
             <button
               type="button"

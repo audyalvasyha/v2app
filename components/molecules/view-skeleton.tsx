@@ -295,7 +295,7 @@ export function BoardPageSkeleton() {
         <Skeleton className="h-3 w-36" />
         <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
           {/* Bentuk toolbar mengikuti FilterChips + tombol Komplain baru. */}
-          <div className="inline-flex w-full max-w-full flex-wrap items-center gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 sm:w-auto">
+          <div className="inline-flex w-full max-w-full flex-wrap items-center gap-1 rounded-lg sm:w-auto">
             {[54, 52, 58, 56].map((width, i) => (
               <Skeleton key={i} className="h-8 rounded-md" style={{ width }} />
             ))}
@@ -305,7 +305,7 @@ export function BoardPageSkeleton() {
       </div>
 
       {/* Tab status mobile — hanya satu kolom yang tampil di layar kecil. */}
-      <div className="grid grid-cols-3 gap-1 rounded-lg border border-border/60 bg-muted/40 p-1 md:hidden">
+      <div className="grid grid-cols-3 gap-1 rounded-lg md:hidden">
         {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-12 rounded-md" />
         ))}

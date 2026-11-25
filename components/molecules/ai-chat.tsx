@@ -730,7 +730,7 @@ export function AIChat({
           <div className={`pointer-events-auto flex w-full flex-col overflow-hidden ${
             isPageMode
               ? "mx-auto h-full min-h-0 w-full max-w-none bg-background text-foreground"
-              : "h-[min(70vh,42rem)] min-w-[20rem] max-w-[min(70vw,60rem)] rounded-2xl border border-ai-panel-foreground/15 bg-ai-panel text-ai-panel-foreground shadow-xl duration-200 animate-in fade-in-0 zoom-in-95"
+              : "h-[min(70vh,42rem)] min-w-[20rem] max-w-[min(70vw,60rem)] rounded-2xl border border-ai-panel-foreground/15 bg-ai-panel text-ai-panel-foreground shadow-overlay duration-200 animate-in fade-in-0 zoom-in-95"
           }`}>
             {/* Kepala — judul di kiri, aksi di kanan. Panel halaman tidak
                 lagi memulai dengan deretan tombol tanpa identitas. */}

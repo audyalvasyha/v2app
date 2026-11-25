@@ -79,7 +79,7 @@ export function GlobalSearchDropdown({ open, hasQuery, items, counts, onSelect, 
 
   return (
     <div
-      className="absolute left-0 right-0 top-full z-30 mt-2 max-h-[70vh] overflow-y-auto rounded-xl border bg-popover p-1.5 shadow-lg"
+      className="absolute left-0 right-0 top-full z-30 mt-2 max-h-[70vh] overflow-y-auto rounded-xl border bg-popover p-1.5 shadow-overlay"
       onMouseDown={(e) => e.preventDefault()}
     >
       {items.length === 0 ? (

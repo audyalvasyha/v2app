@@ -929,7 +929,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
       {/* Modal foto aktual ban: fullscreen, sidewall & tread berdampingan */}
       <Dialog open={photoSlot != null} onOpenChange={(open) => !open && setPhotoSlot(null)}>
         {photoSlot != null && data[photoSlot] && (
-          <DialogContent className="!max-w-6xl w-[90vw] max-h-[92vh] h-auto flex flex-col rounded-2xl border border-border/40 bg-background/95 backdrop-blur-md p-6 shadow-2xl overflow-hidden [&>button]:top-4 [&>button]:right-4 [&>button]:z-10">
+          <DialogContent className="!max-w-6xl w-[90vw] max-h-[92vh] h-auto flex flex-col rounded-2xl border border-border/40 bg-background/95 backdrop-blur-md p-6 overflow-hidden [&>button]:top-4 [&>button]:right-4 [&>button]:z-10">
             <DialogHeader className="sr-only">
               <DialogTitle>
                 Foto ban {data[photoSlot].name} ({data[photoSlot].code})
