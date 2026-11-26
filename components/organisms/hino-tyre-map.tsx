@@ -268,9 +268,17 @@ interface DetailBoxProps {
   health?: TireHealthLevel;
   className?: string;
   style?: React.CSSProperties;
+  /** Handler drag kartu (desktop) — bila ada, kartu bisa diseret pakai mouse. */
+  onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
+  onPointerMove?: (e: React.PointerEvent<HTMLDivElement>) => void;
+  onPointerUp?: (e: React.PointerEvent<HTMLDivElement>) => void;
+  onPointerCancel?: (e: React.PointerEvent<HTMLDivElement>) => void;
+  /** True saat kartu ini lagi diseret — ganti kursor + matikan transisi. */
+  dragging?: boolean;
 }
 
-function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, health, className, style }: DetailBoxProps) {
+function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, health, className, style, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, dragging }: DetailBoxProps) {
+  const draggable = !!onPointerDown;
   return (
     <div
       role="button"
@@ -282,10 +290,16 @@ function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, health, cl
         }
       }}
       onClick={onToggle}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       aria-pressed={active}
       style={style}
+      title={draggable ? "Seret untuk memindah kartu" : undefined}
       className={cn(
-        "relative z-40 block w-full cursor-pointer rounded-xl border bg-background p-2.5 text-left shadow-sm transition-all duration-150",
+        "relative z-40 block w-full rounded-xl border bg-background p-2.5 text-left shadow-sm transition-all duration-150",
+        draggable ? (dragging ? "cursor-grabbing shadow-lg" : "cursor-grab") : "cursor-pointer",
         "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         active
           ? "border-primary/70 shadow-md ring-2 ring-primary/40"
@@ -532,6 +546,34 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
   });
   const suppressClickRef = useRef(false);
 
+  /** Offset kartu detail (% dari kotak peta) — tiap kartu bisa diseret manual. */
+  const [cardOffset, setCardOffset] = useState<Record<string, { x: number; y: number }>>({});
+  const [dragCardSlot, setDragCardSlot] = useState<string | null>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const cardDragRef = useRef<{
+    slot: string | null;
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    moved: boolean;
+    pointerId: number | null;
+  }>({ slot: null, startX: 0, startY: 0, origX: 0, origY: 0, moved: false, pointerId: null });
+  const suppressCardClickRef = useRef<string | null>(null);
+
+  /** Offset kartu mobile (px) — semua kartu bawah peta bisa diseret juga. */
+  const [mobileOffset, setMobileOffset] = useState<Record<string, { x: number; y: number }>>({});
+  const [dragMobileSlot, setDragMobileSlot] = useState<string | null>(null);
+  const mobileDragRef = useRef<{
+    slot: string | null;
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    moved: boolean;
+    pointerId: number | null;
+  }>({ slot: null, startX: 0, startY: 0, origX: 0, origY: 0, moved: false, pointerId: null });
+
   const clampPan = (x: number, y: number, z: number) => ({
     x: Math.max(-220 * z, Math.min(220 * z, x)),
     y: Math.max(-160 * z, Math.min(160 * z, y)),
@@ -541,6 +583,10 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
     zoomRef.current = 1;
     setPan({ x: 0, y: 0 });
     setZoom(1);
+    setCardOffset({});
+    setDragCardSlot(null);
+    setMobileOffset({});
+    setDragMobileSlot(null);
   };
 
   const applyZoom = (next: number) => {
@@ -662,11 +708,15 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
    */
   const effectivePlate = controlled ? selectedPlate : selectedKey;
 
-  // Ganti unit → kembalikan tampilan ke tengah supaya posisi tidak nyasar.
+  // Ganti unit → kembalikan tampilan ke tengah + semua kartu ke posisi awal.
   useEffect(() => {
     zoomRef.current = 1;
     setPan({ x: 0, y: 0 });
     setZoom(1);
+    setCardOffset({});
+    setDragCardSlot(null);
+    setMobileOffset({});
+    setDragMobileSlot(null);
   }, [effectivePlate]);
 
   /** Hasil pemeriksaan ban untuk unit terpilih (plat dinormalisasi). */
@@ -731,6 +781,148 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
     return 1;
   };
 
+  /** Posisi dasar kartu (persen) sebelum digeser manual. */
+  const cardBase = (slot: string, side: "left" | "right" | "center"): { left: number; top: number } => {
+    if (slot === "SP" || side === "center") return { left: 50, top: 85 };
+    return {
+      left: side === "left" ? BOX_X_LEFT : BOX_X_RIGHT,
+      top: boxTop(slot),
+    };
+  };
+
+  /** Posisi kartu + offset seretan user. Garis ikut ujung kartu ini. */
+  const cardPos = (slot: string, side: "left" | "right" | "center") => {
+    const base = cardBase(slot, side);
+    const o = cardOffset[slot] ?? { x: 0, y: 0 };
+    return { left: base.left + o.x, top: base.top + o.y };
+  };
+
+  const handleCardToggle = (slot: string) => {
+    if (suppressCardClickRef.current === slot) {
+      suppressCardClickRef.current = null;
+      return;
+    }
+    toggle(slot);
+  };
+
+  const startCardDrag = (e: React.PointerEvent<HTMLDivElement>, slot: string) => {
+    if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
+    if (e.button !== 0) return;
+    // Jangan sampai viewport ikut ke-pan saat kartu diseret.
+    e.stopPropagation();
+    const orig = cardOffset[slot] ?? { x: 0, y: 0 };
+    cardDragRef.current = {
+      slot,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: orig.x,
+      origY: orig.y,
+      moved: false,
+      pointerId: e.pointerId,
+    };
+    setDragCardSlot(slot);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* abaikan — pointer capture opsional */
+    }
+  };
+
+  const moveCardDrag = (e: React.PointerEvent<HTMLDivElement>, slot: string) => {
+    if (dragCardSlot !== slot) return;
+    const st = cardDragRef.current;
+    if (st.slot !== slot || st.pointerId !== e.pointerId) return;
+    const mapEl = mapRef.current;
+    if (!mapEl) return;
+    const rect = mapEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const dxPct = ((e.clientX - st.startX) / rect.width) * 100;
+    const dyPct = ((e.clientY - st.startY) / rect.height) * 100;
+    if (!st.moved && Math.hypot(e.clientX - st.startX, e.clientY - st.startY) > 4) st.moved = true;
+    if (!st.moved) return;
+    const nx = Math.max(-20, Math.min(20, st.origX + dxPct));
+    const ny = Math.max(-25, Math.min(25, st.origY + dyPct));
+    setCardOffset((prev) => ({ ...prev, [slot]: { x: nx, y: ny } }));
+  };
+
+  const endCardDrag = (e: React.PointerEvent<HTMLDivElement>, slot: string) => {
+    const st = cardDragRef.current;
+    if (st.slot !== slot || st.pointerId !== e.pointerId) return;
+    if (st.moved) suppressCardClickRef.current = slot;
+    cardDragRef.current = { slot: null, startX: 0, startY: 0, origX: 0, origY: 0, moved: false, pointerId: null };
+    setDragCardSlot(null);
+  };
+
+  /* ---- Drag kartu mobile (grid bawah peta, sistem px bebas) ---- */
+  const startMobileDrag = (e: React.PointerEvent<HTMLDivElement>, slot: string) => {
+    if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const orig = mobileOffset[slot] ?? { x: 0, y: 0 };
+    mobileDragRef.current = {
+      slot,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: orig.x,
+      origY: orig.y,
+      moved: false,
+      pointerId: e.pointerId,
+    };
+    setDragMobileSlot(slot);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* abaikan */
+    }
+  };
+
+  const moveMobileDrag = (e: React.PointerEvent<HTMLDivElement>, slot: string) => {
+    if (dragMobileSlot !== slot) return;
+    const st = mobileDragRef.current;
+    if (st.slot !== slot || st.pointerId !== e.pointerId) return;
+    const dx = e.clientX - st.startX;
+    const dy = e.clientY - st.startY;
+    if (!st.moved && Math.hypot(dx, dy) > 4) st.moved = true;
+    if (!st.moved) return;
+    const nx = Math.max(-160, Math.min(160, st.origX + dx));
+    const ny = Math.max(-120, Math.min(120, st.origY + dy));
+    setMobileOffset((prev) => ({ ...prev, [slot]: { x: nx, y: ny } }));
+  };
+
+  const endMobileDrag = (e: React.PointerEvent<HTMLDivElement>, slot: string) => {
+    const st = mobileDragRef.current;
+    if (st.slot !== slot || st.pointerId !== e.pointerId) return;
+    if (st.moved) suppressCardClickRef.current = slot;
+    mobileDragRef.current = { slot: null, startX: 0, startY: 0, origX: 0, origY: 0, moved: false, pointerId: null };
+    setDragMobileSlot(null);
+  };
+
+  const renderMobileBox = (slot: string) => {
+    const o = mobileOffset[slot] ?? { x: 0, y: 0 };
+    const isDragging = dragMobileSlot === slot;
+    return (
+      <TyreDetailBox
+        key={slot}
+        info={data[slot]}
+        active={activeSlot === slot}
+        onToggle={() => handleCardToggle(slot)}
+        onOpenPhotos={() => setPhotoSlot(slot)}
+        check={checksForUnit[slot]}
+        health={healthBySlot[slot]}
+        dragging={isDragging}
+        onPointerDown={(e) => startMobileDrag(e, slot)}
+        onPointerMove={(e) => moveMobileDrag(e, slot)}
+        onPointerUp={(e) => endMobileDrag(e, slot)}
+        onPointerCancel={(e) => endMobileDrag(e, slot)}
+        className={cn(isDragging && "z-50 shadow-lg")}
+        style={{
+          transform: `translate(${o.x}px, ${o.y}px)`,
+          transition: isDragging ? "none" : undefined,
+        }}
+      />
+    );
+  };
+
   const sortedActiveSlots = (Object.keys(data) as string[])
     .filter((slot) => wheelSlots.includes(slot) || slot === "SP")
     .sort((a, b) => getLayerOrder(a) - getLayerOrder(b));
@@ -741,7 +933,8 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
 
     // Ban serap: panel di bawah gambar, garis turun vertikal dari rangka.
     if (slot === "SP") {
-      const to = { x: 50, y: 85 };
+      const sp = cardPos("SP", "center");
+      const to = { x: sp.left, y: sp.top };
       const dy = to.y - from.y;
       const cy = from.y + dy * 0.95;
       return {
@@ -751,9 +944,10 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
     }
 
     const toLeft = (layout.left as readonly string[]).includes(slot);
+    const cp = cardPos(slot, toLeft ? "left" : "right");
     const to = {
-      x: toLeft ? BOX_X_LEFT + BOX_W : BOX_X_RIGHT,
-      y: boxTop(slot),
+      x: toLeft ? cp.left + BOX_W : cp.left,
+      y: cp.top,
     };
     const dx = to.x - from.x;
     const cx1 = from.x + dx * 0.45;
@@ -776,23 +970,34 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
     [tireHistory, effectivePlate, photoSlot],
   );
 
-  const renderBox = (slot: string, side: "left" | "right") => (
-    <TyreDetailBox
-      key={slot}
-      info={data[slot]}
-      active={activeSlot === slot}
-      onToggle={() => toggle(slot)}
-      onOpenPhotos={() => setPhotoSlot(slot)}
-      check={checksForUnit[slot]}
-      health={healthBySlot[slot]}
-      className="absolute -translate-y-1/2"
-      style={{
-        left: `${side === "left" ? BOX_X_LEFT : BOX_X_RIGHT}%`,
-        top: `${boxTop(slot)}%`,
-        width: `${BOX_W}%`,
-      }}
-    />
-  );
+  const renderBox = (slot: string, side: "left" | "right") => {
+    const p = cardPos(slot, side);
+    const isDragging = dragCardSlot === slot;
+    return (
+      <TyreDetailBox
+        key={slot}
+        info={data[slot]}
+        active={activeSlot === slot}
+        onToggle={() => handleCardToggle(slot)}
+        onOpenPhotos={() => setPhotoSlot(slot)}
+        check={checksForUnit[slot]}
+        health={healthBySlot[slot]}
+        dragging={isDragging}
+        onPointerDown={(e) => startCardDrag(e, slot)}
+        onPointerMove={(e) => moveCardDrag(e, slot)}
+        onPointerUp={(e) => endCardDrag(e, slot)}
+        onPointerCancel={(e) => endCardDrag(e, slot)}
+        className={cn("absolute -translate-y-1/2", isDragging && "z-50 shadow-lg")}
+        style={{
+          left: `${p.left}%`,
+          top: `${p.top}%`,
+          width: `${BOX_W}%`,
+          touchAction: "none",
+          transition: isDragging ? "none" : undefined,
+        }}
+      />
+    );
+  };
 
   return (
     <section className={cn("w-full space-y-4", className)}>
@@ -915,7 +1120,7 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <p className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-[11px] text-muted-foreground">
             <Move className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span className="truncate">Seret pakai mouse untuk menggeser · Ctrl+scroll untuk zoom · klik 2× untuk reset</span>
+            <span className="truncate">Seret kartu detail untuk memindah · seret latar untuk geser peta · Ctrl+scroll zoom · 2×klik reset</span>
           </p>
           <div className="ml-auto flex shrink-0 items-center gap-1">
             <button
@@ -955,8 +1160,8 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
         <div
           ref={viewportRef}
           role="application"
-          aria-label="Peta ban — seret pakai mouse untuk menggeser, Ctrl+scroll untuk zoom, klik dua kali untuk reset"
-          title="Seret untuk menggeser"
+          aria-label="Peta ban — seret kartu detail untuk memindah, seret latar untuk menggeser peta, Ctrl+scroll untuk zoom, klik dua kali untuk reset"
+          title="Seret kartu untuk memindah · seret latar untuk geser peta"
           onPointerDown={(e) => {
             if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
             if (e.button !== 0) return;
@@ -1010,8 +1215,9 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
             className={cn("w-full", !dragging && "transition-transform duration-200 ease-out")}
             style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center center" }}
           >
-        {/* Peta desktop: panel di kiri & kanan gambar */}
+        {/* Peta desktop: panel di kiri & kanan gambar — tiap kartu bisa diseret */}
         <div
+          ref={mapRef}
           className="relative hidden w-full md:block"
           style={{ aspectRatio: String(LAYOUT.aspect) }}
         >
@@ -1074,22 +1280,35 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
           {layout.left.map((slot) => renderBox(slot, "left"))}
           {layout.right.map((slot) => renderBox(slot, "right"))}
 
-          {/* Ban serap: satu panel di bawah gambar, semua tipe kendaraan */}
-          <TyreDetailBox
-            key="SP"
-            info={data.SP}
-            active={activeSlot === "SP"}
-            onToggle={() => toggle("SP")}
-            onOpenPhotos={() => setPhotoSlot("SP")}
-            check={checksForUnit["SP"]}
-            health={healthBySlot["SP"]}
-            className="absolute -translate-x-1/2 -translate-y-1/2 shadow-lg"
-            style={{
-              left: "50%",
-              top: "85%",
-              width: `${BOX_W}%`,
-            }}
-          />
+          {/* Ban serap: satu panel di bawah gambar, semua tipe kendaraan — bisa diseret juga */}
+          {(() => {
+            const sp = cardPos("SP", "center");
+            const isDragging = dragCardSlot === "SP";
+            return (
+              <TyreDetailBox
+                key="SP"
+                info={data.SP}
+                active={activeSlot === "SP"}
+                onToggle={() => handleCardToggle("SP")}
+                onOpenPhotos={() => setPhotoSlot("SP")}
+                check={checksForUnit["SP"]}
+                health={healthBySlot["SP"]}
+                dragging={isDragging}
+                onPointerDown={(e) => startCardDrag(e, "SP")}
+                onPointerMove={(e) => moveCardDrag(e, "SP")}
+                onPointerUp={(e) => endCardDrag(e, "SP")}
+                onPointerCancel={(e) => endCardDrag(e, "SP")}
+                className={cn("absolute -translate-x-1/2 -translate-y-1/2 shadow-lg", isDragging && "z-50")}
+                style={{
+                  left: `${sp.left}%`,
+                  top: `${sp.top}%`,
+                  width: `${BOX_W}%`,
+                  touchAction: "none",
+                  transition: isDragging ? "none" : undefined,
+                }}
+              />
+            );
+          })()}
         </div>
 
         {/* Peta mobile: gambar + titik roda ikut kegeser di dalam viewport */}
@@ -1123,31 +1342,28 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
           </div>{/* tutup lapisan transform geser/zoom */}
         </div>{/* tutup viewport geser */}
 
-        {/* Panel mobile di bawah peta — tidak ikut kegeser, tetap gampang diklik */}
+        {/* Panel mobile di bawah peta — semua kartu bisa diseret (mouse/pen) */}
         <div className="md:hidden space-y-3 pt-3">
-          <div className="grid grid-cols-2 gap-2">
-            {activeSlots.map((slot) => (
-              <TyreDetailBox
-                key={slot}
-                info={data[slot]}
-                active={activeSlot === slot}
-                onToggle={() => toggle(slot)}
-                onOpenPhotos={() => setPhotoSlot(slot)}
-                check={checksForUnit[slot]}
-                health={healthBySlot[slot]}
-              />
-            ))}
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Move className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>Tahan & seret kartu buat mindahin · klik 2× buat balikin</span>
+            <button
+              type="button"
+              onDoubleClick={(e) => e.stopPropagation()}
+              onClick={() => {
+                setMobileOffset({});
+                setDragMobileSlot(null);
+              }}
+              className="ml-auto shrink-0 rounded-md border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              Reset kartu
+            </button>
+          </p>
+          <div className="grid grid-cols-2 gap-2" onDoubleClick={() => { setMobileOffset({}); setDragMobileSlot(null); }}>
+            {activeSlots.map((slot) => renderMobileBox(slot))}
           </div>
           {/* Ban serap: satu panel lebar penuh di bawah grid roda */}
-          <TyreDetailBox
-            key="SP"
-            info={data.SP}
-            active={activeSlot === "SP"}
-            onToggle={() => toggle("SP")}
-            onOpenPhotos={() => setPhotoSlot("SP")}
-            check={checksForUnit["SP"]}
-            health={healthBySlot["SP"]}
-          />
+          {renderMobileBox("SP")}
         </div>
 
         {/* Keterangan di bawah gambar */}
