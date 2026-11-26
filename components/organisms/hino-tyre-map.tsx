@@ -2,7 +2,7 @@
 
 import React, { memo, useState, useMemo, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Camera, Gauge, Ruler, Tag, CircleDot, History, Search, ChevronDown, Check } from "lucide-react";
+import { Camera, Gauge, Ruler, Tag, CircleDot, History, Search, ChevronDown, Check, Move, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -427,7 +427,8 @@ function TyrePhoto({ src, alt, className }: { src: string | null; alt: string; c
     />
   );
 
-  return (      <div className="relative h-full w-full">
+  return (
+    <div className="relative h-full w-full">
       {!loaded && (
         <div className="absolute inset-0 flex items-center justify-center rounded-lg border border-border/60 bg-muted/30">
           <span className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-primary" />
@@ -515,6 +516,56 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
   /** Posisi ban yang modalnya terbuka (foto aktual sidewall & tread). */
   const [photoSlot, setPhotoSlot] = useState<string | null>(null);
 
+  /** Geser + zoom peta di dalam kotak pembungkus (drag pakai mouse). */
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(1);
+  const [dragging, setDragging] = useState(false);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef({
+    startX: 0,
+    startY: 0,
+    panX: 0,
+    panY: 0,
+    moved: false,
+    pointerId: null as number | null,
+  });
+  const suppressClickRef = useRef(false);
+
+  const clampPan = (x: number, y: number, z: number) => ({
+    x: Math.max(-220 * z, Math.min(220 * z, x)),
+    y: Math.max(-160 * z, Math.min(160 * z, y)),
+  });
+
+  const resetView = () => {
+    zoomRef.current = 1;
+    setPan({ x: 0, y: 0 });
+    setZoom(1);
+  };
+
+  const applyZoom = (next: number) => {
+    const clamped = Math.max(0.9, Math.min(2.5, Math.round(next * 100) / 100));
+    zoomRef.current = clamped;
+    setZoom(clamped);
+    setPan((p) => clampPan(p.x, p.y, clamped));
+  };
+
+  // Ctrl/cmd + scroll untuk zoom (scroll biasa tetap scroll halaman).
+  // Pakai listener native non-passive supaya bisa preventDefault saat zoom.
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !(e as WheelEvent & { metaKey?: boolean }).metaKey) return;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      applyZoom(zoomRef.current * factor);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const data = CONTOH_DATA_BAN;
 
   /** Peta plat (dinormalisasi tanpa spasi, huruf besar) → type_vehicle. */
@@ -577,6 +628,8 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
       .filter((group) => group.plates.length > 0);
   }, [plateGroups, plateQuery]);
 
+  const [selectedKey, setSelectedKey] = useState<string>("");
+  const controlled = selectedPlate != null;
   const choosePlate = (v: string) => {
     if (controlled && onSelectPlate) onSelectPlate(v);
     else setSelectedKey(v);
@@ -585,7 +638,6 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
     setPlateQuery(null);
     plateInputRef.current?.blur();
   };
-  const [selectedKey, setSelectedKey] = useState<string>("");
   // Unit pertama terpilih otomatis sekali saja di awal (bukan tiap render),
   // dan pilihan user tidak pernah ditimpa saat data ter-refresh.
   const didInitSelection = useRef(false);
@@ -608,8 +660,14 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
    * kontrol penuh pemanggil (panel "Ban perlu tindakan"); kalau tidak,
    * state internal seperti sebelumnya — auto-pilih unit pertama tetap jalan.
    */
-  const controlled = selectedPlate != null;
   const effectivePlate = controlled ? selectedPlate : selectedKey;
+
+  // Ganti unit → kembalikan tampilan ke tengah supaya posisi tidak nyasar.
+  useEffect(() => {
+    zoomRef.current = 1;
+    setPan({ x: 0, y: 0 });
+    setZoom(1);
+  }, [effectivePlate]);
 
   /** Hasil pemeriksaan ban untuk unit terpilih (plat dinormalisasi). */
   const checksForUnit = useMemo(
@@ -853,6 +911,105 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
       </div>
 
       <div className="rounded-2xl border bg-card p-3 sm:p-5">
+        {/* Toolbar geser/zoom — petanya bisa diseret pakai mouse di dalam kotak ini */}
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <p className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Move className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="truncate">Seret pakai mouse untuk menggeser · Ctrl+scroll untuk zoom · klik 2× untuk reset</span>
+          </p>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              aria-label="Perkecil peta"
+              title="Perkecil"
+              onClick={() => applyZoom(zoom - 0.15)}
+              className="grid h-7 w-7 place-items-center rounded-md border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ZoomOut className="h-3.5 w-3.5" aria-hidden />
+            </button>
+            <span className="w-11 text-center text-[11px] tabular-nums text-muted-foreground" aria-live="polite">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              aria-label="Perbesar peta"
+              title="Perbesar"
+              onClick={() => applyZoom(zoom + 0.15)}
+              className="grid h-7 w-7 place-items-center rounded-md border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ZoomIn className="h-3.5 w-3.5" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-label="Reset posisi peta"
+              title="Reset posisi"
+              onClick={resetView}
+              className="grid h-7 w-7 place-items-center rounded-md border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </div>
+        </div>
+
+        {/* Viewport geser — overflow hidden, isi di dalamnya yang bergerak */}
+        <div
+          ref={viewportRef}
+          role="application"
+          aria-label="Peta ban — seret pakai mouse untuk menggeser, Ctrl+scroll untuk zoom, klik dua kali untuk reset"
+          title="Seret untuk menggeser"
+          onPointerDown={(e) => {
+            if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
+            if (e.button !== 0) return;
+            dragRef.current = {
+              startX: e.clientX,
+              startY: e.clientY,
+              panX: pan.x,
+              panY: pan.y,
+              moved: false,
+              pointerId: e.pointerId,
+            };
+            setDragging(true);
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            if (!dragging) return;
+            if (dragRef.current.pointerId !== e.pointerId) return;
+            const dx = e.clientX - dragRef.current.startX;
+            const dy = e.clientY - dragRef.current.startY;
+            if (!dragRef.current.moved && Math.hypot(dx, dy) > 4) dragRef.current.moved = true;
+            if (dragRef.current.moved) {
+              setPan(clampPan(dragRef.current.panX + dx, dragRef.current.panY + dy, zoom));
+            }
+          }}
+          onPointerUp={(e) => {
+            if (dragRef.current.pointerId !== e.pointerId) return;
+            if (dragRef.current.moved) suppressClickRef.current = true;
+            dragRef.current.pointerId = null;
+            setDragging(false);
+          }}
+          onPointerCancel={(e) => {
+            if (dragRef.current.pointerId !== e.pointerId) return;
+            dragRef.current.pointerId = null;
+            setDragging(false);
+          }}
+          onClickCapture={(e) => {
+            if (suppressClickRef.current) {
+              suppressClickRef.current = false;
+              e.stopPropagation();
+              e.preventDefault();
+            }
+          }}
+          onDoubleClick={resetView}
+          className={cn(
+            "relative select-none overflow-hidden rounded-xl",
+            dragging ? "cursor-grabbing" : "cursor-grab",
+          )}
+          style={{ touchAction: zoom > 1 ? "none" : "pan-x pan-y" }}
+        >
+          <div
+            className={cn("w-full", !dragging && "transition-transform duration-200 ease-out")}
+            style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center center" }}
+          >
         {/* Peta desktop: panel di kiri & kanan gambar */}
         <div
           className="relative hidden w-full md:block"
@@ -935,9 +1092,8 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
           />
         </div>
 
-        {/* Peta mobile: gambar + titik roda, panel bergrid di bawahnya */}
-        <div className="md:hidden space-y-3">
-          <div className="relative w-full">
+        {/* Peta mobile: gambar + titik roda ikut kegeser di dalam viewport */}
+        <div className="relative w-full md:hidden">
             <Image
               src={HINO_IMAGE.src}
               alt="Peta posisi ban rangka Hino dilihat dari atas"
@@ -964,6 +1120,11 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
               );
             })}
           </div>
+          </div>{/* tutup lapisan transform geser/zoom */}
+        </div>{/* tutup viewport geser */}
+
+        {/* Panel mobile di bawah peta — tidak ikut kegeser, tetap gampang diklik */}
+        <div className="md:hidden space-y-3 pt-3">
           <div className="grid grid-cols-2 gap-2">
             {activeSlots.map((slot) => (
               <TyreDetailBox
