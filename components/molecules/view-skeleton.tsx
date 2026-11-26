@@ -411,7 +411,7 @@ export function ReviewPageSkeleton() {
   )
 }
 
-/** Analisa ban: toolbar ringkas, panel unit bermasalah 1/3, peta 2/3. */
+/** Analisa ban: toolbar ringkas, peta utama, panel unit bermasalah pendamping. */
 export function BanPageSkeleton() {
   return (
     <div className="space-y-4" role="status" aria-busy="true">
@@ -420,43 +420,39 @@ export function BanPageSkeleton() {
         <Skeleton className="h-3 w-64 max-w-full" />
         <Skeleton className="h-8 w-28 rounded-md" />
       </div>
-      <div className="grid items-start gap-4 xl:grid-cols-3">
-        <div className="overflow-hidden rounded-xl border bg-card xl:col-span-1">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
-            <div className="flex items-center gap-2.5">
-              <Skeleton className="h-8 w-8 rounded-md" />
-              <div className="space-y-1.5">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-3 w-36" />
-              </div>
+      <div className="grid items-start gap-4 lg:grid-cols-12">
+        <div className="space-y-3 lg:col-span-7 xl:col-span-8">
+          <div className="flex items-center justify-between gap-2">
+            <Skeleton className="h-9 w-56 max-w-full rounded-md" />
+            <Skeleton className="h-3 w-40 max-w-full" />
+          </div>
+          <Skeleton className="h-[360px] w-full rounded-lg sm:h-[440px]" />
+        </div>
+        <div className="overflow-hidden rounded-lg border border-border/70 bg-card lg:col-span-5 xl:col-span-4">
+          <div className="space-y-2 border-b border-border/70 px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-6 w-16 rounded-full" />
             </div>
-            <div className="flex w-full gap-1.5">
+            <Skeleton className="h-3 w-44 max-w-full" />
+            <div className="flex gap-1.5">
               {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-7 flex-1 rounded-md" />
+                <Skeleton key={i} className="h-8 flex-1 rounded-md" />
               ))}
             </div>
           </div>
-          <div className="divide-y divide-border/60">
+          <div className="divide-y divide-border/70">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-2.5 px-4 py-3">
-                <Skeleton className="h-9 w-[3px] shrink-0 rounded-full" />
-                <div className="w-28 space-y-1.5">
-                  <Skeleton className="h-3.5 w-20" />
-                  <Skeleton className="h-3 w-16" />
+              <div key={i} className="flex items-start gap-2.5 px-4 py-3">
+                <Skeleton className="mt-1 h-2 w-2 shrink-0 rounded-full" />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Skeleton className="h-3.5 w-24" />
+                  <Skeleton className="h-3 w-40 max-w-full" />
                 </div>
-                <Skeleton className="hidden h-3 flex-1 md:block" />
-                <Skeleton className="h-6 w-16 shrink-0 rounded-full" />
+                <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-sm" />
               </div>
             ))}
           </div>
-        </div>
-        <div className="space-y-3 rounded-xl border bg-card p-3 xl:col-span-2"
-        >
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-9 w-56 max-w-full rounded-md" />
-            <Skeleton className="h-8 w-20 rounded-md" />
-          </div>
-          <Skeleton className="h-[360px] w-full rounded-lg sm:h-[440px]" />
         </div>
       </div>
     </div>

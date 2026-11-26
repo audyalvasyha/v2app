@@ -2,27 +2,20 @@
 
 import React, { memo, useState, useMemo, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Camera, Gauge, Ruler, Tag, CircleDot, History } from "lucide-react";
+import { Camera, Gauge, Ruler, Tag, CircleDot, History, Search, ChevronDown, Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { TIRE_HEALTH_TONE, tireHealthLevel, type TireHealthLevel } from "@/lib/tire-health";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 /**
  * Peta posisi ban untuk menu Analisa Ban.
  *
- * - Dropdown nomor polisi diisi dari tabel `equipment`, dikelompokkan per
+ * - Searchbar nomor polisi diisi dari tabel `equipment`, dikelompokkan per
  *   `type_vehicle`: grup 6R/6D/4R/4D berlabel jumlah unit, tipe di luar daftar
  *   itu masuk grup "Tipe lain" di paling bawah (panel default 6 roda).
+ *   Ketik untuk memfilter, klik chevron untuk membuka semua unit.
  * - Jumlah panel hotspot mengikuti `type_vehicle` di tabel itu:
  *   6R/6D → 6 panel roda (ban belakang dobel: dalam + luar),
  *   4R/4D → 4 panel roda (ban belakang tunggal).
@@ -564,6 +557,34 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
     () => plateGroups.flatMap((g) => g.plates),
     [plateGroups],
   );
+
+  /** Searchbar nopol: buka/tutup daftar + teks filter (null = tampilkan nopol aktif). */
+  const [plateOpen, setPlateOpen] = useState(false);
+  const [plateQuery, setPlateQuery] = useState<string | null>(null);
+  const plateInputRef = useRef<HTMLInputElement>(null);
+
+  /** Grup nopol yang cocok dengan teks search (tanpa spasi, tak sensitif kapital). */
+  const filteredPlateGroups = useMemo(() => {
+    const q = (plateQuery ?? "").replace(/\s+/g, "").toUpperCase();
+    if (!q) return plateGroups;
+    return plateGroups
+      .map((group) => ({
+        ...group,
+        plates: group.plates.filter((plate) =>
+          plate.replace(/\s+/g, "").toUpperCase().includes(q),
+        ),
+      }))
+      .filter((group) => group.plates.length > 0);
+  }, [plateGroups, plateQuery]);
+
+  const choosePlate = (v: string) => {
+    if (controlled && onSelectPlate) onSelectPlate(v);
+    else setSelectedKey(v);
+    setActiveSlot(null);
+    setPlateOpen(false);
+    setPlateQuery(null);
+    plateInputRef.current?.blur();
+  };
   const [selectedKey, setSelectedKey] = useState<string>("");
   // Unit pertama terpilih otomatis sekali saja di awal (bukan tiap render),
   // dan pilihan user tidak pernah ditimpa saat data ter-refresh.
@@ -717,43 +738,112 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
 
   return (
     <section className={cn("w-full space-y-4", className)}>
-      {/* Dropdown nomor polisi — sumbernya tabel equipment */}
+      {/* Searchbar nomor polisi + dropdown — sumbernya tabel equipment.
+          Ketik untuk memfilter nopol, klik chevron untuk membuka/tutup daftar. */}
       <div className="flex flex-wrap items-center gap-3">
-        <Select
-          value={effectivePlate}
-          onValueChange={(v) => {
-            if (controlled && onSelectPlate) onSelectPlate(v);
-            else setSelectedKey(v);
-            setActiveSlot(null);
+        <div
+          className="relative min-w-[13rem] sm:w-64"
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+              setPlateOpen(false);
+              setPlateQuery(null);
+            }
           }}
         >
-          <SelectTrigger size="sm" className="min-w-[13rem] sm:w-64" aria-label="Pilih nomor polisi unit">
-            <SelectValue placeholder="Pilih nomor polisi" />
-          </SelectTrigger>
-          <SelectContent className="max-h-80">
-            {plateGroups.length === 0 ? (
-              <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                Belum ada unit di tabel equipment
-              </p>
-            ) : (
-              plateGroups.map((group) => (
-                <SelectGroup key={group.key}>
-                  <SelectLabel className="flex items-center justify-between gap-6 pr-8">
-                    <span className="font-medium">{group.label}</span>
-                    <span className="tabular-nums text-[10px] text-muted-foreground/70">
-                      {group.plates.length} unit
-                    </span>
-                  </SelectLabel>
-                  {group.plates.map((plate) => (
-                    <SelectItem key={plate} value={plate}>
-                      {plate}
-                    </SelectItem>
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+          <Input
+            ref={plateInputRef}
+            role="combobox"
+            aria-expanded={plateOpen}
+            aria-controls="plate-search-listbox"
+            aria-autocomplete="list"
+            aria-label="Cari dan pilih nomor polisi unit"
+            placeholder="Cari nopol…"
+            value={plateOpen && plateQuery !== null ? plateQuery : (effectivePlate ?? "")}
+            onFocus={() => {
+              setPlateQuery(effectivePlate ?? "");
+              setPlateOpen(true);
+            }}
+            onChange={(e) => {
+              setPlateQuery(e.target.value);
+              setPlateOpen(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setPlateOpen(false);
+                setPlateQuery(null);
+                plateInputRef.current?.blur();
+              }
+            }}
+            className="h-8 pl-8 pr-8 text-sm"
+          />
+          <button
+            type="button"
+            aria-label={plateOpen ? "Tutup daftar nopol" : "Buka daftar nopol"}
+            aria-expanded={plateOpen}
+            onClick={() => {
+              if (plateOpen) {
+                setPlateOpen(false);
+                setPlateQuery(null);
+              } else {
+                setPlateQuery(effectivePlate ?? "");
+                setPlateOpen(true);
+                plateInputRef.current?.focus();
+              }
+            }}
+            className="absolute right-1 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", plateOpen && "rotate-180")} aria-hidden />
+          </button>
+          {plateOpen && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-overlay">
+              {plateGroups.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  Belum ada unit di tabel equipment
+                </p>
+              ) : filteredPlateGroups.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  Tidak ada nopol yang cocok
+                </p>
+              ) : (
+                <ul id="plate-search-listbox" role="listbox" className="max-h-80 overflow-y-auto py-1">
+                  {filteredPlateGroups.map((group) => (
+                    <li key={group.key}>
+                      <p className="flex items-center justify-between gap-6 px-3 pb-1 pt-2 text-[11px] font-medium text-muted-foreground">
+                        <span>{group.label}</span>
+                        <span className="tabular-nums text-[10px] text-muted-foreground/70">
+                          {group.plates.length} unit
+                        </span>
+                      </p>
+                      <ul>
+                        {group.plates.map((plate) => {
+                          const selected = plate === effectivePlate;
+                          return (
+                            <li key={plate}>
+                              <button
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                onClick={() => choosePlate(plate)}
+                                className={cn(
+                                  "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-muted",
+                                  selected && "bg-muted font-medium",
+                                )}
+                              >
+                                <span className="truncate">{plate}</span>
+                                {selected && <Check className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </li>
                   ))}
-                </SelectGroup>
-              ))
-            )}
-          </SelectContent>
-        </Select>
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
 
         <p className="text-xs text-muted-foreground">
           Panel mengikuti <span className="font-medium text-foreground">type_vehicle</span> unit ini di tabel equipment
