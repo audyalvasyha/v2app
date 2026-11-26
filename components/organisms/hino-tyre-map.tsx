@@ -327,6 +327,9 @@ function TyreDetailBox({ info, active, onToggle, onOpenPhotos, check, health, cl
         </span>
         <button
           type="button"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
           onClick={(e) => {
             e.stopPropagation();
             onOpenPhotos();
@@ -808,6 +811,8 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
   const startCardDrag = (e: React.PointerEvent<HTMLDivElement>, slot: string) => {
     if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
     if (e.button !== 0) return;
+    // Klik tombol kamera di dalam kartu jangan mulai drag — biar modal foto kebuka.
+    if ((e.target as HTMLElement | null)?.closest?.("button, a, input, select, textarea")) return;
     // Jangan sampai viewport ikut ke-pan saat kartu diseret.
     e.stopPropagation();
     const orig = cardOffset[slot] ?? { x: 0, y: 0 };
@@ -857,6 +862,8 @@ function HinoTyreMapImpl({ equipments, tyrePhotos, tireChecks, tireHistory, sele
   const startMobileDrag = (e: React.PointerEvent<HTMLDivElement>, slot: string) => {
     if (e.pointerType !== "mouse" && e.pointerType !== "pen") return;
     if (e.button !== 0) return;
+    // Klik tombol kamera di dalam kartu jangan mulai drag — biar modal foto kebuka.
+    if ((e.target as HTMLElement | null)?.closest?.("button, a, input, select, textarea")) return;
     e.stopPropagation();
     const orig = mobileOffset[slot] ?? { x: 0, y: 0 };
     mobileDragRef.current = {
