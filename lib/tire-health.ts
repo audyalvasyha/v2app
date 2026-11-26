@@ -110,6 +110,183 @@ export function tireHealthPriority(level: TireHealthLevel): number {
     return 0
 }
 
+/** Kode slot peta yang dikenali dashboard ringkas — sama dengan menu Ban. */
+const DASHBOARD_TIRE_SLOTS = new Set([
+    "FL",
+    "FR",
+    "RL",
+    "RR",
+    "SP",
+    "RLI",
+    "RLO",
+    "RRI",
+    "RRO",
+])
+
+/** "FR - (Depan Kanan)" → "FR"; null bila kode tidak dikenali peta. */
+export function normalizeTireSlot(value: string | null | undefined): string | null {
+    const match = String(value ?? "").toUpperCase().trim().match(/^([A-Z]{1,3}(?:-[IO])?)\b/)
+    if (!match) return null
+    return DASHBOARD_TIRE_SLOTS.has(match[1]) ? match[1] : null
+}
+
+function toFiniteTireNumber(value: unknown): number | null {
+    if (value == null || value === "") return null
+    const parsed = typeof value === "number" ? value : Number(String(value))
+    return Number.isFinite(parsed) ? parsed : null
+}
+
+function tireKey(plateKey: string, slot: string): string {
+    return `${plateKey}||${slot}`
+}
+
+function recordTimeMs(recordedAt: string, inspectionDate: string | null): number {
+    const recordedMs = Date.parse(recordedAt)
+    if (Number.isFinite(recordedMs)) return recordedMs
+    if (inspectionDate) {
+        const inspectedMs = Date.parse(inspectionDate)
+        if (Number.isFinite(inspectedMs)) return inspectedMs
+    }
+    return Number.NEGATIVE_INFINITY
+}
+
+export interface TireDashboardDetail {
+    tire_position: string | null | undefined
+    tread_depth_mm: number | string | null | undefined
+    pressure_psi: number | string | null | undefined
+    condition: string | null | undefined
+    created_at: string | null | undefined
+}
+
+export interface TireDashboardInspection {
+    equipment_id: string | null | undefined
+    inspection_date: string | null | undefined
+    tire_check_details?: readonly TireDashboardDetail[] | null
+}
+
+export interface TireDashboardIssue {
+    slot: string
+    level: Extract<TireHealthLevel, "action" | "warning">
+    reason: string
+    recordedAt: string
+    inspectionDate: string | null
+}
+
+export interface TireDashboardUnit {
+    plateKey: string
+    plate: string
+    worstLevel: Extract<TireHealthLevel, "action" | "warning">
+    issues: TireDashboardIssue[]
+    lastInspected: string | null
+}
+
+export interface TireDashboardSummary {
+    inspectedUnits: number
+    actionUnits: number
+    warningUnits: number
+    units: TireDashboardUnit[]
+}
+
+/**
+ * Ringkasan dashboard dari pemeriksaan ban harian.
+ *
+ * Hanya memakai pemeriksaan terbaru per unit per slot — sama seperti peta di
+ * menu Ban — supaya satu ban yang sudah diperbaiki tidak terus dihitung dari
+ * riwayat lamanya. Slot yang tidak dikenali peta diabaikan.
+ */
+export function summarizeTireDashboard(
+    inspections: readonly TireDashboardInspection[],
+    plateByEquipmentKey: ReadonlyMap<string, string>,
+): TireDashboardSummary {
+    const inspectedKeys = new Set<string>()
+    const latestBySlot = new Map<string, { record: TireDashboardDetail; recordedAt: string; inspectionDate: string | null }>()
+
+    for (const inspection of inspections) {
+        const plate = plateByEquipmentKey.get(String(inspection?.equipment_id ?? ""))
+        if (!plate) continue
+        const plateKey = String(plate).replace(/\s+/g, "").toUpperCase()
+        if (!plateKey) continue
+        inspectedKeys.add(plateKey)
+
+        const inspectionDate = String(inspection?.inspection_date ?? "").trim() || null
+        for (const detail of inspection?.tire_check_details ?? []) {
+            const slot = normalizeTireSlot(detail?.tire_position)
+            if (!slot) continue
+            const recordedAt = String(detail?.created_at ?? "")
+            const key = tireKey(plateKey, slot)
+            const existing = latestBySlot.get(key)
+            if (!existing || recordTimeMs(recordedAt, inspectionDate) >= recordTimeMs(existing.recordedAt, existing.inspectionDate)) {
+                latestBySlot.set(key, { record: detail, recordedAt, inspectionDate })
+            }
+        }
+    }
+
+    const unitsByPlate = new Map<string, TireDashboardUnit>()
+    for (const [key, entry] of latestBySlot) {
+        const separator = key.indexOf("||")
+        const plateKey = key.slice(0, separator)
+        const slot = key.slice(separator + 2)
+        const vitals = {
+            condition: entry.record.condition?.trim() || null,
+            pressurePsi: toFiniteTireNumber(entry.record.pressure_psi),
+            treadDepthMm: toFiniteTireNumber(entry.record.tread_depth_mm),
+        }
+        const level = tireHealthLevel(vitals)
+        if (level !== "action" && level !== "warning") continue
+        const reason = tireIssueReason(vitals) ?? (level === "action" ? "Perlu tindakan" : "Waspada")
+        let unit = unitsByPlate.get(plateKey)
+        if (!unit) {
+            const display = [...plateByEquipmentKey.values()].find(
+                (plate) => String(plate).replace(/\s+/g, "").toUpperCase() === plateKey,
+            ) ?? plateKey
+            unit = {
+                plateKey,
+                plate: String(display).trim().replace(/\s+/g, " ").toUpperCase(),
+                worstLevel: level,
+                issues: [],
+                lastInspected: entry.inspectionDate,
+            }
+            unitsByPlate.set(plateKey, unit)
+        }
+        unit.issues.push({
+            slot,
+            level,
+            reason,
+            recordedAt: entry.recordedAt,
+            inspectionDate: entry.inspectionDate,
+        })
+        if (entry.inspectionDate && (!unit.lastInspected || entry.inspectionDate > unit.lastInspected)) {
+            unit.lastInspected = entry.inspectionDate
+        }
+    }
+
+    const units = [...unitsByPlate.values()].map((unit) => {
+        const issues = unit.issues
+            .slice()
+            .sort(
+                (a, b) =>
+                    tireHealthPriority(b.level) - tireHealthPriority(a.level) ||
+                    recordTimeMs(b.recordedAt, b.inspectionDate) - recordTimeMs(a.recordedAt, a.inspectionDate) ||
+                    a.slot.localeCompare(b.slot),
+            )
+        return { ...unit, worstLevel: issues[0].level, issues }
+    })
+    units.sort(
+        (a, b) =>
+            tireHealthPriority(b.worstLevel) - tireHealthPriority(a.worstLevel) ||
+            b.issues.length - a.issues.length ||
+            String(b.lastInspected ?? "").localeCompare(String(a.lastInspected ?? "")) ||
+            a.plate.localeCompare(b.plate, "id-ID"),
+    )
+
+    return {
+        inspectedUnits: inspectedKeys.size,
+        actionUnits: units.filter((unit) => unit.worstLevel === "action").length,
+        warningUnits: units.filter((unit) => unit.worstLevel === "warning").length,
+        units,
+    }
+}
+
 /**
  * Tone UI bersama untuk ketiga tampilan (badge, titik roda, aksen panel).
  * "none" tidak pernah menaikkan kalangan — warna netral.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { csvEscape, tireChecksCsv, tireHealthLevel, tireHealthPriority } from "./tire-health";
+import { csvEscape, normalizeTireSlot, summarizeTireDashboard, tireChecksCsv, tireHealthLevel, tireHealthPriority } from "./tire-health";
 
 describe("tireHealthLevel", () => {
   it("kondisi verbal buruk menang atas angka; kondisi bagus tidak menutupi angka terukur", () => {
@@ -63,6 +63,46 @@ describe("csvEscape", () => {
     expect(csvEscape("aman")).toBe("aman");
     expect(csvEscape(null)).toBe("");
     expect(csvEscape(90.5)).toBe("90.5");
+  });
+});
+
+describe("normalizeTireSlot", () => {
+  it("kode peta dikenali, posisi asing diabaikan", () => {
+    expect(normalizeTireSlot("FR - (Depan Kanan)")).toBe("FR");
+    expect(normalizeTireSlot("rli - kiri dalam")).toBe("RLI");
+    expect(normalizeTireSlot("Cadangan")).toBeNull();
+    expect(normalizeTireSlot(null)).toBeNull();
+  });
+});
+
+describe("summarizeTireDashboard", () => {
+  it("memakai pemeriksaan terbaru per slot dan mengabaikan slot asing", () => {
+    const summary = summarizeTireDashboard(
+      [
+        {
+          equipment_id: "EQ-1",
+          inspection_date: "2026-11-20",
+          tire_check_details: [
+            { tire_position: "FR - kanan", tread_depth_mm: 1.5, pressure_psi: 90, condition: "Bagus", created_at: "2026-11-20T01:00:00Z" },
+            { tire_position: "Cadangan", tread_depth_mm: 1.0, pressure_psi: 50, condition: "Gundul", created_at: "2026-11-20T02:00:00Z" },
+          ],
+        },
+        {
+          equipment_id: "EQ-1",
+          inspection_date: "2026-11-21",
+          tire_check_details: [
+            { tire_position: "FR - kanan", tread_depth_mm: 6, pressure_psi: 70, condition: "Bagus", created_at: "2026-11-21T01:00:00Z" },
+          ],
+        },
+      ],
+      new Map([["EQ-1", "B 1234 XY"]]),
+    );
+
+    expect(summary.inspectedUnits).toBe(1);
+    expect(summary.actionUnits).toBe(0);
+    expect(summary.warningUnits).toBe(1);
+    expect(summary.units[0].plate).toBe("B 1234 XY");
+    expect(summary.units[0].issues.map((issue) => `${issue.slot}:${issue.level}`)).toEqual(["FR:warning"]);
   });
 });
 

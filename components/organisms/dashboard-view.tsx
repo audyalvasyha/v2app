@@ -10,6 +10,7 @@ import { WeatherBanner } from "@/components/organisms/weather-banner";
 import { supabase } from "@/utils/supabase";
 import {
   compactRupiah,
+  formatDateMedium,
   formatNumber,
   formatRupiah,
   startOfZonedDay,
@@ -31,15 +32,34 @@ import {
 } from "@/lib/outbound-status";
 import {
   isEscalated,
+  isOverdue,
   readLocalTasks,
   sortTasks,
   ticketAgeDays,
+  ticketAgeLabel,
   type Task,
 } from "@/lib/tasks";
+import { summarizeComplaintsByPlate } from "@/lib/complaint-summary";
+import {
+  summarizeTireDashboard,
+  type TireDashboardInspection,
+  type TireDashboardSummary,
+} from "@/lib/tire-health";
 import { isMaintenanceStatus } from "@/lib/unit-status";
 import { cn } from "@/lib/utils";
 import type { View } from "@/components/templates/dashboard-layout";
-import { Activity, AlertTriangle, ArrowRight, CheckCircle2, ListChecks } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  CircleDollarSign,
+  ClipboardList,
+  ListChecks,
+  Package,
+  Send,
+  Truck,
+  Wrench,
+} from "lucide-react";
 
 interface DashboardViewProps {
   equipments: any[];
@@ -117,10 +137,8 @@ function DashboardHeader({ onNavigate }: { onNavigate?: (view: View) => void }) 
           className="w-full gap-2 bg-card sm:w-auto"
           onClick={() => onNavigate?.("tugas")}
         >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border border-border/70 bg-muted/50">
-            <ListChecks className="h-3 w-3" />
-          </span>
-          Complain board
+          <ListChecks className="h-4 w-4 text-muted-foreground" />
+          Complaint Board
         </Button>
         <Button
           size="sm"
@@ -128,9 +146,7 @@ function DashboardHeader({ onNavigate }: { onNavigate?: (view: View) => void }) 
           className="w-full gap-2 bg-card sm:w-auto"
           onClick={() => onNavigate?.("monitoring")}
         >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border border-border/70 bg-muted/50">
-            <Activity className="h-3 w-3" />
-          </span>
+          <Activity className="h-4 w-4 text-muted-foreground" />
           Servis
         </Button>
       </div>
@@ -141,99 +157,174 @@ function DashboardHeader({ onNavigate }: { onNavigate?: (view: View) => void }) 
 function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-3 sm:gap-4" role="status" aria-busy="true">
-      <div className="rounded-xl border bg-card px-4 py-3">
-        <Skeleton className="h-4 w-28" />
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full rounded-lg" />
-          ))}
-        </div>
-      </div>
-      <div className="rounded-xl border bg-card p-4">
-        <Skeleton className="h-5 w-36" />
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full" />
-          ))}
-        </div>
-      </div>
-      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="rounded-xl border bg-card p-4">
-            <Skeleton className="h-5 w-28" />
-            <Skeleton className="mt-4 h-16 w-full" />
-          </div>
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-[108px] w-full rounded-lg" />
         ))}
       </div>
-      <div className="rounded-xl border bg-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1.5">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-3 w-64 max-w-full" />
-          </div>
-          <div className="space-y-1.5 text-right">
-            <Skeleton className="ml-auto h-2.5 w-20" />
-            <Skeleton className="ml-auto h-4 w-24" />
-          </div>
-        </div>
-        <Skeleton className="mt-3 h-[360px] w-full rounded-lg sm:h-[400px]" />
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-12">
+        <Skeleton className="h-[430px] w-full rounded-lg lg:col-span-8" />
+        <Skeleton className="h-[430px] w-full rounded-lg lg:col-span-4" />
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-[330px] w-full rounded-lg lg:col-span-4" />
+        ))}
+        <Skeleton className="h-[380px] w-full rounded-lg lg:col-span-4" />
+        <Skeleton className="h-[380px] w-full rounded-lg lg:col-span-8" />
       </div>
     </div>
   );
 }
 
-function SectionHeader({
+type DashboardTone = "neutral" | "success" | "warning" | "danger";
+
+const dashboardToneDot: Record<DashboardTone, string> = {
+  neutral: "bg-muted-foreground/50",
+  success: "bg-emerald-500",
+  warning: "bg-amber-500",
+  danger: "bg-destructive",
+};
+
+const dashboardToneText: Record<DashboardTone, string> = {
+  neutral: "text-foreground",
+  success: "text-emerald-700 dark:text-emerald-300",
+  warning: "text-amber-700 dark:text-amber-400",
+  danger: "text-destructive",
+};
+
+function DashboardCard({
+  icon: Icon,
   title,
   description,
   action,
+  footer,
+  className,
+  children,
 }: {
+  icon: React.ComponentType<{ className?: string }>;
   title: string;
   description?: string;
   action?: React.ReactNode;
+  footer?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="border-b px-4 py-2.5">
-      <div className="flex min-w-0 items-center justify-between gap-3">
-        <h2 className="min-w-0 text-sm font-semibold leading-tight">{title}</h2>
+    <Card className={cn("flex h-full flex-col gap-0 overflow-hidden rounded-lg border-border/70 py-0 shadow-none", className)}>
+      <div className="flex items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className="text-sm font-medium leading-tight">{title}</h2>
+            {description && (
+              <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{description}</p>
+            )}
+          </div>
+        </div>
         {action && <div className="shrink-0">{action}</div>}
       </div>
-      {description && (
-        <p className="mt-1 text-xs leading-snug text-muted-foreground">{description}</p>
+      <div className="grid flex-1 content-start gap-4 px-4 pb-4 pt-3">{children}</div>
+      {footer && (
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border/70 px-4 py-2.5 text-xs text-muted-foreground">
+          {footer}
+        </div>
       )}
+    </Card>
+  );
+}
+
+function DashboardKpi({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+  view,
+  loading,
+  onNavigate,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  detail: string;
+  tone: DashboardTone;
+  view: View;
+  loading?: boolean;
+  onNavigate?: (view: View) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate?.(view)}
+      aria-label={`${label}: ${loading ? "memuat data" : value}. ${detail}`}
+      className="group flex min-h-[108px] flex-col justify-between gap-3 rounded-lg border border-border/70 bg-card p-4 text-left transition-colors hover:border-foreground/20 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+    >
+      <span className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{label}</span>
+        </span>
+        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-2xl font-semibold tabular-nums text-foreground">
+          {loading ? "…" : value}
+        </span>
+        <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dashboardToneDot[tone])} aria-hidden="true" />
+          <span className="truncate">{detail}</span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function DashboardStat({
+  label,
+  value,
+  sub,
+  tone = "neutral",
+  title,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: DashboardTone;
+  title?: string;
+}) {
+  const valueClassName =
+    tone === "danger" || tone === "warning" ? dashboardToneText[tone] : "text-foreground";
+  return (
+    <div className="min-w-0">
+      <dt className="truncate text-xs text-muted-foreground">{label}</dt>
+      <dd className={cn("mt-1 truncate text-xl font-semibold tabular-nums", valueClassName)} title={title ?? value}>
+        {value}
+      </dd>
+      {sub && <p className="mt-1 truncate text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
 }
 
-function MetricCell({
-  label,
-  value,
-  hint,
-  tone,
+function PriorityItem({
+  title,
+  meta,
+  onClick,
 }: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "danger" | "warning" | "success";
+  title: string;
+  meta: string;
+  onClick: () => void;
 }) {
   return (
-    <div className="min-w-0 bg-card px-3 py-2.5 sm:px-4 sm:py-3">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd
-        className={cn(
-          "mt-1 truncate text-[17px] font-semibold leading-tight tabular-nums sm:text-lg",
-          tone === "danger"
-            ? "text-destructive"
-            : tone === "warning"
-              ? "text-amber-700 dark:text-amber-400"
-              : tone === "success"
-                ? "text-emerald-700 dark:text-emerald-400"
-                : "text-foreground",
-        )}
-      >
-        {value}
-      </dd>
-      {hint && <div className="mt-1 truncate text-[11px] text-muted-foreground">{hint}</div>}
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center justify-between gap-3 py-2 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+    >
+      <span className="min-w-0">
+        <span className="block truncate text-sm" title={title}>{title}</span>
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{meta}</span>
+      </span>
+      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+    </button>
   );
 }
 
@@ -243,83 +334,88 @@ function FleetStatusCard({
   inUse,
   maintenance,
   other,
+  className,
 }: {
   total: number;
   available: number;
   inUse: number;
   maintenance: number;
   other: number;
+  className?: string;
 }) {
+  const readyRate = total > 0 ? Math.round((available / total) * 100) : null;
+  const width = (count: number) => (total > 0 ? `${(count / total) * 100}%` : "0%");
+
   return (
-    <Card className="h-full overflow-hidden gap-0 py-0 shadow-none">
-      <SectionHeader title="Armada hari ini" />
-      <dl className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-        <MetricCell label="Total" value={formatNumber(total)} />
-        <MetricCell
-          label="Tersedia"
-          value={formatNumber(available)}
-          tone="success"
-          hint={total > 0 ? `${Math.round((available / total) * 100)}% armada` : undefined}
-        />
-        <MetricCell
-          label="Dipakai"
-          value={formatNumber(inUse)}
-          tone="warning"
-          hint="sedang beroperasi"
-        />
-        <MetricCell
+    <DashboardCard
+      icon={Truck}
+      title="Kesiapan armada"
+      description={
+        readyRate != null
+          ? `${formatNumber(available)} dari ${formatNumber(total)} unit siap jalan`
+          : "Belum ada data unit"
+      }
+      className={className}
+      action={
+        <Badge variant="outline" className="tabular-nums">
+          {readyRate != null ? `${readyRate}% siap` : "—"}
+        </Badge>
+      }
+      footer={other > 0 ? <span>{formatNumber(other)} unit berstatus lain</span> : undefined}
+    >
+      <div
+        className="flex h-1.5 overflow-hidden rounded-full bg-muted"
+        role="img"
+        aria-label={`Tersedia ${available}, dipakai ${inUse}, maintenance ${maintenance} dari ${total} unit`}
+      >
+        {available > 0 && <span style={{ width: width(available) }} className="bg-emerald-500" />}
+        {inUse > 0 && <span style={{ width: width(inUse) }} className="bg-foreground/70" />}
+        {maintenance > 0 && <span style={{ width: width(maintenance) }} className="bg-amber-500" />}
+        {other > 0 && <span style={{ width: width(other) }} className="bg-muted-foreground/50" />}
+      </div>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <DashboardStat label="Total" value={formatNumber(total)} />
+        <DashboardStat label="Tersedia" value={formatNumber(available)} />
+        <DashboardStat label="Dipakai" value={formatNumber(inUse)} />
+        <DashboardStat
           label="Maintenance"
           value={formatNumber(maintenance)}
-          tone={maintenance > 0 ? "danger" : undefined}
-          hint="tidak siap jalan"
+          tone={maintenance > 0 ? "warning" : "neutral"}
         />
       </dl>
-      {other > 0 && (
-        <p className="border-t px-4 py-2 text-xs text-muted-foreground">
-          {formatNumber(other)} unit berstatus lain / belum diketahui.
-        </p>
-      )}
-    </Card>
+    </DashboardCard>
   );
 }
 
-function AttentionRow({
-  label,
+function PriorityColumn({
+  title,
   count,
   detail,
-  onClick,
-  loading,
+  onOpen,
+  children,
+  footer,
 }: {
-  label: string;
+  title: string;
   count: number;
   detail: string;
-  onClick: () => void;
-  loading?: boolean;
+  onOpen: () => void;
+  children: React.ReactNode;
+  footer?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center justify-between gap-3 bg-card px-4 py-2.5 text-left transition-colors hover:bg-muted/40"
-    >
-      <span className="min-w-0">
-        <span className="block text-sm font-medium">{label}</span>
-        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-          {detail}
-        </span>
-      </span>
-      <span className="flex shrink-0 items-center gap-2">
-        <span
-          className={cn(
-            "font-mono text-sm tabular-nums",
-            count > 0 ? "font-semibold text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {loading ? "…" : formatNumber(count)}
-        </span>
-        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-      </span>
-    </button>
+    <section className="min-w-0 lg:border-l lg:border-border/70 lg:pl-4 lg:first:border-l-0 lg:first:pl-0">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex w-full items-center justify-between gap-2 py-1 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+      >
+        <span className="text-sm font-medium">{title}</span>
+        <Badge variant="outline" className="tabular-nums">{formatNumber(count)}</Badge>
+      </button>
+      <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{detail}</p>
+      <div className="mt-2 divide-y divide-border/70 border-t border-border/70">{children}</div>
+      {footer && <p className="mt-2 text-xs leading-snug text-muted-foreground">{footer}</p>}
+    </section>
   );
 }
 
@@ -336,10 +432,13 @@ function AttentionCard({
   lateTrips,
   openTasks,
   escalatedCount,
+  complaintOverdue,
   oldestTaskDays,
+  repeatedComplaints,
   tasksLoading,
   tasksUnavailable,
   onNavigate,
+  className,
 }: {
   overdue: number;
   warning: number;
@@ -348,10 +447,13 @@ function AttentionCard({
   lateTrips: { row: any; hours: number }[];
   openTasks: Task[];
   escalatedCount: number;
+  complaintOverdue: number;
   oldestTaskDays: number | null;
+  repeatedComplaints?: string;
   tasksLoading: boolean;
   tasksUnavailable: boolean;
   onNavigate?: (view: View) => void;
+  className?: string;
 }) {
   const serviceCount = overdue + warning + withoutLog;
   const total = serviceCount + openTasks.length + lateTrips.length;
@@ -367,109 +469,94 @@ function AttentionCard({
     : tasksUnavailable
       ? "Complain board belum tersambung"
       : openTasks.length > 0
-        ? `${formatNumber(escalatedCount)} perlu FU${oldestTaskDays != null ? ` · tertua ${Math.floor(oldestTaskDays)} hari` : ""}`
+        ? `${formatNumber(openTasks.length)} terbuka · ${formatNumber(escalatedCount)} perlu FU · ${formatNumber(complaintOverdue)} terlambat`
         : "Tidak ada komplain terbuka";
   const lateDetail =
     lateTrips.length > 0
       ? `${formatNumber(lateTrips.length)} trip > 24 jam${lateTrips[0]?.row?.no_polisi ? ` · ${lateTrips[0].row.no_polisi}` : ""}`
       : "Semua trip sudah kembali";
-
   return (
-    <Card className="flex h-full flex-col overflow-hidden gap-0 py-0 shadow-none">
-      <SectionHeader
-        title="Perlu tindakan"
-        description="Hal yang paling mendesak hari ini."
-        action={
-          <Badge
-            variant="outline"
-            className={cn(
-              "font-mono tabular-nums",
-              total > 0
-                ? "border-destructive/30 bg-destructive/10 text-destructive"
-                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-            )}
-          >
-            {total > 0 ? <AlertTriangle /> : <CheckCircle2 />}
-            {total > 0 ? `${formatNumber(total)} item` : "Aman"}
-          </Badge>
-        }
-      />
-
-      <div className="grid gap-px bg-border sm:grid-cols-3">
-        <AttentionRow
-          label="Servis"
+    <DashboardCard
+      icon={AlertTriangle}
+      title="Prioritas hari ini"
+      description="Servis, komplain, dan pengiriman yang perlu ditindak."
+      className={className}
+      action={
+        <Badge variant="outline" className="tabular-nums">
+          {total > 0 ? `${formatNumber(total)} item` : "Aman"}
+        </Badge>
+      }
+      footer={
+        oldestTaskDays != null && openTasks.length > 0 ? (
+          <span>Komplain terbuka tertua {Math.floor(oldestTaskDays)} hari</span>
+        ) : undefined
+      }
+    >
+      <div className="grid gap-2 lg:grid-cols-3">
+        <PriorityColumn
+          title="Servis"
           count={serviceCount}
           detail={serviceDetail}
-          onClick={() => onNavigate?.("monitoring")}
-        />
-        <AttentionRow
-          label="Komplain"
-          count={openTasks.length}
+          onOpen={() => onNavigate?.("monitoring")}
+          footer={urgent.length === 0 ? "Tidak ada unit yang perlu servis mendesak." : undefined}
+        >
+          {urgent.slice(0, 3).map(({ equipment, status }) => {
+            const plate = String(equipment.license_plate ?? "").trim() || "Tanpa nopol";
+            const schedule = [
+              remainingDaysLabel(status.remainingDays),
+              status.remainingKm != null ? remainingKmLabel(status.remainingKm) : null,
+            ].filter(Boolean).join(" · ");
+            return (
+              <PriorityItem
+                key={String(equipment.id ?? equipment.equipment_id)}
+                title={String(equipment.equipment_id ?? plate)}
+                meta={`${plate} · ${schedule}`}
+                onClick={() => onNavigate?.("monitoring")}
+              />
+            );
+          })}
+        </PriorityColumn>
+        <PriorityColumn
+          title="Komplain"
+          count={tasksLoading ? 0 : openTasks.length}
           detail={complaintDetail}
-          loading={tasksLoading}
-          onClick={() => onNavigate?.("tugas")}
-        />
-        <AttentionRow
-          label="Pengiriman"
+          onOpen={() => onNavigate?.("tugas")}
+          footer={repeatedComplaints ? `Nopol berulang: ${repeatedComplaints}` : undefined}
+        >
+          {openTasks.slice(0, 3).map((task) => (
+            <PriorityItem
+              key={String(task.id)}
+              title={task.title || "Komplain tanpa judul"}
+              meta={`${String(task.license_plate ?? "").trim() || "Tanpa nopol"} · ${ticketAgeLabel(task)}`}
+              onClick={() => onNavigate?.("tugas")}
+            />
+          ))}
+          {!tasksLoading && openTasks.length === 0 && (
+            <p className="px-2 py-1 text-xs text-muted-foreground">Tidak ada komplain terbuka.</p>
+          )}
+        </PriorityColumn>
+        <PriorityColumn
+          title="Pengiriman"
           count={lateTrips.length}
           detail={lateDetail}
-          onClick={() => onNavigate?.("pengiriman")}
-        />
+          onOpen={() => onNavigate?.("pengiriman")}
+          footer={lateTrips.length === 0 ? "Semua trip sudah kembali." : undefined}
+        >
+          {lateTrips.slice(0, 3).map((trip) => {
+            const plate = String(trip.row.no_polisi ?? "").trim() || "Tanpa nopol";
+            const freight = trip.row.freight_order != null ? `FO ${trip.row.freight_order}` : "Tanpa FO";
+            return (
+              <PriorityItem
+                key={String(trip.row.freight_order ?? trip.row.created_at ?? plate)}
+                title={`${plate} · ${freight}`}
+                meta={`Keluar ${Math.floor(trip.hours)} jam lalu`}
+                onClick={() => onNavigate?.("pengiriman")}
+              />
+            );
+          })}
+        </PriorityColumn>
       </div>
-
-      <div className="mt-auto border-t px-4 py-2.5">
-        {urgent.length > 0 && (
-          <>
-            <p className="text-xs font-medium text-muted-foreground">
-              Prioritas servis
-            </p>
-            <div className="mt-1.5 grid gap-1 sm:grid-cols-3">
-              {urgent.slice(0, 3).map(({ equipment, status }) => (
-                <button
-                  key={String(equipment.id ?? equipment.equipment_id)}
-                  type="button"
-                  onClick={() => onNavigate?.("monitoring")}
-                  className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-muted/40"
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      className={cn(
-                        "h-1.5 w-1.5 shrink-0 rounded-full",
-                        status.id === "overdue" ? "bg-destructive" : "bg-amber-500",
-                      )}
-                    />
-                    <span className="truncate text-xs font-medium">
-                      {equipment.equipment_id}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {equipment.license_plate || "—"}
-                    </span>
-                  </span>
-                  <span
-                    className={cn(
-                      "shrink-0 text-right text-[11px] tabular-nums sm:text-xs",
-                      status.id === "overdue"
-                        ? "text-destructive"
-                        : "text-amber-700 dark:text-amber-400",
-                    )}
-                  >
-                    {remainingDaysLabel(status.remainingDays)}
-                    {status.remainingKm != null && (
-                      <span className="hidden sm:inline">
-                        {" · "}{remainingKmLabel(status.remainingKm)}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-        <p className={cn("text-[11px] text-muted-foreground", urgent.length > 0 && "mt-2")}>
-          {serviceCount > 0 ? "Buka menu untuk melihat seluruh unit." : "Tidak ada unit yang perlu servis mendesak."}
-        </p>
-      </div>
-    </Card>
+    </DashboardCard>
   );
 }
 
@@ -481,6 +568,7 @@ function DeliveryTodayCard({
   averageDuration,
   longestDuration,
   onNavigate,
+  className,
 }: {
   waiting: number;
   running: number;
@@ -489,60 +577,39 @@ function DeliveryTodayCard({
   averageDuration: number | null;
   longestDuration: number | null;
   onNavigate?: (view: View) => void;
+  className?: string;
 }) {
   return (
-    <Card className="flex h-full flex-col overflow-hidden gap-0 py-0 shadow-none">
-      <SectionHeader
-        title="Pengiriman hari ini"
-        description="Antrean dan trip yang sedang berjalan."
-        action={
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-            onClick={() => onNavigate?.("pengiriman")}
-          >
-            Buka
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Button>
-        }
-      />
-      <dl className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-        <MetricCell label="Menunggu" value={formatNumber(waiting)} />
-        <MetricCell
-          label="Berjalan"
-          value={formatNumber(running)}
-          tone={running > 0 ? "warning" : undefined}
-        />
-        <MetricCell
-          label="Selesai hari ini"
-          value={formatNumber(completedToday)}
-          tone={completedToday > 0 ? "success" : undefined}
-        />
-        <MetricCell
-          label="Terlambat"
-          value={formatNumber(late)}
-          tone={late > 0 ? "danger" : undefined}
-          hint="> 24 jam"
-        />
+    <DashboardCard
+      icon={Send}
+      title="Pengiriman"
+      description="Antrean dan trip yang sedang berjalan."
+      className={className}
+      action={
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+          onClick={() => onNavigate?.("pengiriman")}
+        >
+          Lihat pengiriman
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
+      }
+      footer={
+        <>
+          <span>Rata-rata 30 hari <strong className="font-medium tabular-nums text-foreground">{formatDuration(averageDuration)}</strong></span>
+          <span>Terlama 30 hari <strong className="font-medium tabular-nums text-foreground">{formatDuration(longestDuration)}</strong></span>
+        </>
+      }
+    >
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <DashboardStat label="Menunggu" value={formatNumber(waiting)} />
+        <DashboardStat label="Berjalan" value={formatNumber(running)} />
+        <DashboardStat label="Selesai hari ini" value={formatNumber(completedToday)} />
+        <DashboardStat label="Terlambat" value={formatNumber(late)} tone={late > 0 ? "danger" : "neutral"} sub="> 24 jam" />
       </dl>
-      <div className="mt-auto border-t px-4 py-2.5">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span>
-            Rata-rata 30 hari{" "}
-            <span className="font-mono tabular-nums text-foreground">
-              {formatDuration(averageDuration)}
-            </span>
-          </span>
-          <span>
-            Terlama 30 hari{" "}
-            <span className="font-mono tabular-nums text-foreground">
-              {formatDuration(longestDuration)}
-            </span>
-          </span>
-        </div>
-      </div>
-    </Card>
+    </DashboardCard>
   );
 }
 
@@ -554,6 +621,7 @@ function SkrCard({
   oldestDays,
   error,
   onNavigate,
+  className,
 }: {
   docs: number;
   qty: number;
@@ -562,65 +630,44 @@ function SkrCard({
   oldestDays: number | null;
   error?: string | null;
   onNavigate?: (view: View) => void;
+  className?: string;
 }) {
   return (
-    <Card className="flex h-full flex-col overflow-hidden gap-0 py-0 shadow-none">
-      <SectionHeader
-        title="Sisa kiriman"
-        description="Dokumen SKR yang belum tuntas."
-        action={
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-            onClick={() => onNavigate?.("skr")}
-          >
-            Buka
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Button>
-        }
-      />
-      {error && docs === 0 ? (
-        <p className="px-4 py-4 text-xs text-muted-foreground">
-          Data SKR belum bisa dimuat.
-        </p>
-      ) : (
+    <DashboardCard
+      icon={Package}
+      title="Sisa kiriman"
+      description="Dokumen SKR yang belum tuntas."
+      className={className}
+      action={
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+          onClick={() => onNavigate?.("skr")}
+        >
+          Lihat SKR
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
+      }
+      footer={
         <>
-          <dl className="grid grid-cols-3 gap-px bg-border">
-            <MetricCell label="Dokumen" value={formatNumber(docs)} />
-            <MetricCell label="Qty" value={formatNumber(qty)} />
-            <div className="bg-card px-3 py-2.5 sm:px-4 sm:py-3">
-              <dt className="text-xs text-muted-foreground">Nilai</dt>
-              <dd
-                className="mt-1 truncate text-[17px] font-semibold leading-tight tabular-nums sm:text-lg"
-                title={formatRupiah(value)}
-              >
-                {compactRupiah(value)}
-              </dd>
-            </div>
-          </dl>
-          <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-2.5 text-xs text-muted-foreground">
-            <span>
-              <span className="font-mono tabular-nums text-foreground">
-                {formatNumber(stores)}
-              </span>{" "}
-              toko
-            </span>
-            <span>
-              Dokumen tertua{" "}
-              <span className="font-mono tabular-nums text-foreground">
-                {oldestDays != null ? `${formatNumber(oldestDays)} hari` : "—"}
-              </span>
-            </span>
-          </div>
-          {error && (
-            <p className="border-t px-4 py-1.5 text-[11px] text-muted-foreground">
-              Data mungkin tertunda.
-            </p>
-          )}
+          <span><strong className="font-medium tabular-nums text-foreground">{formatNumber(stores)}</strong> toko</span>
+          <span>Dokumen tertua <strong className="font-medium tabular-nums text-foreground">{oldestDays != null ? `${formatNumber(oldestDays)} hari` : "—"}</strong></span>
+          {error && docs > 0 && <span>Data mungkin tertunda.</span>}
         </>
+      }
+    >
+      {error && docs === 0 ? (
+        <p className="text-xs text-muted-foreground">Data SKR belum bisa dimuat.</p>
+      ) : (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+          <DashboardStat label="Dokumen" value={formatNumber(docs)} />
+          <DashboardStat label="Qty" value={formatNumber(qty)} />
+          <DashboardStat label="Nilai" value={compactRupiah(value)} title={formatRupiah(value)} />
+          <DashboardStat label="Toko" value={formatNumber(stores)} />
+        </dl>
       )}
-    </Card>
+    </DashboardCard>
   );
 }
 
@@ -631,6 +678,7 @@ function CostCard({
   entries30,
   delta30,
   onNavigate,
+  className,
 }: {
   cost30: number;
   averageEntry30: number;
@@ -638,49 +686,122 @@ function CostCard({
   entries30: number;
   delta30: number | null;
   onNavigate?: (view: View) => void;
+  className?: string;
 }) {
+  const deltaText =
+    delta30 != null
+      ? `${delta30 > 0 ? "+" : delta30 < 0 ? "−" : ""}${Math.abs(delta30).toFixed(1)}% vs 30 hari lalu`
+      : "Belum ada pembanding";
   return (
-    <Card className="flex h-full flex-col overflow-hidden gap-0 py-0 shadow-none">
-      <SectionHeader
-        title="Biaya perbaikan"
-        description="30 hari terakhir."
-        action={
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-            onClick={() => onNavigate?.("maintenance")}
-          >
-            Riwayat
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Button>
-        }
-      />
-      <dl className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3">
-        <MetricCell
-          label="Total"
-          value={compactRupiah(cost30)}
-          hint={delta30 != null ? `${delta30 > 0 ? "+" : delta30 < 0 ? "−" : ""}${Math.abs(delta30).toFixed(1)}% vs 30 hari lalu` : undefined}
-          tone={delta30 != null ? (delta30 > 0 ? "danger" : delta30 < 0 ? "success" : undefined) : undefined}
-        />
-        <MetricCell
-          label="Entri"
-          value={formatNumber(entries30)}
-          hint="maintenance"
-        />
-        <MetricCell
-          label="Rata-rata"
-          value={compactRupiah(averageEntry30)}
-          hint="per entri"
-        />
+    <DashboardCard
+      icon={CircleDollarSign}
+      title="Biaya perbaikan"
+      description="30 hari terakhir."
+      className={className}
+      action={
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+          onClick={() => onNavigate?.("maintenance")}
+        >
+          Lihat riwayat
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
+      }
+      footer={
+        <>
+          <span>Biaya per unit armada</span>
+          <span className="font-medium tabular-nums text-foreground">{compactRupiah(costPerUnit30)}</span>
+        </>
+      }
+    >
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+        <DashboardStat label="Total" value={compactRupiah(cost30)} title={formatRupiah(cost30)} tone={delta30 != null && delta30 > 0 ? "danger" : "neutral"} sub={deltaText} />
+        <DashboardStat label="Entri" value={formatNumber(entries30)} sub="maintenance" />
+        <DashboardStat label="Rata-rata" value={compactRupiah(averageEntry30)} title={formatRupiah(averageEntry30)} sub="per entri" />
       </dl>
-      <div className="mt-auto flex items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
-        <span>Biaya per unit armada</span>
-        <span className="font-mono tabular-nums text-foreground">
-          {compactRupiah(costPerUnit30)}
-        </span>
-      </div>
-    </Card>
+    </DashboardCard>
+  );
+}
+
+function TireCard({
+  summary,
+  loading,
+  error,
+  totalUnits,
+  onNavigate,
+  className,
+}: {
+  summary: TireDashboardSummary | null;
+  loading: boolean;
+  error: string | null;
+  totalUnits: number;
+  onNavigate?: (view: View) => void;
+  className?: string;
+}) {
+  const actionUnits = summary?.actionUnits ?? 0;
+  const warningUnits = summary?.warningUnits ?? 0;
+  const topUnits = summary?.units.slice(0, 3) ?? [];
+
+  return (
+    <DashboardCard
+      icon={Wrench}
+      title="Kesehatan ban"
+      description="Pemeriksaan harian driver; agregat terbaru per posisi."
+      className={className}
+      action={
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+          onClick={() => onNavigate?.("ban")}
+        >
+          Lihat ban
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
+      }
+      footer={
+        <>
+          <span>
+            {summary
+              ? `${formatNumber(summary.inspectedUnits)} dari ${formatNumber(totalUnits)} unit diperiksa`
+              : "Menunggu data pemeriksaan"}
+          </span>
+          {error && <span>Data mungkin tertunda.</span>}
+        </>
+      }
+    >
+      {error && !summary ? (
+        <p className="text-xs text-muted-foreground">Data ban belum bisa dimuat.</p>
+      ) : (
+        <>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <DashboardStat label="Perlu tindakan" value={loading && !summary ? "…" : formatNumber(actionUnits)} tone={actionUnits > 0 ? "danger" : "neutral"} />
+            <DashboardStat label="Waspada" value={loading && !summary ? "…" : formatNumber(warningUnits)} tone={warningUnits > 0 ? "warning" : "neutral"} />
+          </dl>
+          {topUnits.length > 0 ? (
+            <div>
+              <p className="text-xs text-muted-foreground">Unit paling bermasalah</p>
+              <div className="mt-1 divide-y divide-border/70 border-t border-border/70">
+                {topUnits.map((unit) => (
+                  <PriorityItem
+                    key={unit.plateKey}
+                    title={unit.plate}
+                    meta={`${unit.issues[0].reason} · ${formatDateMedium(unit.lastInspected)}`}
+                    onClick={() => onNavigate?.("ban")}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {loading ? "Memuat pemeriksaan ban…" : "Semua ban yang diperiksa dalam kondisi aman."}
+            </p>
+          )}
+        </>
+      )}
+    </DashboardCard>
   );
 }
 
@@ -761,6 +882,9 @@ function DashboardContent({
   const [tasksUnavailable, setTasksUnavailable] = useState(false);
   /** Trip yang sudah keluar dan belum kembali; sumber status "Dipakai". */
   const [activeOutbounds, setActiveOutbounds] = useState<any[]>([]);
+  const [tireInspections, setTireInspections] = useState<TireDashboardInspection[]>([]);
+  const [tireLoading, setTireLoading] = useState(true);
+  const [tireError, setTireError] = useState<string | null>(null);
 
   // Komplain adalah sinyal harian. Query-nya kecil dan hanya hidup saat
   // Dashboard terbuka; bila tabel belum dibuat, pakai mode lokal yang sama
@@ -805,6 +929,34 @@ function DashboardContent({
       .then(({ data, error }) => {
         if (cancelled) return;
         setActiveOutbounds(error ? [] : data ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Ringkasan ban memakai pemeriksaan terbaru per unit per posisi dari
+  // `daily_tire_inspections` + `tire_check_details`, sama seperti menu Ban.
+  // Kolom pemeriksaan terbaru diurutkan menurun supaya agregat dashboard
+  // berhenti pada temuan paling segar tiap slot.
+  useEffect(() => {
+    let cancelled = false;
+    setTireLoading(true);
+    supabase
+      .from("daily_tire_inspections")
+      .select("id,equipment_id,inspection_date,tire_check_details(tire_position,tread_depth_mm,pressure_psi,condition,created_at)")
+      .order("created_at", { ascending: false })
+      .limit(500)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setTireError(error.message);
+          setTireInspections([]);
+        } else {
+          setTireError(null);
+          setTireInspections((data ?? []) as TireDashboardInspection[]);
+        }
+        setTireLoading(false);
       });
     return () => {
       cancelled = true;
@@ -983,6 +1135,24 @@ function DashboardContent({
     };
   }, [equipments, histories, serviceLogs, outbounds, activeOutbounds, skrDetails, today]);
 
+  const plateByEquipmentKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const equipment of equipments) {
+      const plate = String(equipment?.license_plate ?? "").trim();
+      if (!plate) continue;
+      if (equipment?.id != null && !map.has(String(equipment.id))) map.set(String(equipment.id), plate);
+      if (equipment?.equipment_id != null && !map.has(String(equipment.equipment_id))) {
+        map.set(String(equipment.equipment_id), plate);
+      }
+    }
+    return map;
+  }, [equipments]);
+
+  const tireSummary = useMemo<TireDashboardSummary | null>(() => {
+    if (tireInspections.length === 0) return null;
+    return summarizeTireDashboard(tireInspections, plateByEquipmentKey);
+  }, [tireInspections, plateByEquipmentKey]);
+
   const openTasks = useMemo(
     () => tasks.filter((task) => task.status !== "done").sort(sortTasks),
     [tasks],
@@ -998,71 +1168,187 @@ function DashboardContent({
         : null,
     [openTasks],
   );
+  const complaintOverdueCount = useMemo(
+    () => openTasks.filter((task) => isOverdue(task)).length,
+    [openTasks],
+  );
+  const complaintSummary = useMemo(() => summarizeComplaintsByPlate(openTasks), [openTasks]);
+  const repeatedComplaintSummary = useMemo(
+    () =>
+      complaintSummary.groups
+        .filter((group) => group.repeated && group.open > 0)
+        .slice(0, 2)
+        .map((group) => `${group.plate} (${formatNumber(group.open)})`)
+        .join(" · "),
+    [complaintSummary],
+  );
+  const readyRate = analytics.total > 0 ? Math.round((analytics.available / analytics.total) * 100) : null;
+
+  const fleetRisk: DashboardTone =
+    readyRate == null ? "neutral" : readyRate >= 80 ? "success" : readyRate >= 50 ? "warning" : "danger";
+  const serviceRisk: DashboardTone =
+    analytics.overdue > 0 ? "danger" : analytics.warning > 0 ? "warning" : "success";
+  const complaintRisk: DashboardTone =
+    complaintOverdueCount > 0 ? "danger" : escalatedCount > 0 ? "warning" : tasksLoading ? "neutral" : "success";
+  const deliveryRisk: DashboardTone =
+    analytics.late > 0 ? "danger" : analytics.running > 0 ? "warning" : "neutral";
+  const costRisk: DashboardTone =
+    analytics.delta30 != null ? (analytics.delta30 > 0 ? "danger" : analytics.delta30 < 0 ? "success" : "neutral") : "neutral";
+  const skrRisk: DashboardTone =
+    analytics.skrOldestDays != null
+      ? analytics.skrOldestDays >= 30
+        ? "danger"
+        : analytics.skrOldestDays >= 14
+          ? "warning"
+          : "neutral"
+      : "neutral";
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
-      <FleetStatusCard
-        total={analytics.total}
-        available={analytics.available}
-        inUse={analytics.inUse}
-        maintenance={analytics.maintenance}
-        other={analytics.other}
-      />
-
-      <AttentionCard
-        overdue={analytics.overdue}
-        warning={analytics.warning}
-        withoutLog={analytics.withoutLog}
-        urgent={analytics.urgent}
-        lateTrips={analytics.lateTrips}
-        openTasks={openTasks}
-        escalatedCount={escalatedCount}
-        oldestTaskDays={oldestTaskDays}
-        tasksLoading={tasksLoading}
-        tasksUnavailable={tasksUnavailable}
-        onNavigate={onNavigate}
-      />
-
-      <div className="grid items-stretch gap-3 sm:gap-4 lg:grid-cols-3">
-        <div className="min-w-0">
-          <DeliveryTodayCard
-            waiting={analytics.waiting}
-            running={analytics.running}
-            completedToday={analytics.completedToday}
-            late={analytics.late}
-            averageDuration={analytics.averageDuration30}
-            longestDuration={analytics.longestDuration30}
-            onNavigate={onNavigate}
-          />
-        </div>
-        <div className="min-w-0">
-          <SkrCard
-            docs={analytics.skrDocs}
-            qty={analytics.skrQty}
-            value={analytics.skrNilai}
-            stores={analytics.skrStores}
-            oldestDays={analytics.skrOldestDays}
-            error={skrError}
-            onNavigate={onNavigate}
-          />
-        </div>
-        <div className="min-w-0">
-          <CostCard
-            cost30={analytics.cost30}
-            averageEntry30={analytics.averageEntry30}
-            costPerUnit30={analytics.costPerUnit30}
-            entries30={analytics.entries30}
-            delta30={analytics.delta30}
-            onNavigate={onNavigate}
-          />
-        </div>
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        <DashboardKpi
+          icon={Truck}
+          label="Armada siap"
+          value={formatNumber(analytics.available)}
+          detail={readyRate != null ? `${readyRate}% siap · ${formatNumber(analytics.total)} unit` : "Belum ada data unit"}
+          tone={fleetRisk}
+          view="equipment"
+          onNavigate={onNavigate}
+        />
+        <DashboardKpi
+          icon={Wrench}
+          label="Servis terlewat"
+          value={formatNumber(analytics.overdue)}
+          detail={`${formatNumber(analytics.warning)} mendekat · ${formatNumber(analytics.withoutLog)} tanpa jadwal`}
+          tone={serviceRisk}
+          view="monitoring"
+          onNavigate={onNavigate}
+        />
+        <DashboardKpi
+          icon={ClipboardList}
+          label="Komplain perlu FU"
+          value={formatNumber(escalatedCount)}
+          detail={tasksLoading ? "Memuat komplain…" : `${formatNumber(complaintOverdueCount)} terlambat · ${formatNumber(openTasks.length)} terbuka`}
+          tone={complaintRisk}
+          view="tugas"
+          loading={tasksLoading}
+          onNavigate={onNavigate}
+        />
+        <DashboardKpi
+          icon={Send}
+          label="Trip terlambat"
+          value={formatNumber(analytics.late)}
+          detail={`${formatNumber(analytics.running)} berjalan · ${formatNumber(analytics.completedToday)} selesai hari ini`}
+          tone={deliveryRisk}
+          view="pengiriman"
+          onNavigate={onNavigate}
+        />
+        <DashboardKpi
+          icon={Package}
+          label="Sisa kiriman"
+          value={formatNumber(analytics.skrDocs)}
+          detail={`${compactRupiah(analytics.skrNilai)} · ${formatNumber(analytics.skrStores)} toko`}
+          tone={skrRisk}
+          view="skr"
+          onNavigate={onNavigate}
+        />
+        <DashboardKpi
+          icon={CircleDollarSign}
+          label="Biaya 30 hari"
+          value={compactRupiah(analytics.cost30)}
+          detail={
+            analytics.delta30 != null
+              ? `${analytics.delta30 > 0 ? "+" : analytics.delta30 < 0 ? "−" : ""}${Math.abs(analytics.delta30).toFixed(1)}% vs periode lalu`
+              : `${formatNumber(analytics.entries30)} entri maintenance`
+          }
+          tone={costRisk}
+          view="maintenance"
+          onNavigate={onNavigate}
+        />
       </div>
 
-      <Card className="shrink-0 gap-0 py-0 shadow-none">
-        <div className="min-h-[460px] px-3 py-4 sm:p-5">
+      <div className="grid items-stretch gap-3 sm:gap-4 lg:grid-cols-12">
+        <AttentionCard
+          overdue={analytics.overdue}
+          warning={analytics.warning}
+          withoutLog={analytics.withoutLog}
+          urgent={analytics.urgent}
+          lateTrips={analytics.lateTrips}
+          openTasks={openTasks}
+          escalatedCount={escalatedCount}
+          complaintOverdue={complaintOverdueCount}
+          oldestTaskDays={oldestTaskDays}
+          repeatedComplaints={repeatedComplaintSummary || undefined}
+          tasksLoading={tasksLoading}
+          tasksUnavailable={tasksUnavailable}
+          onNavigate={onNavigate}
+          className="lg:col-span-8"
+        />
+        <FleetStatusCard
+          total={analytics.total}
+          available={analytics.available}
+          inUse={analytics.inUse}
+          maintenance={analytics.maintenance}
+          other={analytics.other}
+          className="lg:col-span-4"
+        />
+        <DeliveryTodayCard
+          waiting={analytics.waiting}
+          running={analytics.running}
+          completedToday={analytics.completedToday}
+          late={analytics.late}
+          averageDuration={analytics.averageDuration30}
+          longestDuration={analytics.longestDuration30}
+          onNavigate={onNavigate}
+          className="lg:col-span-4"
+        />
+        <SkrCard
+          docs={analytics.skrDocs}
+          qty={analytics.skrQty}
+          value={analytics.skrNilai}
+          stores={analytics.skrStores}
+          oldestDays={analytics.skrOldestDays}
+          error={skrError}
+          onNavigate={onNavigate}
+          className="lg:col-span-4"
+        />
+        <TireCard
+          summary={tireSummary}
+          loading={tireLoading}
+          error={tireError}
+          totalUnits={analytics.total}
+          onNavigate={onNavigate}
+          className="lg:col-span-4"
+        />
+        <CostCard
+          cost30={analytics.cost30}
+          averageEntry30={analytics.averageEntry30}
+          costPerUnit30={analytics.costPerUnit30}
+          entries30={analytics.entries30}
+          delta30={analytics.delta30}
+          onNavigate={onNavigate}
+          className="lg:col-span-4"
+        />
+        <DashboardCard
+          icon={Activity}
+          title="Tren biaya perbaikan"
+          description="Agregat riwayat maintenance per bulan."
+          className="lg:col-span-8"
+          action={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+              onClick={() => onNavigate?.("analisa")}
+            >
+              Lihat analisa
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          }
+        >
           <DeferredCostChart histories={histories} error={historyError} />
-        </div>
-      </Card>
+        </DashboardCard>
+      </div>
 
       {outboundError && (
         <p className="text-xs text-muted-foreground">

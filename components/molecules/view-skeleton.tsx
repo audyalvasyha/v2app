@@ -613,7 +613,7 @@ export function AboutPageSkeleton() {
   )
 }
 
-/** Dashboard: kepala, strip armada, panel tindakan, tiga kartu, lalu cuaca. */
+/** Dashboard: kepala, grid KPI, panel prioritas, kartu operasional, lalu cuaca. */
 export function DashboardPageSkeleton() {
   return (
     <div className="flex flex-col gap-3 pb-2 sm:gap-4" role="status" aria-busy="true">
@@ -629,80 +629,20 @@ export function DashboardPageSkeleton() {
         </div>
       </div>
 
-      {/* Armada hari ini */}
-      <div className="overflow-hidden rounded-xl border bg-card">
-        <div className="flex min-h-12 items-center justify-between gap-3 border-b px-4 py-2.5">
-          <div className="space-y-1.5">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-3 w-56 max-w-full" />
-          </div>
-          <Skeleton className="h-3 w-14" />
-        </div>
-        <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-card px-3 py-2.5 sm:px-4 sm:py-3">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="mt-2 h-6 w-12" />
-              <Skeleton className="mt-1.5 h-2.5 w-20 max-w-full" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Perlu tindakan */}
-      <div className="overflow-hidden rounded-xl border bg-card">
-        <div className="flex min-h-12 items-center justify-between gap-3 border-b px-4 py-2.5">
-          <div className="space-y-1.5">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-52 max-w-full" />
-          </div>
-          <Skeleton className="h-6 w-20 rounded-full" />
-        </div>
-        <div className="grid gap-px bg-border sm:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-card px-4 py-3">
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="mt-2 h-3 w-32 max-w-full" />
-              <Skeleton className="mt-2 h-5 w-6" />
-            </div>
-          ))}
-        </div>
-        <div className="border-t px-4 py-2.5">
-          <Skeleton className="h-3 w-28" />
-          <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-6 w-full rounded-md" />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Pengiriman, sisa kiriman, biaya perbaikan */}
-      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="overflow-hidden rounded-xl border bg-card">
-            <div className="flex min-h-12 items-center justify-between gap-3 border-b px-4 py-2.5">
-              <div className="space-y-1.5">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-3 w-36 max-w-full" />
-              </div>
-              <Skeleton className="h-6 w-16 rounded-full" />
-            </div>
-            <div className="grid grid-cols-2 gap-px bg-border">
-              {Array.from({ length: 2 }).map((_, j) => (
-                <div key={j} className="bg-card px-4 py-3">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="mt-2 h-6 w-12" />
-                  <Skeleton className="mt-1.5 h-2.5 w-20 max-w-full" />
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-between gap-2 border-t px-4 py-2.5">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-3 w-14" />
-            </div>
-          </div>
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-[108px] w-full rounded-lg" />
         ))}
+      </div>
+
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-12">
+        <Skeleton className="h-[430px] w-full rounded-lg lg:col-span-8" />
+        <Skeleton className="h-[430px] w-full rounded-lg lg:col-span-4" />
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-[330px] w-full rounded-lg lg:col-span-4" />
+        ))}
+        <Skeleton className="h-[380px] w-full rounded-lg lg:col-span-4" />
+        <Skeleton className="h-[380px] w-full rounded-lg lg:col-span-8" />
       </div>
 
       {/* Strip cuaca */}
