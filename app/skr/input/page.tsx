@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { parseSkrCsv, SKR_CSV_TEMPLATE, type SkrCsvRow } from "@/lib/skr-csv"
+import { dedupSkrRows } from "@/lib/skr-dedup"
 import { formatQty } from "@/lib/skr-status"
 import { roleForUser } from "@/lib/roles"
 import { usePageTitle } from "@/hooks/use-page-title"
@@ -133,12 +134,13 @@ export default function SkrInputPage() {
 
     const handleUpload = async () => {
         if (!rows || rows.length === 0) return
-        const total = rows.length
-        const label = `${total.toLocaleString("id-ID")} baris akan di-upsert: yang sudah ada ditimpa, yang baru ditambah. Lanjutkan?`
+        const { deduped, dupes } = dedupSkrRows(rows)
+        const total = deduped.length
+        const label = `${total.toLocaleString("id-ID")} baris akan di-upsert: yang sudah ada ditimpa, yang baru ditambah.${dupes > 0 ? ` (${dupes} baris kembar di CSV digabung otomatis.)` : ""} Lanjutkan?`
         if (!window.confirm(label)) return
 
         setUploading(true)
-        const { data, error } = await supabase.rpc("upsert_skr_detail", { rows: rows as unknown as never[] })
+        const { data, error } = await supabase.rpc("upsert_skr_detail", { rows: deduped as unknown as never[] })
         setUploading(false)
         if (error) {
             toast.error("Upload gagal — data lama tidak berubah", { description: error.message })

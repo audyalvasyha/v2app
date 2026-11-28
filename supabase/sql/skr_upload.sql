@@ -50,6 +50,7 @@ as $$
 declare
   v_inserted bigint;
   v_updated  bigint;
+  v_dupes bigint;
 begin
   -- Hanya user yang sudah login lewat Supabase Auth yang boleh menjalankan.
   if auth.uid() is null then
@@ -83,42 +84,55 @@ begin
     raise exception 'Maksimal 50.000 baris per upload' using errcode = '22023';
   end if;
 
+  -- CSV sistem sering berisi baris kembar dengan sidik jari SAMA
+  -- (delivery_number + pod_date + base_unit + sales_unit + value).
+  -- Tanpa dedup, Postgres menolak seluruh batch:
+  -- "ON CONFLICT DO UPDATE command cannot affect row a second time".
+  -- Jadi saring dulu: satu sidik jari = satu baris, baris TERAKHIR menang.
+  -- DISTINCT ON menganggap NULL sama dengan NULL, jadi baris bersidik
+  -- NULL pun ikut ciut — aman karena unique index mengabaikan NULL.
+  with parsed as (
+    select
+      nullif(trim(r.item->>'license_no'), '') as license_no,
+      nullif(trim(r.item->>'salesman'), '') as salesman,
+      nullif(trim(r.item->>'pod_reason'), '') as pod_reason,
+      nullif(trim(r.item->>'skr_base_unit'), '') as skr_base_unit,
+      nullif(trim(r.item->>'pod_date'), '') as pod_date,
+      case
+        when btrim(r.item->>'skr_sales_unit') ~ '^-?[0-9]+$'
+          then btrim(r.item->>'skr_sales_unit')::bigint
+        else null
+      end as skr_sales_unit,
+      nullif(trim(r.item->>'skr_value'), '') as skr_value,
+      case
+        when btrim(r.item->>'customer_id') ~ '^-?[0-9]+$'
+          then btrim(r.item->>'customer_id')::bigint
+        else null
+      end as customer_id,
+      nullif(trim(r.item->>'delivery_number'), '') as delivery_number,
+      nullif(trim(r.item->>'sales_office'), '') as sales_office,
+      nullif(trim(r.item->>'distribution_channel'), '') as distribution_channel,
+      r.ord as ord
+    from jsonb_array_elements(rows) with ordinality as r(item, ord)
+  ),
+  deduped as (
+    select distinct on (delivery_number, pod_date, skr_base_unit, skr_sales_unit, skr_value)
+      license_no, salesman, pod_reason, skr_base_unit,
+      pod_date, skr_sales_unit, skr_value, customer_id, delivery_number,
+      sales_office, distribution_channel
+    from parsed
+    order by delivery_number, pod_date, skr_base_unit, skr_sales_unit, skr_value, ord desc
+  )
   insert into public.skr_detail (
     license_no, salesman, pod_reason, skr_base_unit,
     pod_date, skr_sales_unit, skr_value, customer_id, delivery_number,
     sales_office, distribution_channel
   )
   select
-    nullif(trim(r.item->>'license_no'), ''),
-    nullif(trim(r.item->>'salesman'), ''),
-    nullif(trim(r.item->>'pod_reason'), ''),
-    nullif(trim(r.item->>'skr_base_unit'), ''),
-    nullif(trim(r.item->>'pod_date'), ''),
-    --_qty dikirim browser sebagai angka, tapi di sini selalu berupa TEKS
-    -- (->> menghasilkan jsonb -> text). Nilai yang bukan bilangan bulat
-    -- (mis. kosong) disimpan NULL, bukan menggagalkan seluruh batch.
-    --_JANGAN pernah menulis coalesce(regex, ::bigint): itu mencampur boolean
-    -- dengan bigint tanpa tipe bersama dan PostgreSQL akan menolak dengan
-    -- "operator does not exist: boolean = bigint" — gagal di setiap upload.
-    case
-      when btrim(r.item->>'skr_sales_unit') ~ '^-?[0-9]+$'
-        then btrim(r.item->>'skr_sales_unit')::bigint
-      else null
-    end,
-    nullif(trim(r.item->>'skr_value'), ''),
-    --_customer_id bertipe bigint di skr_detail (customers.customer_id
-    -- justru TEXT, jadi keduanya tidak bisa langsung disamakan).
-    --_->> selalu menghasilkan text dan PostgreSQL tidak melakukan cast
-    -- otomatis untuk ekspresi bertipe text — harus dicast eksplisit.
-    case
-      when btrim(r.item->>'customer_id') ~ '^-?[0-9]+$'
-        then btrim(r.item->>'customer_id')::bigint
-      else null
-    end,
-    nullif(trim(r.item->>'delivery_number'), ''),
-    nullif(trim(r.item->>'sales_office'), ''),
-    nullif(trim(r.item->>'distribution_channel'), '')
-  from jsonb_array_elements(rows) as r(item)
+    license_no, salesman, pod_reason, skr_base_unit,
+    pod_date, skr_sales_unit, skr_value, customer_id, delivery_number,
+    sales_office, distribution_channel
+  from deduped
   on conflict (delivery_number, pod_date, skr_base_unit, skr_sales_unit, skr_value) do update
     set license_no          = excluded.license_no,
         salesman            = excluded.salesman,
